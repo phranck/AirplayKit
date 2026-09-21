@@ -18,6 +18,9 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
+# Written out at each use as ${scratch[@]+...}, because bash 3.2, which is what
+# macOS ships and what the runner uses, treats an empty array as unset under
+# set -u and stops there.
 scratch=()
 if [[ -n "${1:-}" ]]; then
     scratch=(--scratch-path "$1")
@@ -27,10 +30,10 @@ echo "== the toolchain"
 swift --version
 
 echo "== build"
-swift build -c release "${scratch[@]}"
+swift build -c release ${scratch[@]+"${scratch[@]}"}
 
 echo "== test"
-swift test "${scratch[@]}"
+swift test ${scratch[@]+"${scratch[@]}"}
 
 # The binary that was just built, rather than swift run, which re-plans the
 # build and trips over the debug description the tests left behind.
@@ -38,6 +41,6 @@ swift test "${scratch[@]}"
 # Called without arguments the example prints its usage and exits with 2, and
 # anything else means it is broken.
 echo "== the example"
-"$(swift build -c release "${scratch[@]}" --show-bin-path)/Demo" || [[ $? -eq 2 ]]
+"$(swift build -c release ${scratch[@]+"${scratch[@]}"} --show-bin-path)/Demo" || [[ $? -eq 2 ]]
 
 echo "== all green"
