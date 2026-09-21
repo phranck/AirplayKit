@@ -10,6 +10,12 @@ Discovery finds every `_raop._tcp` receiver on the network, whether or not anyth
 
 One session reaches one receiver. Several sessions at once would each start their own RTP timeline against their own clock, so the receivers would drift apart, and holding them together needs a single timeline shared between them. That is the multi-room work the sender underneath has not done yet, so this library does not offer it and does not pretend to.
 
+## Documentation
+
+The reference lives at [phranck.github.io/PlayableAirplay](https://phranck.github.io/PlayableAirplay/), built from the source by CI on every push to `main`.
+
+To read it locally, run `./Scripts/build-documentation.sh` and open `build/documentation`. That script is also what CI runs, so the two cannot drift apart.
+
 ## How it is put together
 
 There are two layers, and only the upper one is meant to be called.
