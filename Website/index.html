@@ -48,7 +48,7 @@
       <a href="#interface"><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>Interface</a>
       <a href="#example"><svg class="icon" aria-hidden="true"><use href="#ph-terminal-window"></use></svg>Example</a>
       <a href="#usage"><svg class="icon" aria-hidden="true"><use href="#ph-package"></use></svg>Usage</a>
-      <a href="docs/" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-book-open"></use></svg>Reference</a>
+      <a href="docs/" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-book-open"></use></svg>API reference</a>
       <a href="https://github.com/phranck/PlayableAirplay" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-github-logo"></use></svg>Source</a>
     </nav>
 
@@ -68,13 +68,13 @@
       <h1>Play to the speaker in the other room without taking the whole machine with you.</h1>
       <p class="standfirst">Apple's route picker moves the system's output, so everything on the Mac follows it. PlayableAirplay speaks RAOP to the receiver itself. One application streams to the kitchen, and the rest of the machine keeps playing where it always did.</p>
       <p class="hero-actions">
-        <a class="action action-primary" href="docs/" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-book-open"></use></svg>Read the reference</a>
+        <a class="action action-primary" href="docs/" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-book-open"></use></svg>API reference</a>
         <a class="action" href="https://github.com/phranck/PlayableAirplay" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-github-logo"></use></svg>Get the source</a>
       </p>
     </div>
 
     <figure class="panel hero-code">
-      <figcaption><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>Finding the speakers<button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button></figcaption>
+      <figcaption><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg><span class="panel-label">Finding the speakers</span><button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button></figcaption>
 <pre><code><span class="k">let</span> speakers = <span class="t">AirPlayDiscovery</span> { found <span class="k">in</span>
     <span class="k">for</span> speaker <span class="k">in</span> found {
         <span class="c">// Dining Room, Sonos-48A6B8F7CA56</span>
@@ -111,7 +111,7 @@
     </div>
 
     <figure class="panel">
-      <figcaption><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>Playing to one of them<button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button></figcaption>
+      <figcaption><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg><span class="panel-label">Playing to one of them</span><button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button></figcaption>
 <pre><code><span class="k">let</span> session = <span class="k">try</span> <span class="t">AirPlaySession</span>(receiver: receiver, senderName: <span class="s">"My App"</span>)
 session.volume = <span class="n">0.7</span>
 
@@ -133,7 +133,7 @@ session.volume = <span class="n">0.7</span>
       <figcaption>
         <svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>
         <span class="variants" role="group" aria-label="Which platform">
-          <button class="variant" type="button" data-variant="apple" aria-pressed="true">macOS and iOS</button>
+          <button class="variant" type="button" data-variant="apple" aria-pressed="true">macOS &amp; iOS</button>
           <button class="variant" type="button" data-variant="portable" aria-pressed="false">Linux</button>
         </span>
         <button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button>
@@ -159,7 +159,7 @@ session.volume = <span class="n">0.7</span>
       <figcaption>
         <svg class="icon" aria-hidden="true"><use href="#ph-terminal-window"></use></svg>
         <span class="variants" role="group" aria-label="Which platform">
-          <button class="variant" type="button" data-variant="apple" aria-pressed="true">macOS and iOS</button>
+          <button class="variant" type="button" data-variant="apple" aria-pressed="true">macOS &amp; iOS</button>
           <button class="variant" type="button" data-variant="portable" aria-pressed="false">Linux</button>
         </span>
         <button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button>
@@ -188,8 +188,7 @@ dependencies: [
 </main>
 
 <footer class="colophon measure">
-  <p><b>PlayableAirplay</b> is built on <a href="https://github.com/akustikrausch/airplay2-sender-cpp" target="_blank" rel="noopener">airplay2-sender-cpp</a>, and it is not affiliated with Apple Inc.</p>
-  <p>The <a href="docs/" target="_blank" rel="noopener">reference</a> carries every type and every method. Published under the <a href="https://layered.mit-license.org" target="_blank" rel="noopener">MIT</a> license.</p>
+  <p>made with <span class="heart" role="img" aria-label="love">&#10084;&#65039;</span> by <a href="https://layered.work" target="_blank" rel="noopener">LAYERED</a></p>
 </footer>
 
 <script src="theme.js"></script>
