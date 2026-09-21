@@ -144,27 +144,6 @@
         --card-text-inset: calc(var(--card-radius) / 2);
     }
 
-    /* The switch keeps its words, so on a narrow screen it takes a line of its
-       own rather than pushing the copy button off the edge. The break is an
-       empty full-width item ordered between the two, so the switch itself stays
-       the width of its words and sits in the middle. */
-    .panel figcaption { flex-wrap: wrap; }
-
-    .panel figcaption::after {
-        content: "";
-        order: 2;
-        flex-basis: 100%;
-    }
-
-    .variants {
-        order: 3;
-        margin-inline: auto;
-        margin-top: var(--gap-tight);
-    }
-
-    /* The copy button is alone on the first line now, so it takes the right of
-       it the way it does in a panel with no switch at all. */
-    .panel .variants + .copy { margin-left: auto; }
 }
 
 /* ---------------------------------------------------------------- base --- */
@@ -539,7 +518,7 @@ section + section { margin-top: var(--section-gap); }
 .variant {
     min-height: calc(var(--step) * 3.25);
     white-space: nowrap;
-    padding: 0 calc(var(--step) * 1.6);
+    padding: 0 calc(var(--step) * 1.2);
     border: 0;
     border-radius: 999px;
     background: none;
@@ -643,6 +622,27 @@ section + section { margin-top: var(--section-gap); }
 /* Centred on each other rather than sat on a baseline, so the mark takes no
    lift here. */
 .panel figcaption .icon { transform: none; }
+
+/* Below this the switch and the copy button together are wider than the row,
+   so the switch takes a line of its own. The break is an empty full-width item
+   ordered between the two, which leaves the switch the width of its words. */
+@media (max-width: 22rem) {
+    .panel figcaption { flex-wrap: wrap; }
+
+    .panel figcaption::after {
+        content: "";
+        order: 2;
+        flex-basis: 100%;
+    }
+
+    .variants {
+        order: 3;
+        margin-inline: auto;
+        margin-top: var(--gap-tight);
+    }
+
+    .panel .variants + .copy { margin-left: auto; }
+}
 
 /* The label is what gives way when the row is narrower than its words, because
    the mark and the buttons cannot. */
