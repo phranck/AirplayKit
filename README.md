@@ -1,3 +1,14 @@
+<div align="center">
+
+[![CI](https://img.shields.io/github/actions/workflow/status/phranck/PlayableAirplay/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=1c1c1c&color=e53935)](https://github.com/phranck/PlayableAirplay/actions/workflows/ci.yml)
+[![Last commit](https://img.shields.io/github/last-commit/phranck/PlayableAirplay?style=for-the-badge&label=Commit&labelColor=1c1c1c&color=fb8c00)](https://github.com/phranck/PlayableAirplay/commits/main)
+[![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux-fdd835?style=for-the-badge&labelColor=1c1c1c)](https://github.com/phranck/PlayableAirplay/actions/workflows/ci.yml)
+[![Language](https://img.shields.io/badge/Written%20in-Swift-43a047?style=for-the-badge&labelColor=1c1c1c)](https://swift.org)
+[![Documentation](https://img.shields.io/badge/Reference-DocC-1e88e5?style=for-the-badge&labelColor=1c1c1c)](https://playable-airplay.layered.work/docs/)
+[![License](https://img.shields.io/github/license/phranck/PlayableAirplay?style=for-the-badge&label=License&labelColor=1c1c1c&color=8e24aa)](https://layered.mit-license.org)
+
+</div>
+
 # PlayableAirplay
 
 Sends audio to an AirPlay 2 receiver from macOS and from Linux, from Swift.

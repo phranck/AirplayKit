@@ -13,15 +13,23 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+
+    # Linux builds inside the official Swift image, which brings the toolchain
+    # with it. Installing one on a bare runner took a quarter of an hour, which
+    # is not a gate anybody waits for.
+    container: ${{ matrix.container }}
+
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: macOS
             runner: macos-15
+            container: ""
             swiftFlags: -lc++ -framework CoreFoundation
           - name: Linux
             runner: ubuntu-latest
+            container: swift:6.2
             swiftFlags: -lstdc++ -lpthread -ldns_sd
 
     steps:
@@ -30,17 +38,17 @@ jobs:
           submodules: recursive
 
       # dns_sd.h ships with macOS. On Linux it comes from Avahi's compatibility
-      # package, which is the same header and the same calls.
-      - name: Install libdns_sd
-        if: matrix.runner == 'ubuntu-latest'
+      # package, which is the same header and the same calls. CMake is not in
+      # the Swift image either.
+      - name: Install what the image lacks
+        if: matrix.container != ''
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libavahi-compat-libdnssd-dev
+          apt-get update
+          apt-get install -y cmake libavahi-compat-libdnssd-dev
 
-      # macOS brings a Swift toolchain with Xcode. Linux does not.
-      - name: Install Swift
-        if: matrix.runner == 'ubuntu-latest'
-        uses: swift-actions/setup-swift@v2
+      # Printed so the two toolchains can be compared when they disagree.
+      - name: Say which Swift this is
+        run: swift --version
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
