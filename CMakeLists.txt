@@ -12,7 +12,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-option(PLAYABLE_AIRPLAY_BUILD_EXAMPLE "build the pa_demo command line example" ON)
 option(PLAYABLE_AIRPLAY_BUILD_TESTS   "build the test binary" ON)
 
 set(SENDER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/airplay2-sender-cpp)
@@ -85,10 +84,8 @@ else()
     target_link_libraries(PlayableAirplay PRIVATE ${DNSSD_LIBRARY} pthread)
 endif()
 
-if(PLAYABLE_AIRPLAY_BUILD_EXAMPLE)
-    add_executable(pa_demo example/pa_demo.c)
-    target_link_libraries(pa_demo PRIVATE PlayableAirplay)
-endif()
+# The example is Swift and is built with swiftc rather than here, because this
+# file's job is the library. README.md carries the one command it takes.
 
 if(PLAYABLE_AIRPLAY_BUILD_TESTS)
     enable_testing()
@@ -102,4 +99,5 @@ endif()
 
 include(GNUInstallDirs)
 install(TARGETS PlayableAirplay ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-install(FILES include/PlayableAirplay.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES include/PlayableAirplay.h include/module.modulemap
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

@@ -1,0 +1,12 @@
+//
+//  module.modulemap
+//  Makes the header a Clang module, which is what lets Swift write
+//  `import PlayableAirplay` instead of carrying a bridging header around.
+//
+//  Copyright © 2026 cocoa:naut. All rights reserved.
+//
+
+module PlayableAirplay {
+    header "PlayableAirplay.h"
+    export *
+}

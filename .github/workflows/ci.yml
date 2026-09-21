@@ -19,10 +19,10 @@ jobs:
         include:
           - name: macOS
             runner: macos-15
-            consumerFlags: -lc++ -framework CoreFoundation
+            swiftFlags: -lc++ -framework CoreFoundation
           - name: Linux
             runner: ubuntu-latest
-            consumerFlags: -lstdc++ -lpthread -ldns_sd
+            swiftFlags: -lstdc++ -lpthread -ldns_sd
 
     steps:
       - uses: actions/checkout@v5
@@ -37,6 +37,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libavahi-compat-libdnssd-dev
 
+      # macOS brings a Swift toolchain with Xcode. Linux does not.
+      - name: Install Swift
+        if: matrix.runner == 'ubuntu-latest'
+        uses: swift-actions/setup-swift@v2
+
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
@@ -46,28 +51,17 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-      # The example is the interface used from outside the library, so it is
-      # worth knowing that it links and runs. Called without arguments it prints
-      # its usage and exits with 2, and anything else means it is broken.
-      - name: Smoke-test the example
-        run: ./build/pa_demo || test $? -eq 2
-
-      # The README tells a consumer that the one archive is the whole of it, so
-      # this links a program that has nothing but that archive and the flags the
-      # README names. It is the only thing that keeps the promise honest.
-      - name: Link a consumer against the archive alone
+      # The README tells a consumer that the one archive and a handful of system
+      # libraries are the whole of it, and that Swift imports the header as a
+      # module. Building the example is what keeps both promises honest.
+      - name: Build the example
         env:
-          CONSUMER_FLAGS: ${{ matrix.consumerFlags }}
+          SWIFT_FLAGS: ${{ matrix.swiftFlags }}
         run: |
-          cat > consumer.c <<'EOF'
-          #include "PlayableAirplay.h"
-          #include <stdio.h>
-          int main(void) {
-              PAResult result = PAResultOK;
-              printf("%s\n", pa_result_description(result));
-              pa_session_close(pa_session_open(NULL, 0, "consumer", &result));
-              return result == PAResultInvalidArgument ? 0 : 1;
-          }
-          EOF
-          cc -Iinclude consumer.c build/libPlayableAirplay.a $CONSUMER_FLAGS -o consumer
-          ./consumer
+          swiftc -O -I include example/Demo.swift -o build/Demo \
+              -Xlinker build/libPlayableAirplay.a $SWIFT_FLAGS
+
+      # Called without arguments it prints its usage and exits with 2, and
+      # anything else means it is broken.
+      - name: Run the example
+        run: ./build/Demo || test $? -eq 2
