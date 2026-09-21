@@ -1,0 +1,80 @@
+/*
+ *  fonts.css
+ *  The site's typefaces, carried into the DocC reference.
+ *
+ *  The reference is Swift-DocC-Render's own application and brings its own
+ *  stylesheet, so this does not replace that. It names the two variables the
+ *  renderer reads for its body and its code, and sets the condensed face on the
+ *  headings, which the renderer has no variable for.
+ *
+ *  The build injects a link to this into every page under /docs.
+ *
+ *  Copyright © 2026 cocoa:naut. All rights reserved.
+ */
+
+@font-face {
+    font-family: "Barlow";
+    src: url("/fonts/Barlow-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Barlow";
+    src: url("/fonts/Barlow-Medium.woff2") format("woff2");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Barlow Condensed";
+    src: url("/fonts/BarlowCondensed-SemiBold.woff2") format("woff2");
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Barlow Condensed";
+    src: url("/fonts/BarlowCondensed-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Fira Code Nerd Font";
+    src: url("/fonts/FiraCodeNerdFont-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+:root {
+    --typography-html-font: "Barlow", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --typography-html-font-mono: "Fira Code Nerd Font", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/*
+ The renderer sets its heading faces through classes of its own, which beat a
+ bare element selector however this file is ordered. Overriding the face is
+ exactly what this stylesheet is for, so it says so rather than winning by a
+ longer selector that the next renderer release would break.
+ */
+h1, h2, h3, h4, h5, h6 {
+    font-family: "Barlow Condensed", "Barlow", ui-sans-serif, -apple-system, sans-serif !important;
+    letter-spacing: -0.015em;
+}
+
+/* Code inside a heading is still code. */
+h1 code, h2 code, h3 code, h4 code, h5 code, h6 code {
+    font-family: var(--typography-html-font-mono) !important;
+    letter-spacing: normal;
+}
+
+/* Fira Code's ligatures are what it is for, and they are contextual alternates. */
+code, pre, .code-listing, .source, .decorated-title, .token {
+    font-variant-ligatures: contextual;
+}

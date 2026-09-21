@@ -7,9 +7,8 @@
 #  catalogue, into a site of its own. It does not go through the docc plugin,
 #  because one swiftc call over one file is less machinery than a plugin is.
 #
-#  Pass --host to build for the published site, where the reference is served
-#  from /docs and every link inside it has to say so. Without it the reference
-#  is built for opening off the disk.
+#  The reference is served from /docs wherever the site stands, so it is always
+#  built to say so. Serve build/site and both halves work.
 #
 #  Copyright © 2026 cocoa:naut. All rights reserved.
 #
@@ -22,11 +21,6 @@ cd "$root"
 moduleName="PlayableAirplay"
 symbolDirectory="build/symbol-graph"
 siteDirectory="build/site"
-
-hostingArguments=()
-if [[ "${1:-}" == "--host" ]]; then
-    hostingArguments=(--hosting-base-path "docs")
-fi
 
 rm -rf "$symbolDirectory" "$siteDirectory"
 mkdir -p "$symbolDirectory" "$siteDirectory"
@@ -58,7 +52,7 @@ fi
     --additional-symbol-graph-dir "$symbolDirectory" \
     --output-path "$siteDirectory/docs" \
     --warnings-as-errors \
-    "${hostingArguments[@]}"
+    --hosting-base-path "docs"
 
 cp -R Website/. "$siteDirectory/"
 
@@ -69,9 +63,12 @@ python3 Scripts/fill-snippets.py "$siteDirectory/index.html" Sources/Demo/Demo.s
 # DocC opens on its own landing page, which is one click further in than the
 # link from the site suggests. This sends a reader straight there.
 documentationPath="/docs/documentation/$(echo "$moduleName" | tr '[:upper:]' '[:lower:]')/"
-if [[ ${#hostingArguments[@]} -eq 0 ]]; then
-    documentationPath=".${documentationPath#/docs}"
-fi
+
+# The reference is the renderer's own application and brings its own
+# stylesheet. This adds the site's typefaces to it, on every page, because each
+# page carries its own shell.
+cp Website/docs-theme/fonts.css "$siteDirectory/docs/playable-fonts.css"
+python3 Scripts/inject-stylesheet.py "$siteDirectory/docs" /docs/playable-fonts.css
 
 cat > "$siteDirectory/docs/index.html" <<HTML
 <!doctype html>

@@ -13,7 +13,7 @@
 /**
  Splits a RAOP service instance into an identifier and a name.
 
- A receiver is announced as `48A6B8F7CA56@Esszimmer`: the part before the
+ A receiver is announced as `48A6B8F7CA56@Dining Room`: the part before the
  separator is its hardware address and the part after is what a person calls
  it. Both are wanted. The address survives a rename, so it is what identifies a
  receiver across sightings; the name is what goes on screen.
