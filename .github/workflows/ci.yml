@@ -51,15 +51,15 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-      # The README tells a consumer that the one archive and a handful of system
-      # libraries are the whole of it, and that Swift imports the header as a
-      # module. Building the example is what keeps both promises honest.
+      # The README tells a consumer that the Swift wrapper, the one archive and a
+      # handful of system libraries are the whole of it. Building the example
+      # exactly that way is what keeps the instruction honest.
       - name: Build the example
         env:
           SWIFT_FLAGS: ${{ matrix.swiftFlags }}
         run: |
-          swiftc -O -I include example/Demo.swift -o build/Demo \
-              -Xlinker build/libPlayableAirplay.a $SWIFT_FLAGS
+          swiftc -O -I include Sources/PlayableAirplay.swift example/Demo.swift \
+              -o build/Demo -Xlinker build/libPlayableAirplay.a $SWIFT_FLAGS
 
       # Called without arguments it prints its usage and exits with 2, and
       # anything else means it is broken.

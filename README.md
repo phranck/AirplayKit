@@ -10,7 +10,13 @@ Discovery finds every `_raop._tcp` receiver on the network, whether or not anyth
 
 One session reaches one receiver. Several sessions at once would each start their own RTP timeline against their own clock, so the receivers would drift apart, and holding them together needs a single timeline shared between them. That is the multi-room work the sender underneath has not done yet, so this library does not offer it and does not pretend to.
 
-The library itself is C, and that is what makes it portable: Swift imports it as a module on macOS and on Linux alike, with no bridging header and no C++ interoperability. Nothing about the C++ underneath reaches a caller, and nothing in it touches AVFoundation, CoreAudio or AppKit.
+## How it is put together
+
+There are two layers, and only the upper one is meant to be called.
+
+`Sources/PlayableAirplay.swift` is the library: `AirPlayDiscovery`, `AirPlaySession`, `AirPlayReceiver` and `AirPlayError`. That is the whole interface.
+
+Underneath it sits a C module, `CPlayableAirplay`, and further down the C++ sender. C is what Swift imports directly on macOS and on Linux alike, with no bridging header and no C++ interoperability, which is why that layer exists at all. Nothing in it reaches the Swift interface: no opaque pointer, no C buffer, no `pa_` function. Nothing anywhere touches AVFoundation, CoreAudio or AppKit.
 
 ## Building
 
@@ -29,78 +35,69 @@ sudo apt install libavahi-compat-libdnssd-dev
 
 The configure step fetches Mbed TLS, so the first build needs a network connection. Everything else is in the repository or in the submodule.
 
-What comes out is `build/libPlayableAirplay.a` and the `include` directory. That archive holds the sender, the crypto, ed25519 and Mbed TLS as members, so linking it is the whole of it.
+What comes out is `build/libPlayableAirplay.a`, and that archive holds the sender, the crypto, ed25519 and Mbed TLS as members, so linking it is the whole of it.
+
+To use the library, add `Sources/PlayableAirplay.swift` to your own target, put `include` on the import paths, and link the archive:
 
 ```bash
 # macOS
-swiftc -I include YourFile.swift -Xlinker build/libPlayableAirplay.a -lc++ -framework CoreFoundation
+swiftc -I include Sources/PlayableAirplay.swift YourFile.swift \
+    -Xlinker build/libPlayableAirplay.a -lc++ -framework CoreFoundation
 
 # Linux
-swiftc -I include YourFile.swift -Xlinker build/libPlayableAirplay.a -lstdc++ -lpthread -ldns_sd
+swiftc -I include Sources/PlayableAirplay.swift YourFile.swift \
+    -Xlinker build/libPlayableAirplay.a -lstdc++ -lpthread -ldns_sd
 ```
 
-In Xcode, put `include` on the import paths, add the archive to the link phase, and run the two CMake commands above from a build phase so the library is always current.
+In Xcode, add the Swift file to the target, put `include` on the header search paths, add the archive to the link phase, and run the two CMake commands above from a build phase so the library is always current.
 
 ## Using it
 
-The names and host names arrive in fixed C buffers, which Swift sees as tuples. This turns them back into strings, and every example below uses it:
+Discovery reports the whole set each time it changes, sorted by name, on a queue you name. Browsing runs for as long as you hold on to the instance.
 
 ```swift
-import PlayableAirplay
-
-extension PAReceiver {
-    var displayName: String { Self.string(from: name, capacity: Int(PA_MAX_NAME)) }
-    var hostName: String { Self.string(from: host, capacity: Int(PA_MAX_HOST)) }
-
-    private static func string<Buffer>(from buffer: Buffer, capacity: Int) -> String {
-        withUnsafePointer(to: buffer) { pointer in
-            pointer.withMemoryRebound(to: CChar.self, capacity: capacity) { String(cString: $0) }
-        }
+let discovery = AirPlayDiscovery { receivers in
+    for receiver in receivers {
+        print("\(receiver.name) at \(receiver.host):\(receiver.port)")
     }
 }
-```
-
-Discovery reports the full list, sorted by name, each time it changes. The handler is a C function pointer, so it captures nothing and anything it needs travels through the context argument. It runs on the library's own thread, and the list it carries lives only for the duration of the call, so copy what you want to keep and hop to your own queue before touching an interface.
-
-```swift
-let discovery = pa_discovery_start({ _, receivers, count in
-    guard let receivers else { return }
-    let found = (0..<count).map { receivers[$0] }
-    DispatchQueue.main.async { show(found) }
-}, nil)
 
 // ...
 
-pa_discovery_stop(discovery)
+discovery.stop()
 ```
 
-Opening a session pairs with the receiver and blocks until it is playing or has refused, which takes a couple of seconds on a cold receiver. After that, write frames as they arrive:
+Opening a session pairs with the receiver and blocks until it is playing or has refused, which takes a couple of seconds on one that was asleep. After that, write frames as they arrive:
 
 ```swift
-var result = PAResultOK
-guard let session = pa_session_open(receiver.hostName, receiver.port, "My App", &result) else {
-    print(String(cString: pa_result_description(result)))
-    return
-}
-
-pa_session_set_volume(session, 0.7)
+let session = try AirPlaySession(receiver: receiver, senderName: "My App")
+session.volume = 0.7
 
 // 16 bit, stereo, interleaved, 44100 Hz.
-if !pa_session_write(session, &frames, frameCount) {
-    // The frames were not taken. See below for what that means.
-}
+switch session.write(frames) {
+case .taken:
+    break
 
-pa_session_close(session)
+case .bufferFull:
+    // The sender has not caught up. A live source drops these frames and
+    // carries on; one that can pause offers them again.
+    break
+
+case .ended:
+    session.close()
+}
 ```
 
-`pa_session_write` never waits, because the thread producing live audio must not. A `false` result therefore means one of two things. Either the session has ended, and the next call will say so as well, or the buffer is full because the sender is still working through the four seconds it holds. The second is back pressure rather than a failure, and what to do about it depends on where the audio comes from: a live source drops those frames and carries on, whilst a source reading a file faster than real time waits and offers them again.
+Writing never waits, because the thread producing live audio must not. `.bufferFull` is therefore back pressure rather than a failure, and it says the four seconds the sender holds are not yet spent. `.ended` is the receiver having hung up, and the answer to it is to close the session.
+
+In an audio callback the samples usually arrive as a pointer already, and there is a `write` for that which copies nothing on the way in.
 
 ## The example
 
 `example/Demo.swift` is the whole interface exercised from a terminal.
 
 ```bash
-swiftc -O -I include example/Demo.swift -o build/Demo \
+swiftc -O -I include Sources/PlayableAirplay.swift example/Demo.swift -o build/Demo \
     -Xlinker build/libPlayableAirplay.a -lc++ -framework CoreFoundation
 
 ./build/Demo list

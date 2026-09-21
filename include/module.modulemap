@@ -1,12 +1,15 @@
 //
 //  module.modulemap
-//  Makes the header a Clang module, which is what lets Swift write
-//  `import PlayableAirplay` instead of carrying a bridging header around.
+//  Makes the header a Clang module, which is what lets the Swift wrapper reach
+//  it without a bridging header, on macOS and on Linux alike.
+//
+//  The C prefix is the usual mark for the layer underneath: the module a Swift
+//  caller imports is PlayableAirplay, and this is what that module is built on.
 //
 //  Copyright © 2026 cocoa:naut. All rights reserved.
 //
 
-module PlayableAirplay {
+module CPlayableAirplay {
     header "PlayableAirplay.h"
     export *
 }
