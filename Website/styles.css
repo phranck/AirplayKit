@@ -7,6 +7,50 @@
  *  Copyright © 2026 cocoa:naut. All rights reserved.
  */
 
+/* Carried with the page rather than fetched from anybody else, so it asks for
+   nothing beyond itself and nobody is told who reads it. Every one of them
+   swaps in, so the writing is there to read before the font has arrived. */
+
+@font-face {
+    font-family: "Barlow";
+    src: url("fonts/Barlow-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Barlow";
+    src: url("fonts/Barlow-Medium.woff2") format("woff2");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Barlow Condensed";
+    src: url("fonts/BarlowCondensed-SemiBold.woff2") format("woff2");
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Barlow Condensed";
+    src: url("fonts/BarlowCondensed-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Fira Code Nerd Font";
+    src: url("fonts/FiraCodeNerdFont-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
 :root {
     color-scheme: light dark;
 
@@ -26,15 +70,18 @@
     --card-text-inset: calc(var(--card-radius) / 2);
 
     /* ---- Type ---- */
-    --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --font-sans: "Barlow", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-display: "Barlow Condensed", "Barlow", ui-sans-serif, -apple-system, sans-serif;
+    --font-mono: "Fira Code Nerd Font", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-    --type-display: clamp(2.3rem, 4.8vw, 3.6rem);
-    --type-title: clamp(1.7rem, 3vw, 2.5rem);
-    --type-lead: clamp(1.05rem, 1.5vw, 1.3rem);
-    --type-body: 1rem;
-    --type-small: 0.82rem;
-    --type-code: 0.84rem;
+    /* Barlow sets narrow and small for its size, so the whole scale stands a
+       step higher than a system face would want. */
+    --type-display: clamp(3rem, 6.4vw, 5.4rem);
+    --type-title: clamp(2.1rem, 4vw, 3.2rem);
+    --type-lead: clamp(1.2rem, 1.7vw, 1.45rem);
+    --type-body: 1.125rem;
+    --type-small: 0.95rem;
+    --type-code: 0.95rem;
 
     --leading-tight: 1.06;
     --leading-body: 1.62;
@@ -62,12 +109,18 @@
     --code-number: light-dark(#8a4b12, #f0b878);
     --code-comment: var(--ink-faint);
 
+    /* How large a station on the signal line is drawn. The pulse takes the same
+       size, so the two read as one thing travelling between them. */
+    --station-size: 9px;
+
     /* ---- Icons ---- */
-    --icon-size: 1.15em;
+    --icon-size: 1.3em;
+
     /* An icon beside text is centred on the midline between the baseline and
-       the cap line, which sits below the middle of its own box. Measured
-       against this face at this size. */
-    --icon-lift: 0.215em;
+       the cap line rather than on the middle of its own box, so it drops by
+       half the difference between the two. Barlow and Fira Code both put their
+       capitals 0.7em above the baseline. */
+    --icon-lift: calc((var(--icon-size) - 0.7em) / 2);
 
     /* ---- Motion ---- */
     --duration: 220ms;
@@ -214,6 +267,16 @@ code {
 
 .masthead-links a:hover { color: var(--ink); }
 
+/* The two that leave this page carry their mark, so a reader can see which
+   links move within it and which do not. */
+.masthead-elsewhere {
+    display: inline-flex;
+    align-items: baseline;
+    gap: calc(var(--step) * 0.9);
+}
+
+.masthead-links .masthead-elsewhere[href="docs/"] { color: var(--ink); }
+
 @media (max-width: 46rem) {
     .masthead-links a:not([href="docs/"]) { display: none; }
 }
@@ -317,10 +380,11 @@ section + section { margin-top: var(--section-gap); }
 
 .hero h1 {
     margin: 0;
+    font-family: var(--font-display);
     font-size: var(--type-display);
     line-height: var(--leading-tight);
     letter-spacing: var(--tracking-tight);
-    font-weight: 620;
+    font-weight: 700;
     text-wrap: balance;
 }
 
@@ -432,6 +496,7 @@ section + section { margin-top: var(--section-gap); }
 .panel pre {
     margin: 0;
     padding: var(--gap);
+    font-variant-ligatures: contextual;
     border-radius: var(--card-inner-radius);
     background: var(--paper);
     overflow-x: auto;
@@ -442,6 +507,27 @@ section + section { margin-top: var(--section-gap); }
 }
 
 .panel code { font-size: inherit; }
+
+/* The panel in the hero starts where the headline's capitals start, so the two
+   blocks read as standing on one line. What separates them is the eyebrow above
+   the headline, plus the distance from each block's own top to its capitals.
+   Both fonts put their capitals 0.7em under the top of their ascent, and the
+   headline's line height takes a little of that back. */
+.hero-code {
+    --eyebrow-block: calc(var(--type-small) * var(--leading-body) + var(--gap));
+    --display-cap-inset: calc(var(--type-display) * 0.23);
+
+    /* Measured on the caption's own row, which carries an icon and so is taller
+       than its type alone would make it. */
+    --caption-cap-inset: 25px;
+
+    margin-top: calc(var(--eyebrow-block) + var(--display-cap-inset) - var(--caption-cap-inset));
+}
+
+@media (max-width: 58rem) {
+    /* One column, so there is no headline beside it to line up with. */
+    .hero-code { margin-top: 0; }
+}
 
 .panel .k { color: var(--code-keyword); }
 .panel .t { color: var(--code-type); }
@@ -459,7 +545,6 @@ section + section { margin-top: var(--section-gap); }
 
 .path-line {
     position: relative;
-    overflow: hidden;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--gap);
@@ -505,8 +590,8 @@ section + section { margin-top: var(--section-gap); }
     position: absolute;
     top: 50%;
     left: 0;
-    width: calc(var(--step) * 1.1);
-    height: calc(var(--step) * 1.1);
+    width: var(--station-size);
+    height: var(--station-size);
     border-radius: 50%;
     background: var(--line-strong);
     transform: translateY(-50%);
@@ -514,25 +599,29 @@ section + section { margin-top: var(--section-gap); }
 
 .path-line::after {
     /* One pulse travels the whole row, which is what the audio does. It is
-       drawn on the list rather than on a station, so its travel is the width
-       of the row however many stations that row holds. */
+       drawn on the list rather than on a station, so its travel is the width of
+       the row however many stations that row holds, and it sits on the line the
+       same way the stations do. */
     content: "";
     position: absolute;
     top: 0;
     left: 0;
-    width: calc(var(--step) * 1.1);
-    height: calc(var(--step) * 1.1);
+    width: var(--station-size);
+    height: var(--station-size);
     border-radius: 50%;
     background: var(--signal);
-    box-shadow: 0 0 0 calc(var(--step) * 0.7) var(--signal-quiet);
+    box-shadow: 0 0 0 calc(var(--station-size) * 0.6) var(--signal-quiet);
+    transform: translateY(-50%);
     animation: travel 7s var(--ease) infinite;
 }
 
+/* It stops a station's width short of the end, so the last of it never hangs
+   over the edge of the row. */
 @keyframes travel {
     0% { left: 0; opacity: 0; }
     6% { opacity: 1; }
     88% { opacity: 1; }
-    100% { left: 100%; opacity: 0; }
+    100% { left: calc(100% - var(--station-size)); opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -552,10 +641,11 @@ section + section { margin-top: var(--section-gap); }
 .prose-section h2 {
     margin: 0 0 var(--gap) 0;
     max-width: 22em;
+    font-family: var(--font-display);
     font-size: var(--type-title);
     line-height: 1.14;
     letter-spacing: var(--tracking-tight);
-    font-weight: 600;
+    font-weight: 700;
     text-wrap: balance;
 }
 

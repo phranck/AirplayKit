@@ -108,9 +108,10 @@ swiftc -O -I include Sources/PlayableAirplay.swift example/Demo.swift -o build/D
 
 ./build/Demo list
 ./build/Demo play Sonos-48A6B8F7CA56.local 7000 5
+./build/Demo file ~/Music/track.m4a Sonos-48A6B8F7CA56.local
 ```
 
-`list` browses for five seconds and prints what it found. `play` opens a session and sends a quiet 440 Hz tone at a tenth of full volume.
+`list` browses for five seconds and prints what it found. `play` opens a session and sends a quiet 440 Hz tone. `file` plays an audio file, converting it to what AirPlay carries on the way, and its `stream` function is the complete example the site shows.
 
 ## Tests
 

@@ -60,7 +60,11 @@ fi
     --warnings-as-errors \
     "${hostingArguments[@]}"
 
-cp Website/* "$siteDirectory/"
+cp -R Website/. "$siteDirectory/"
+
+# The page holds a marker where a snippet goes, and the snippet comes out of the
+# example that CI compiles. So the page cannot show code that stopped working.
+python3 Scripts/fill-snippets.py "$siteDirectory/index.html" example/Demo.swift
 
 # DocC opens on its own landing page, which is one click further in than the
 # link from the site suggests. This sends a reader straight there.

@@ -45,9 +45,10 @@
 
     <nav class="masthead-links" aria-label="Sections">
       <a href="#interface">Interface</a>
+      <a href="#example">Example</a>
       <a href="#building">Building</a>
-      <a href="docs/">Reference</a>
-      <a href="https://github.com/phranck/PlayableAirplay">Source</a>
+      <a class="masthead-elsewhere" href="docs/"><svg class="icon" aria-hidden="true"><use href="#ph-book-open"></use></svg>Reference</a>
+      <a class="masthead-elsewhere" href="https://github.com/phranck/PlayableAirplay"><svg class="icon" aria-hidden="true"><use href="#ph-github-logo"></use></svg>Source</a>
     </nav>
 
     <button class="theme-toggle" type="button" id="theme-toggle" aria-pressed="false">
@@ -73,10 +74,10 @@
 
     <figure class="panel hero-code">
       <figcaption><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>Finding the speakers<button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button></figcaption>
-<pre><code><span class="k">let</span> discovery = <span class="t">AirPlayDiscovery</span> { receivers <span class="k">in</span>
-    <span class="k">for</span> receiver <span class="k">in</span> receivers {
+<pre><code><span class="k">let</span> speakers = <span class="t">AirPlayDiscovery</span> { found <span class="k">in</span>
+    <span class="k">for</span> speaker <span class="k">in</span> found {
         <span class="c">// Esszimmer, Sonos-48A6B8F7CA56</span>
-        print(receiver.name, receiver.host)
+        print(speaker.name, speaker.host)
     }
 }</code></pre>
     </figure>
@@ -121,15 +122,26 @@ session.volume = <span class="n">0.7</span>
     </figure>
   </section>
 
-  <section class="prose-section">
+  <section id="example" class="prose-section">
     <p class="section-number">02</p>
+    <h2>A file, start to finish</h2>
+    <p class="lead">This is the whole of it: read a file, convert it to what AirPlay carries, open a session, and keep it fed until the file runs out. It is lifted straight out of <code>example/Demo.swift</code> when this page is built, so what stands here is what the compiler saw.</p>
+
+    <figure class="panel">
+      <figcaption><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>Playing a file to a speaker<button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button></figcaption>
+<pre><code><!--@snippet stream--></code></pre>
+    </figure>
+  </section>
+
+  <section class="prose-section">
+    <p class="section-number">03</p>
     <h2>What it will not do</h2>
     <p class="lead">One session reaches one receiver. Several sessions at once would each start their own timeline against their own clock, so two speakers in the same room would drift apart within a minute. Holding them together needs a single timeline shared between them, and the sender underneath has not done that work, so this library does not offer it and does not pretend to.</p>
     <p>It also does not resample. The audio goes in as interleaved signed 16 bit stereo at 44100 Hz, because that is what AirPlay carries, and anything else is converted before it arrives.</p>
   </section>
 
   <section id="building" class="prose-section">
-    <p class="section-number">03</p>
+    <p class="section-number">04</p>
     <h2>Building it</h2>
     <p class="lead">CMake builds the library and everything underneath it, so what comes out is one archive and one import path. On Linux the Bonjour header comes from Avahi's compatibility package, and the first configure fetches Mbed TLS.</p>
 
@@ -148,7 +160,7 @@ cmake --build build -j8</code></pre>
 
 <footer class="colophon measure">
   <p><b>PlayableAirplay</b> is built on <a href="https://github.com/akustikrausch/airplay2-sender-cpp">airplay2-sender-cpp</a>, and it is not affiliated with Apple Inc.</p>
-  <p>Published under the <a href="https://layered.mit-license.org">MIT</a> license.</p>
+  <p>The <a href="docs/">reference</a> carries every type and every method. Published under the <a href="https://layered.mit-license.org">MIT</a> license.</p>
 </footer>
 
 <script src="theme.js"></script>

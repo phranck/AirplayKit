@@ -6,6 +6,7 @@
 //  Copyright © 2026 cocoa:naut. All rights reserved.
 //
 
+import AVFoundation
 import Dispatch
 import Foundation
 
@@ -90,6 +91,71 @@ func playTone(on host: String, port: UInt16, forSeconds seconds: Int) -> Int32 {
     return 0
 }
 
+// MARK: - Sending a file
+
+/// Plays a file to a speaker, converting it to what AirPlay carries on the way.
+func stream(_ file: AVAudioFile, to host: String, port: UInt16) throws {
+    // Interleaved 16 bit stereo at 44100 is the only thing that goes over the wire.
+    let wire = AVAudioFormat(commonFormat: .pcmFormatInt16,
+                             sampleRate: Double(AirPlaySession.sampleRate),
+                             channels: AVAudioChannelCount(AirPlaySession.channelCount),
+                             interleaved: true)!
+    let converter = AVAudioConverter(from: file.processingFormat, to: wire)!
+
+    let session = try AirPlaySession(host: host, port: port, senderName: "My App")
+    session.volume = 0.7
+
+    let framesPerChunk: AVAudioFrameCount = 4096
+    let ratio = wire.sampleRate / file.processingFormat.sampleRate
+    let read = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: framesPerChunk)!
+    let converted = AVAudioPCMBuffer(pcmFormat: wire,
+                                     frameCapacity: AVAudioFrameCount(Double(framesPerChunk) * ratio) + 1)!
+
+    while true {
+        try file.read(into: read)
+        if read.frameLength == 0 { break }   // the end of the file
+
+        var handedOver = false
+        converter.convert(to: converted, error: nil) { _, status in
+            defer { handedOver = true }
+            status.pointee = handedOver ? .noDataNow : .haveData
+
+            return handedOver ? nil : read
+        }
+
+        let samples = converted.int16ChannelData![0]
+        let count = Int(converted.frameLength) * AirPlaySession.channelCount
+
+        // A file can wait, so it offers the same frames again. A live source would drop them.
+        var outcome = session.write(UnsafeBufferPointer(start: samples, count: count))
+        while outcome == .bufferFull {
+            Thread.sleep(forTimeInterval: 0.01)
+            outcome = session.write(UnsafeBufferPointer(start: samples, count: count))
+        }
+
+        if outcome == .ended { break }
+    }
+
+    // The sender still holds what has not gone out, so closing now would cut the end off.
+    Thread.sleep(forTimeInterval: 4)
+    session.close()
+}
+
+/// Reads the file named on the command line and hands it to the function above.
+func playFile(at path: String, on host: String, port: UInt16) -> Int32 {
+    do {
+        let file = try AVAudioFile(forReading: URL(fileURLWithPath: path))
+        print("playing \(path) on \(host):\(port)")
+        try stream(file, to: host, port: port)
+        print("done")
+    } catch {
+        FileHandle.standardError.write(Data("\(error)\n".utf8))
+        return 1
+    }
+
+    return 0
+}
+
 // MARK: - What the command does
 
 @main
@@ -101,6 +167,7 @@ struct Demo {
             print("""
                   usage: Demo list
                          Demo play <host> [port] [seconds]
+                         Demo file <path> <host> [port]
                   """)
             exit(2)
         }
@@ -113,6 +180,10 @@ struct Demo {
             let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000
             let seconds = Int(arguments.count > 4 ? arguments[4] : "5") ?? 5
             exit(playTone(on: arguments[2], port: port, forSeconds: seconds))
+
+        case "file" where arguments.count > 3:
+            let port = UInt16(arguments.count > 4 ? arguments[4] : "7000") ?? 7000
+            exit(playFile(at: arguments[2], on: arguments[3], port: port))
 
         default:
             print("usage: Demo play <host> [port] [seconds]")
