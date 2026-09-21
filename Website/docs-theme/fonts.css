@@ -52,6 +52,16 @@
     font-display: swap;
 }
 
+/*
+ The renderer sizes itself from the root, and its root is 16 points whilst the
+ page in front of it reads at 18. Barlow sets small for its size on top of that,
+ so the reference came out a step below everything else. Raising the root scales
+ the whole of it, headings and code with it, rather than pinning each one.
+ */
+html {
+    font-size: 112.5%;
+}
+
 :root {
     --typography-html-font: "Barlow", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
     --typography-html-font-mono: "Fira Code Nerd Font", ui-monospace, SFMono-Regular, Menlo, monospace;
