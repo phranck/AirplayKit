@@ -12,9 +12,9 @@ One session reaches one receiver. Several sessions at once would each start thei
 
 ## Documentation
 
-The reference lives at [phranck.github.io/PlayableAirplay](https://phranck.github.io/PlayableAirplay/), built from the source by CI on every push to `main`.
+The site is at [playable-airplay.layered.work](https://playable-airplay.layered.work/), and the reference under [/docs](https://playable-airplay.layered.work/docs/). Both are built from the source by CI on every push to `main`.
 
-To read it locally, run `./Scripts/build-documentation.sh` and open `build/documentation`. That script is also what CI runs, so the two cannot drift apart.
+To read them locally, run `./Scripts/build-site.sh` and open `build/site`. That script is also what CI runs, so the two cannot drift apart.
 
 ## How it is put together
 

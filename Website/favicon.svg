@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="PlayableAirplay">
+  <!-- Four bars of a level meter, rising left to right. The accent matches the
+       one the site uses, and both palettes are held here so the mark follows
+       the system the way the page does. -->
+  <style>
+    rect { fill: #14181b; }
+    .signal { fill: #b4531a; }
+    @media (prefers-color-scheme: dark) {
+      rect { fill: #eef1f3; }
+      .signal { fill: #ffa053; }
+    }
+  </style>
+  <rect x="3"  y="19" width="4" height="10" rx="2"/>
+  <rect x="10" y="13" width="4" height="16" rx="2"/>
+  <rect x="17" y="7"  width="4" height="22" rx="2"/>
+  <rect class="signal" x="24" y="3" width="4" height="26" rx="2"/>
+</svg>

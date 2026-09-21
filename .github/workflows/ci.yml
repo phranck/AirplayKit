@@ -66,24 +66,25 @@ jobs:
       - name: Run the example
         run: ./build/Demo || test $? -eq 2
 
-  documentation:
-    name: Documentation
+  site:
+    name: Site
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
 
-      # The documentation is built from the Swift sources and the header, both
-      # of which are in this repository, so the submodule stays where it is.
+      # The page and the reference are built from the Swift sources, the header
+      # and Website/, all of which are in this repository, so the submodule
+      # stays where it is.
       - name: Build
-        run: ./Scripts/build-documentation.sh --host
+        run: ./Scripts/build-site.sh --host
 
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: build/documentation
+          path: build/site
 
   publish:
-    name: Publish the documentation
-    needs: documentation
+    name: Publish the site
+    needs: site
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

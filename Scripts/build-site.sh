@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 #
-#  build-documentation.sh
-#  Builds the DocC documentation for the Swift library.
+#  build-site.sh
+#  Builds the site: the page at the root, the DocC reference under /docs.
 #
-#  This package is built by CMake rather than by SwiftPM, so there is no
-#  docc plugin to lean on. The symbol graph comes from the compiler and docc
-#  turns it, together with the catalogue, into a site.
+#  This package is built by CMake rather than by SwiftPM, so there is no docc
+#  plugin to lean on. The symbol graph comes from the compiler and docc turns
+#  it, together with the catalogue, into a site of its own.
 #
-#  Pass --host to build for GitHub Pages, which needs every link prefixed with
-#  the repository name.
+#  Pass --host to build for the published site, where the reference is served
+#  from /docs and every link inside it has to say so. Without it the reference
+#  is built for opening off the disk.
 #
 #  Copyright © 2026 cocoa:naut. All rights reserved.
 #
@@ -20,15 +21,15 @@ cd "$root"
 
 moduleName="PlayableAirplay"
 symbolDirectory="build/symbol-graph"
-outputDirectory="build/documentation"
+siteDirectory="build/site"
 
 hostingArguments=()
 if [[ "${1:-}" == "--host" ]]; then
-    hostingArguments=(--hosting-base-path "$moduleName")
+    hostingArguments=(--hosting-base-path "docs")
 fi
 
-rm -rf "$symbolDirectory" "$outputDirectory"
-mkdir -p "$symbolDirectory"
+rm -rf "$symbolDirectory" "$siteDirectory"
+mkdir -p "$symbolDirectory" "$siteDirectory"
 
 # The module is compiled only to get its symbols, so the object file goes away
 # with the temporary directory it was written into.
@@ -55,26 +56,30 @@ fi
     --fallback-bundle-identifier "at.playable.airplay" \
     --fallback-bundle-version "1" \
     --additional-symbol-graph-dir "$symbolDirectory" \
-    --output-path "$outputDirectory" \
+    --output-path "$siteDirectory/docs" \
     --warnings-as-errors \
     "${hostingArguments[@]}"
 
-if [[ ${#hostingArguments[@]} -gt 0 ]]; then
-    # Every page below carries its own index.html, so the one at the root has
-    # nothing to show. It sends a reader to the landing page instead.
-    landing="/$moduleName/documentation/$(echo "$moduleName" | tr '[:upper:]' '[:lower:]')/"
-    cat > "$outputDirectory/index.html" <<HTML
+cp Website/* "$siteDirectory/"
+
+# DocC opens on its own landing page, which is one click further in than the
+# link from the site suggests. This sends a reader straight there.
+documentationPath="/docs/documentation/$(echo "$moduleName" | tr '[:upper:]' '[:lower:]')/"
+if [[ ${#hostingArguments[@]} -eq 0 ]]; then
+    documentationPath=".${documentationPath#/docs}"
+fi
+
+cat > "$siteDirectory/docs/index.html" <<HTML
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>$moduleName</title>
-<meta http-equiv="refresh" content="0; url=$landing">
-<link rel="canonical" href="$landing">
+<title>$moduleName reference</title>
+<meta http-equiv="refresh" content="0; url=$documentationPath">
+<link rel="canonical" href="$documentationPath">
 </head>
-<body><a href="$landing">$moduleName documentation</a></body>
+<body><a href="$documentationPath">$moduleName reference</a></body>
 </html>
 HTML
-fi
 
-echo "documentation written to $outputDirectory"
+echo "site written to $siteDirectory"

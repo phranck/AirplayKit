@@ -1,0 +1,610 @@
+/*
+ *  styles.css
+ *  Every value in this file is a token, and everything that can be derived is
+ *  derived. The two themes are one declaration each, because light-dark() holds
+ *  both answers in the same place and color-scheme decides which one is read.
+ *
+ *  Copyright © 2026 cocoa:naut. All rights reserved.
+ */
+
+:root {
+    color-scheme: light dark;
+
+    /* ---- Measure and rhythm ---- */
+    --page-width: 72rem;
+    --page-gutter: clamp(1.25rem, 5vw, 4rem);
+    --step: 0.5rem;
+    --gap-tight: calc(var(--step) * 1.5);
+    --gap: calc(var(--step) * 3);
+    --gap-wide: calc(var(--step) * 6);
+    --section-gap: clamp(3.5rem, 8vw, 6.5rem);
+
+    /* ---- Card geometry: two numbers, the rest follows ---- */
+    --card-radius: 24px;
+    --card-padding: 14px;
+    --card-inner-radius: max(calc(var(--card-radius) - var(--card-padding)), 0px);
+    --card-text-inset: calc(var(--card-radius) / 2);
+
+    /* ---- Type ---- */
+    --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    --type-display: clamp(2.3rem, 4.8vw, 3.6rem);
+    --type-title: clamp(1.7rem, 3vw, 2.5rem);
+    --type-lead: clamp(1.05rem, 1.5vw, 1.3rem);
+    --type-body: 1rem;
+    --type-small: 0.82rem;
+    --type-code: 0.84rem;
+
+    --leading-tight: 1.06;
+    --leading-body: 1.62;
+    --tracking-tight: -0.022em;
+    --tracking-wide: 0.16em;
+
+    /* ---- Colour ---- */
+    --paper: light-dark(#f7f4ef, #0d1012);
+    --paper-raised: light-dark(#fffdfa, #14191c);
+    --ink: light-dark(#14181b, #eef1f3);
+    --ink-soft: light-dark(#5b6469, #97a3a9);
+    --ink-faint: light-dark(#8b9499, #66727a);
+    --line: light-dark(#ded7cc, #232b30);
+    --line-strong: light-dark(#c5bcae, #333e45);
+
+    /* The accent is a level meter, not a brand gradient. It marks the signal
+       and the links, and it appears nowhere else. */
+    --signal: light-dark(#b4531a, #ffa053);
+    --signal-quiet: light-dark(#f0e2d5, #2a1d13);
+
+    /* ---- Code colours, one per token class ---- */
+    --code-keyword: light-dark(#9a2c6c, #ff9ecb);
+    --code-type: light-dark(#1d5e8c, #7fc4f0);
+    --code-string: light-dark(#3f6b2a, #9ed17a);
+    --code-number: light-dark(#8a4b12, #f0b878);
+    --code-comment: var(--ink-faint);
+
+    /* ---- Icons ---- */
+    --icon-size: 1.15em;
+    /* An icon beside text is centred on the midline between the baseline and
+       the cap line, which sits below the middle of its own box. Measured
+       against this face at this size. */
+    --icon-lift: 0.215em;
+
+    /* ---- Motion ---- */
+    --duration: 220ms;
+    --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+@media (prefers-reduced-motion: reduce) {
+    :root { --duration: 1ms; }
+}
+
+/* ---------------------------------------------------------------- base --- */
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html {
+    scroll-behavior: smooth;
+    scroll-padding-top: calc(var(--step) * 14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+}
+
+body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--type-body);
+    line-height: var(--leading-body);
+    -webkit-font-smoothing: antialiased;
+
+    /* A hairline grid in the paper, just visible enough to give the page a
+       surface. It is the only decoration on the background. */
+    background-image:
+        linear-gradient(to right, var(--line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+    background-size: calc(var(--step) * 12) calc(var(--step) * 12);
+    background-position: center top;
+    background-attachment: fixed;
+}
+
+body::before {
+    /* The grid fades out downwards so it frames the masthead and then leaves
+       the reading area alone. */
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent, var(--paper) 30rem);
+    pointer-events: none;
+    z-index: -1;
+}
+
+a {
+    color: var(--signal);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.22em;
+    transition: color var(--duration) var(--ease);
+}
+
+a:hover { color: var(--ink); }
+
+code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+}
+
+/* --------------------------------------------------------------- icons --- */
+
+.icon-sprite { display: none; }
+
+/* Text that only a screen reader needs. */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.icon {
+    width: var(--icon-size);
+    height: var(--icon-size);
+    flex: none;
+    vertical-align: baseline;
+    transform: translateY(var(--icon-lift));
+    fill: currentColor;
+}
+
+/* ------------------------------------------------------------ masthead --- */
+
+/* The band spans the window so the frosted edge reaches both sides, and the
+   row inside it keeps the page measure, so the wordmark begins where the
+   writing beneath it begins. */
+.masthead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    padding-block: var(--gap-tight);
+    background: color-mix(in srgb, var(--paper) 82%, transparent);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
+}
+
+.masthead-row {
+    display: flex;
+    align-items: center;
+    gap: var(--gap);
+}
+
+.wordmark {
+    font-family: var(--font-mono);
+    font-size: var(--type-small);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--ink);
+    text-decoration: none;
+}
+
+.wordmark b {
+    font-weight: inherit;
+    color: var(--signal);
+}
+
+.masthead-links {
+    display: flex;
+    gap: var(--gap);
+    margin-left: auto;
+    font-size: var(--type-small);
+}
+
+.masthead-links a {
+    color: var(--ink-soft);
+    text-decoration: none;
+}
+
+.masthead-links a:hover { color: var(--ink); }
+
+@media (max-width: 46rem) {
+    .masthead-links a:not([href="docs/"]) { display: none; }
+}
+
+/* -------------------------------------------------------- theme toggle --- */
+
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-tight);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: var(--type-small);
+    cursor: pointer;
+}
+
+.theme-toggle:hover { color: var(--ink); }
+
+/* The sun and the moon say which way the switch goes, and the one in force
+   takes the accent so the state is not colour alone. */
+.theme-toggle .icon {
+    transform: none;
+    color: var(--ink-faint);
+    transition: color var(--duration) var(--ease);
+}
+
+.theme-toggle[aria-pressed="false"] .theme-toggle-sun,
+.theme-toggle[aria-pressed="true"] .theme-toggle-moon { color: var(--signal); }
+
+.theme-toggle-track {
+    position: relative;
+    width: calc(var(--step) * 5.5);
+    height: calc(var(--step) * 3);
+    border: 1px solid var(--line-strong);
+    border-radius: calc(var(--step) * 1.5);
+    background: var(--paper-raised);
+    transition: border-color var(--duration) var(--ease),
+                background-color var(--duration) var(--ease);
+}
+
+.theme-toggle-knob {
+    position: absolute;
+    top: 50%;
+    left: calc(var(--step) * 0.4);
+    width: calc(var(--step) * 1.8);
+    height: calc(var(--step) * 1.8);
+    border-radius: 50%;
+    background: var(--ink-soft);
+    transform: translateY(-50%);
+    transition: transform var(--duration) var(--ease),
+                background-color var(--duration) var(--ease);
+}
+
+.theme-toggle[aria-pressed="true"] .theme-toggle-track {
+    border-color: var(--signal);
+    background: var(--signal-quiet);
+}
+
+.theme-toggle[aria-pressed="true"] .theme-toggle-knob {
+    background: var(--signal);
+    transform: translate(calc(var(--step) * 2.5), -50%);
+}
+
+/* ------------------------------------------------------------- layout --- */
+
+/* One measure for the whole page. The masthead row, the content and the
+   colophon all take it, so nothing begins at a different edge from the thing
+   above it. */
+.measure {
+    width: min(100% - var(--page-gutter) * 2, var(--page-width));
+    margin-inline: auto;
+}
+
+section + section { margin-top: var(--section-gap); }
+
+/* ---------------------------------------------------------------- hero --- */
+
+.hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+    align-items: start;
+    gap: var(--gap-wide);
+    padding-top: clamp(3.5rem, 9vw, 7rem);
+}
+
+@media (max-width: 58rem) {
+    .hero { grid-template-columns: minmax(0, 1fr); }
+}
+
+.eyebrow {
+    margin: 0 0 var(--gap) 0;
+    font-family: var(--font-mono);
+    font-size: var(--type-small);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--ink-faint);
+}
+
+.hero h1 {
+    margin: 0;
+    font-size: var(--type-display);
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-tight);
+    font-weight: 620;
+    text-wrap: balance;
+}
+
+.standfirst {
+    margin: var(--gap) 0 0 0;
+    max-width: 34em;
+    font-size: var(--type-lead);
+    color: var(--ink-soft);
+}
+
+.hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--gap-tight);
+    margin: var(--gap-wide) 0 0 0;
+}
+
+.action {
+    display: inline-flex;
+    align-items: baseline;
+    gap: calc(var(--step) * 1.1);
+    padding: calc(var(--step) * 1.4) calc(var(--step) * 2.6);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--ink);
+    font-size: var(--type-small);
+    text-decoration: none;
+    transition: border-color var(--duration) var(--ease),
+                background-color var(--duration) var(--ease),
+                color var(--duration) var(--ease);
+}
+
+.action:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+}
+
+.action-primary {
+    border-color: var(--signal);
+    background: var(--signal);
+    color: var(--paper);
+}
+
+.action-primary:hover {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+}
+
+/* --------------------------------------------------------------- panel --- */
+
+.panel {
+    margin: 0;
+    padding: var(--card-padding);
+    border: 1px solid var(--line);
+    border-radius: var(--card-radius);
+    background: var(--paper-raised);
+    overflow: hidden;
+}
+
+.panel figcaption {
+    display: flex;
+    align-items: baseline;
+    gap: calc(var(--step) * 1.1);
+    padding-left: var(--card-text-inset);
+    padding-right: var(--card-text-inset);
+    padding-bottom: var(--gap-tight);
+    font-family: var(--font-mono);
+    font-size: var(--type-small);
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+}
+
+/* -------------------------------------------------------- copy button --- */
+
+.copy {
+    display: grid;
+    margin-left: auto;
+    padding: calc(var(--step) * 0.5);
+    border: 0;
+    background: none;
+    color: var(--ink-faint);
+    cursor: pointer;
+    transition: color var(--duration) var(--ease);
+}
+
+.copy:hover { color: var(--ink); }
+
+.copy[data-state="copied"] { color: var(--signal); }
+
+/* The tick and the offer occupy the same cell, so the button does not change
+   size when it swaps one for the other. */
+.copy .icon {
+    grid-area: 1 / 1;
+    transform: none;
+}
+
+.copy .copy-done,
+.copy[data-state] .copy-idle { opacity: 0; }
+
+.copy[data-state] .copy-done { opacity: 1; }
+
+/* The confirmation arrives at once and drains away afterwards, so the
+   transition sits on the resting state and not on the confirmed one. */
+.copy .copy-idle { transition: opacity var(--duration) var(--ease); }
+
+.copy[data-state="refused"] .copy-done { color: var(--ink-faint); }
+
+.panel pre {
+    margin: 0;
+    padding: var(--gap);
+    border-radius: var(--card-inner-radius);
+    background: var(--paper);
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: var(--type-code);
+    line-height: 1.75;
+    tab-size: 4;
+}
+
+.panel code { font-size: inherit; }
+
+.panel .k { color: var(--code-keyword); }
+.panel .t { color: var(--code-type); }
+.panel .s { color: var(--code-string); }
+.panel .n { color: var(--code-number); }
+.panel .c { color: var(--code-comment); font-style: italic; }
+
+/* ---------------------------------------------------------------- path --- */
+
+.path {
+    padding: var(--gap-wide) 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+}
+
+.path-line {
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--gap);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: station;
+}
+
+@media (max-width: 52rem) {
+    .path-line { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.path-line li {
+    position: relative;
+    padding-top: calc(var(--step) * 3.5);
+    font-size: var(--type-small);
+    color: var(--ink-faint);
+}
+
+.path-line b {
+    display: flex;
+    align-items: baseline;
+    gap: calc(var(--step) * 1.1);
+    font-weight: 560;
+    color: var(--ink);
+}
+
+.path-icon { color: var(--signal); }
+
+.path-mark {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--line-strong);
+}
+
+.path-mark::before {
+    /* The station itself, sitting on the line. */
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: calc(var(--step) * 1.1);
+    height: calc(var(--step) * 1.1);
+    border-radius: 50%;
+    background: var(--line-strong);
+    transform: translateY(-50%);
+}
+
+.path-line::after {
+    /* One pulse travels the whole row, which is what the audio does. It is
+       drawn on the list rather than on a station, so its travel is the width
+       of the row however many stations that row holds. */
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: calc(var(--step) * 1.1);
+    height: calc(var(--step) * 1.1);
+    border-radius: 50%;
+    background: var(--signal);
+    box-shadow: 0 0 0 calc(var(--step) * 0.7) var(--signal-quiet);
+    animation: travel 7s var(--ease) infinite;
+}
+
+@keyframes travel {
+    0% { left: 0; opacity: 0; }
+    6% { opacity: 1; }
+    88% { opacity: 1; }
+    100% { left: 100%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .path-line::after { animation: none; opacity: 0; }
+}
+
+/* ------------------------------------------------------------ sections --- */
+
+.section-number {
+    margin: 0 0 var(--gap-tight) 0;
+    font-family: var(--font-mono);
+    font-size: var(--type-small);
+    letter-spacing: var(--tracking-wide);
+    color: var(--signal);
+}
+
+.prose-section h2 {
+    margin: 0 0 var(--gap) 0;
+    max-width: 22em;
+    font-size: var(--type-title);
+    line-height: 1.14;
+    letter-spacing: var(--tracking-tight);
+    font-weight: 600;
+    text-wrap: balance;
+}
+
+.prose-section h3 {
+    margin: 0 0 var(--gap-tight) 0;
+    font-size: var(--type-body);
+    font-weight: 560;
+}
+
+.prose-section h3 code { color: var(--signal); }
+
+.prose-section p {
+    max-width: 38em;
+    color: var(--ink-soft);
+}
+
+.prose-section .lead {
+    max-width: 44em;
+    font-size: var(--type-lead);
+    color: var(--ink);
+}
+
+.prose-section .panel { margin-top: var(--gap-wide); }
+
+.columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--gap-wide);
+}
+
+@media (max-width: 52rem) {
+    .columns { grid-template-columns: minmax(0, 1fr); }
+}
+
+.columns p { margin-top: 0; }
+
+/* ------------------------------------------------------------ colophon --- */
+
+.colophon {
+    margin-top: var(--section-gap);
+    padding-block: var(--gap-wide);
+    border-top: 1px solid var(--line);
+    color: var(--ink-faint);
+    font-size: var(--type-small);
+}
+
+.colophon p { margin: 0 0 var(--gap-tight) 0; }
+
+.colophon b {
+    font-weight: 560;
+    color: var(--ink-soft);
+}
