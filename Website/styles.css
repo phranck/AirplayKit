@@ -143,6 +143,28 @@
         --card-inner-radius: max(calc(var(--card-radius) - var(--card-padding)), 0px);
         --card-text-inset: calc(var(--card-radius) / 2);
     }
+
+    /* The switch keeps its words, so on a narrow screen it takes a line of its
+       own rather than pushing the copy button off the edge. The break is an
+       empty full-width item ordered between the two, so the switch itself stays
+       the width of its words and sits in the middle. */
+    .panel figcaption { flex-wrap: wrap; }
+
+    .panel figcaption::after {
+        content: "";
+        order: 2;
+        flex-basis: 100%;
+    }
+
+    .variants {
+        order: 3;
+        margin-inline: auto;
+        margin-top: var(--gap-tight);
+    }
+
+    /* The copy button is alone on the first line now, so it takes the right of
+       it the way it does in a panel with no switch at all. */
+    .panel .variants + .copy { margin-left: auto; }
 }
 
 /* ---------------------------------------------------------------- base --- */
@@ -314,6 +336,8 @@ code {
     .masthead-links { display: none; }
 
     .masthead-row { gap: var(--gap-tight); }
+
+    .theme-toggle { margin-left: auto; }
 
     .wordmark { letter-spacing: 0.06em; }
 }
@@ -487,9 +511,9 @@ section + section { margin-top: var(--section-gap); }
 .panel figcaption {
     display: flex;
     align-items: center;
+    min-height: calc(var(--step) * 5.5);
     gap: calc(var(--step) * 1.1);
     padding-left: var(--card-text-inset);
-    padding-right: var(--card-text-inset);
     padding-bottom: var(--gap-tight);
     font-family: var(--font-mono);
     font-size: var(--type-small);
@@ -514,6 +538,7 @@ section + section { margin-top: var(--section-gap); }
 
 .variant {
     min-height: calc(var(--step) * 3.25);
+    white-space: nowrap;
     padding: 0 calc(var(--step) * 1.6);
     border: 0;
     border-radius: 999px;
@@ -539,10 +564,12 @@ section + section { margin-top: var(--section-gap); }
     /* The far right of the caption, in a panel that carries nothing else. */
     margin-left: auto;
     /* A finger is wider than a cursor, so the box round the mark is what grows
-       rather than the mark. */
+       rather than the mark. The caption gives up its right inset in return, so
+       the mark still lines up with the one on the left rather than sitting a
+       box's worth further in. */
     min-width: calc(var(--step) * 5.5);
     min-height: calc(var(--step) * 5.5);
-    padding: calc(var(--step) * 0.5);
+    padding: 0;
     border: 0;
     background: none;
     color: var(--ink-faint);
@@ -611,6 +638,19 @@ section + section { margin-top: var(--section-gap); }
 @media (max-width: 68rem) {
     /* One column, so there is no headline beside it to line up with. */
     .hero-code { margin-top: 0; }
+}
+
+/* Centred on each other rather than sat on a baseline, so the mark takes no
+   lift here. */
+.panel figcaption .icon { transform: none; }
+
+/* The label is what gives way when the row is narrower than its words, because
+   the mark and the buttons cannot. */
+.panel-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .panel .k { color: var(--code-keyword); }
@@ -774,11 +814,22 @@ section + section { margin-top: var(--section-gap); }
     border-top: 1px solid var(--line);
     color: var(--ink-faint);
     font-size: var(--type-small);
+    text-align: center;
 }
 
-.colophon p { margin: 0 0 var(--gap-tight) 0; }
+.colophon p { margin: 0; }
 
-.colophon b {
-    font-weight: 560;
+.colophon a {
     color: var(--ink-soft);
+    text-decoration: none;
+    letter-spacing: var(--tracking-wide);
+    font-family: var(--font-mono);
+}
+
+.colophon a:hover { color: var(--signal); }
+
+.heart {
+    /* An emoji sits tight in its own box, so it takes the space a word would
+       have either side of it. */
+    padding-inline: 0.12em;
 }
