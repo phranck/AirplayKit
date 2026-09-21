@@ -37,6 +37,7 @@
   <symbol id="ph-moon" viewBox="0 0 256 256"><path d="M233.54,142.23a8,8,0,0,0-8-2,88.08,88.08,0,0,1-109.8-109.8,8,8,0,0,0-10-10,104.84,104.84,0,0,0-52.91,37A104,104,0,0,0,136,224a103.09,103.09,0,0,0,62.52-20.88,104.84,104.84,0,0,0,37-52.91A8,8,0,0,0,233.54,142.23ZM188.9,190.34A88,88,0,0,1,65.66,67.11a89,89,0,0,1,31.4-26A106,106,0,0,0,96,56,104.11,104.11,0,0,0,200,160a106,106,0,0,0,14.92-1.06A89,89,0,0,1,188.9,190.34Z"/></symbol>
   <symbol id="ph-copy" viewBox="0 0 256 256"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></symbol>
   <symbol id="ph-check" viewBox="0 0 256 256"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></symbol>
+  <symbol id="ph-package" viewBox="0 0 256 256"><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></symbol>
 </svg>
 
 <header class="masthead">
@@ -44,11 +45,11 @@
     <a class="wordmark" href="./" aria-label="PlayableAirplay, home">Playable<b>Airplay</b></a>
 
     <nav class="masthead-links" aria-label="Sections">
-      <a href="#interface">Interface</a>
-      <a href="#example">Example</a>
-      <a href="#building">Building</a>
-      <a class="masthead-elsewhere" href="docs/"><svg class="icon" aria-hidden="true"><use href="#ph-book-open"></use></svg>Reference</a>
-      <a class="masthead-elsewhere" href="https://github.com/phranck/PlayableAirplay"><svg class="icon" aria-hidden="true"><use href="#ph-github-logo"></use></svg>Source</a>
+      <a href="#interface"><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>Interface</a>
+      <a href="#example"><svg class="icon" aria-hidden="true"><use href="#ph-terminal-window"></use></svg>Example</a>
+      <a href="#usage"><svg class="icon" aria-hidden="true"><use href="#ph-package"></use></svg>Usage</a>
+      <a href="docs/" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-book-open"></use></svg>Reference</a>
+      <a href="https://github.com/phranck/PlayableAirplay" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-github-logo"></use></svg>Source</a>
     </nav>
 
     <button class="theme-toggle" type="button" id="theme-toggle" aria-pressed="false">
@@ -67,8 +68,8 @@
       <h1>Play to the speaker in the other room without taking the whole machine with you.</h1>
       <p class="standfirst">Apple's route picker moves the system's output, so everything on the Mac follows it. PlayableAirplay speaks RAOP to the receiver itself. One application streams to the kitchen, and the rest of the machine keeps playing where it always did.</p>
       <p class="hero-actions">
-        <a class="action action-primary" href="docs/"><svg class="icon" aria-hidden="true"><use href="#ph-book-open"></use></svg>Read the reference</a>
-        <a class="action" href="https://github.com/phranck/PlayableAirplay"><svg class="icon" aria-hidden="true"><use href="#ph-github-logo"></use></svg>Get the source</a>
+        <a class="action action-primary" href="docs/" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-book-open"></use></svg>Read the reference</a>
+        <a class="action" href="https://github.com/phranck/PlayableAirplay" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-github-logo"></use></svg>Get the source</a>
       </p>
     </div>
 
@@ -76,7 +77,7 @@
       <figcaption><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>Finding the speakers<button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button></figcaption>
 <pre><code><span class="k">let</span> speakers = <span class="t">AirPlayDiscovery</span> { found <span class="k">in</span>
     <span class="k">for</span> speaker <span class="k">in</span> found {
-        <span class="c">// Room B, sonos-2</span>
+        <span class="c">// Dining Room, sonos-2</span>
         print(speaker.name, speaker.host)
     }
 }</code></pre>
@@ -149,7 +150,7 @@ session.volume = <span class="n">0.7</span>
     <p>It also does not resample. The audio goes in as interleaved signed 16 bit stereo at 44100 Hz, because that is what AirPlay carries, and anything else is converted before it arrives.</p>
   </section>
 
-  <section id="building" class="prose-section">
+  <section id="usage" class="prose-section">
     <p class="section-number">04</p>
     <h2>How to use it</h2>
     <p class="lead">It is a Swift package, and everything underneath it is built as part of that package. The C++ sender, ed25519 and Mbed TLS come from their own checkouts, so a clone and a build is the whole of it and nothing is fetched behind your back.</p>
@@ -187,8 +188,8 @@ dependencies: [
 </main>
 
 <footer class="colophon measure">
-  <p><b>PlayableAirplay</b> is built on <a href="https://github.com/akustikrausch/airplay2-sender-cpp">airplay2-sender-cpp</a>, and it is not affiliated with Apple Inc.</p>
-  <p>The <a href="docs/">reference</a> carries every type and every method. Published under the <a href="https://layered.mit-license.org">MIT</a> license.</p>
+  <p><b>PlayableAirplay</b> is built on <a href="https://github.com/akustikrausch/airplay2-sender-cpp" target="_blank" rel="noopener">airplay2-sender-cpp</a>, and it is not affiliated with Apple Inc.</p>
+  <p>The <a href="docs/" target="_blank" rel="noopener">reference</a> carries every type and every method. Published under the <a href="https://layered.mit-license.org" target="_blank" rel="noopener">MIT</a> license.</p>
 </footer>
 
 <script src="theme.js"></script>

@@ -16,37 +16,78 @@ import Foundation
 // MARK: - Receiver
 
 /// One AirPlay receiver, as discovery found it on the network.
+///
+/// Everything here comes out of what the receiver publishes over Bonjour, which
+/// is the only thing known about it before a session is opened. A receiver that
+/// has gone quiet keeps its values; it simply stops appearing in the set.
 public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
-    /// Stable across sightings, taken from the service instance name.
+    /// What identifies the hardware, taken from the service instance name.
+    ///
+    /// It stays the same across sightings, which is what lets a selection
+    /// survive a receiver dropping off the network and coming back. The name can
+    /// change whenever its owner renames it, so it is the wrong thing to
+    /// remember a choice by.
     public let id: String
 
-    /// What a person calls it, such as "Room B".
+    /// What its owner called it, such as "Dining Room".
+    ///
+    /// This is what belongs on screen, and it is what discovery sorts by. Two
+    /// receivers can carry the same name, which is another reason a selection is
+    /// remembered by ``id``.
     public let name: String
 
-    /// Where to reach it, as a host name rather than an address, since addresses move.
+    /// Where to reach it, as a host name rather than an address.
+    ///
+    /// An address on a home network is a lease and can differ between one
+    /// sighting and the next, whilst the name keeps resolving, so this is what
+    /// ``AirPlaySession`` is given.
     public let host: String
 
-    /// The port its RTSP service listens on.
+    /// The port its RTSP service listens on, which is 7000 on every receiver seen so far.
     public let port: UInt16
 
-    /// Whether it announced the AirPlay 2 pairing key. A receiver without one needs the older path.
+    /// Whether it announced the pairing key that AirPlay 2 is built on.
+    ///
+    /// The pairing this library performs needs that key. A receiver without one
+    /// speaks the older protocol, which used an RSA challenge instead, and
+    /// opening a session with it fails rather than falling back.
     public let supportsAirPlay2: Bool
 }
 
 // MARK: - Failures
 
 /// Why a session could not be opened, or why it stopped.
+///
+/// These divide by what somebody can do about them. A refused pairing and an
+/// unusable request are worth telling a person about; the other three are worth
+/// a line in a log and a return to playing locally.
 public enum AirPlayError: Error, Sendable {
     /// The receiver could not be reached at all.
+    ///
+    /// Usually a receiver that went to sleep or left the network between being
+    /// found and being opened, which is a gap of seconds but a real one. Trying
+    /// the same receiver again a moment later is reasonable.
     case unreachable
 
     /// The receiver answered and refused the pairing.
+    ///
+    /// It is reachable and it said no. A receiver already streaming from
+    /// somewhere else does this, and so does one that wants a code typed into
+    /// it, which this library does not ask for.
     case pairingRefused
 
     /// The session was set up and the receiver ended it.
+    ///
+    /// Something took the receiver away after it had agreed: it was switched
+    /// off, or another sender took it. Whatever was playing belongs back on the
+    /// machine it came from.
     case sessionEnded
 
     /// Something was asked for that this library cannot use, such as an empty host name.
+    ///
+    /// This one is a mistake in the calling code rather than anything about the
+    /// network, and it is the only one that will keep happening until the code
+    /// changes.
     case invalidRequest
 
     /// The sender failed for a reason the caller can do nothing about.
@@ -58,10 +99,20 @@ public enum AirPlayError: Error, Sendable {
 /// Watches the network for AirPlay receivers.
 ///
 /// Browsing starts when the instance is created and stops when it is released or
-/// when ``stop()`` is called, so holding on to it is what keeps it running.
+/// when ``stop()`` is called, so holding on to it is what keeps it running. An
+/// instance nobody holds finds nothing, and one held for the life of the
+/// application keeps a socket and a thread for that long, so the usual place to
+/// hold one is whatever shows the list.
 ///
-/// The C layer reports on a thread of its own, and this hands every change to a
-/// queue the caller names, so a list on screen never updates from the wrong place.
+/// What it browses for is the service AirPlay audio receivers advertise over
+/// Bonjour. That is not the same as the output devices the system knows about:
+/// those hold a receiver only once the system has connected it, and connecting
+/// it is what moves the whole machine's output. Browsing finds every receiver on
+/// the network, connected or not, which is the point.
+///
+/// The layer underneath reports on a thread of its own, and this hands every
+/// change to a queue the caller names, so a list on screen never updates from
+/// the wrong place.
 public final class AirPlayDiscovery {
     /// The receivers currently visible, sorted by name.
     ///
@@ -126,20 +177,38 @@ public extension AirPlayDiscovery {
 
 /// A connection to one receiver, carrying audio.
 ///
+/// Opening one pairs with the receiver, which is several round trips and a
+/// couple of seconds against a speaker that was asleep. After that the session
+/// holds a buffer of a few seconds, and the sender drains it against its own
+/// clock and paces packets onto the network, so writing into it never waits and
+/// a refused write is usually that buffer being full.
+///
 /// One session reaches one receiver. Several at once would each start their own
-/// timeline against their own clock, so the receivers would drift apart.
+/// timeline against their own clock, so the receivers would drift apart within a
+/// minute. Holding them together needs a single timeline shared between them,
+/// which the sender underneath has not done yet.
 public final class AirPlaySession {
     /// What became of frames handed to ``write(_:)-([Int16])``.
+    ///
+    /// Two of these mean the frames were not taken, and they want opposite
+    /// answers, which is why this is not a Bool.
     public enum WriteOutcome: Sendable {
         /// The frames are on their way.
         case taken
 
-        /// The buffer is full because the sender has not caught up yet. A live
-        /// source drops these frames and carries on; one that can pause offers
-        /// them again.
+        /// The buffer is full because the sender has not caught up yet.
+        ///
+        /// This is back pressure rather than a failure: the sender drains in
+        /// real time and the caller is ahead of it. A live source drops these
+        /// frames and carries on, because a late packet is worse than a missing
+        /// one. A source that can pause offers them again, which is what turns
+        /// the buffer into the thing that paces the read.
         case bufferFull
 
         /// The receiver ended the session, and it wants closing.
+        ///
+        /// Further writes say the same thing, so there is nothing to be gained
+        /// by carrying on.
         case ended
     }
 
@@ -154,9 +223,17 @@ public final class AirPlaySession {
 
     /// The receiver's own volume, from 0 for silent to 1 for full.
     ///
-    /// This moves the receiver's control rather than scaling the samples, so it
-    /// survives a track change. Anything outside the range is brought into it,
-    /// and reading it back gives what was actually sent.
+    /// Setting it sends a parameter to the receiver rather than scaling the
+    /// samples, which is why it survives a track change, why the speaker's own
+    /// display follows it, and why it costs nothing in the audio path.
+    ///
+    /// The protocol's range is an attenuation in decibels, so this is not a
+    /// curve that sounds linear: half way up here is half way up the receiver's
+    /// range, which is louder than half volume to the ear. Shape the value
+    /// before setting it where a fader should sound even.
+    ///
+    /// Anything outside the range is brought into it, and reading it back gives
+    /// what was actually sent.
     public var volume: Float {
         get { sentVolume }
         set {
@@ -239,7 +316,13 @@ public extension AirPlaySession {
         return isRunning ? .bufferFull : .ended
     }
 
-    /// Ends the session. Calling it twice is allowed, and releasing the session does it anyway.
+    /// Ends the session.
+    ///
+    /// Calling it twice is allowed, and releasing the session does it anyway.
+    ///
+    /// It does not wait for what is still in the buffer, so a caller that has
+    /// just written the end of a file and closes at once cuts off whatever had
+    /// not gone out yet.
     func close() {
         guard let handle else { return }
 

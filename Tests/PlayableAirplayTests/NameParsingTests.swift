@@ -22,17 +22,17 @@ final class NameParsingTests: XCTestCase {
     }
 
     func testTakesTheAddressFromBeforeTheSeparator() {
-        let (identifier, name) = split("48A6B8F7CA56@Room B")
+        let (identifier, name) = split("48A6B8F7CA56@DiningRoom")
 
         XCTAssertEqual(identifier, "48A6B8F7CA56")
-        XCTAssertEqual(name, "Room B")
+        XCTAssertEqual(name, "DiningRoom")
     }
 
     func testKeepsAnInstanceThatCarriesNoAddress() {
-        let (identifier, name) = split("Room A")
+        let (identifier, name) = split("LivingRoom")
 
-        XCTAssertEqual(identifier, "Room A")
-        XCTAssertEqual(name, "Room A")
+        XCTAssertEqual(identifier, "LivingRoom")
+        XCTAssertEqual(name, "LivingRoom")
     }
 
     func testDividesOnTheFirstSeparatorOnly() {
@@ -46,7 +46,7 @@ final class NameParsingTests: XCTestCase {
         var identifier = [CChar](repeating: 1, count: 4)
         var name = [CChar](repeating: 1, count: 4)
 
-        pa_split_instance_name("48A6B8F7CA56@Room B", &identifier, identifier.count, &name, name.count)
+        pa_split_instance_name("48A6B8F7CA56@DiningRoom", &identifier, identifier.count, &name, name.count)
 
         XCTAssertEqual(identifier.last, 0)
         XCTAssertEqual(name.last, 0)

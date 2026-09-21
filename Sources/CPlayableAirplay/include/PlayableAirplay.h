@@ -57,7 +57,7 @@ typedef enum PAResult {
 typedef struct PAReceiver {
     /** Stable across sightings, taken from the service instance name. */
     char id[PA_MAX_ID];
-    /** What a person calls it, such as "Room B". */
+    /** What a person calls it, such as "Dining Room". */
     char name[PA_MAX_NAME];
     /** Where to reach it, as a host name rather than an address, since addresses move. */
     char host[PA_MAX_HOST];
