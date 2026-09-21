@@ -463,7 +463,9 @@ section + section { margin-top: var(--section-gap); }
 .variants {
     display: flex;
     gap: calc(var(--step) * 0.5);
-    margin-left: auto;
+    /* Auto on both sides, so the group sits between the caption and the copy
+       button rather than pushing one of them about. */
+    margin-inline: auto;
     padding: calc(var(--step) * 0.4);
     border: 1px solid var(--line);
     border-radius: 999px;
@@ -491,7 +493,9 @@ section + section { margin-top: var(--section-gap); }
 
 .copy {
     display: grid;
-    margin-left: calc(var(--step) * 1.5);
+    /* The far right of the caption, in every panel, whether or not there is a
+       switch between it and the caption's own words. */
+    margin-left: auto;
     padding: calc(var(--step) * 0.5);
     border: 0;
     background: none;
