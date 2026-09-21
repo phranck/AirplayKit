@@ -1,11 +1,11 @@
 <div align="center">
 
-[![CI](https://img.shields.io/github/actions/workflow/status/phranck/PlayableAirplay/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=1c1c1c&color=e53935)](https://github.com/phranck/PlayableAirplay/actions/workflows/ci.yml)
-[![Last commit](https://img.shields.io/github/last-commit/phranck/PlayableAirplay?style=for-the-badge&label=Commit&labelColor=1c1c1c&color=fb8c00)](https://github.com/phranck/PlayableAirplay/commits/main)
-[![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux-fdd835?style=for-the-badge&labelColor=1c1c1c)](https://github.com/phranck/PlayableAirplay/actions/workflows/ci.yml)
-[![Language](https://img.shields.io/badge/Written%20in-Swift-43a047?style=for-the-badge&labelColor=1c1c1c)](https://swift.org)
-[![Documentation](https://img.shields.io/badge/Reference-DocC-1e88e5?style=for-the-badge&labelColor=1c1c1c)](https://playable-airplay.layered.work/docs/)
-[![License](https://img.shields.io/github/license/phranck/PlayableAirplay?style=for-the-badge&label=License&labelColor=1c1c1c&color=8e24aa)](https://layered.mit-license.org)
+[![CI](https://img.shields.io/github/actions/workflow/status/phranck/PlayableAirplay/ci.yml?branch=main&style=flat&label=CI&labelColor=1c1c1c&color=e53935)](https://github.com/phranck/PlayableAirplay/actions/workflows/ci.yml)
+[![Last commit](https://img.shields.io/github/last-commit/phranck/PlayableAirplay?style=flat&label=Commit&labelColor=1c1c1c&color=fb8c00)](https://github.com/phranck/PlayableAirplay/commits/main)
+[![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux-fdd835?style=flat&labelColor=1c1c1c)](https://github.com/phranck/PlayableAirplay/actions/workflows/ci.yml)
+[![Language](https://img.shields.io/badge/Written%20in-Swift-43a047?style=flat&labelColor=1c1c1c)](https://swift.org)
+[![Documentation](https://img.shields.io/badge/Reference-DocC-1e88e5?style=flat&labelColor=1c1c1c)](https://playable-airplay.layered.work/docs/)
+[![License](https://img.shields.io/github/license/phranck/PlayableAirplay?style=flat&label=License&labelColor=1c1c1c&color=8e24aa)](https://layered.mit-license.org)
 
 </div>
 
@@ -29,11 +29,13 @@ To read them locally, run `./Scripts/build-site.sh` and serve `build/site`, whic
 
 ## How it is put together
 
-There are two layers, and only the upper one is meant to be called.
+There are two layers, and Swift takes the upper one.
 
-`Sources/PlayableAirplay` is the library: `AirPlayDiscovery`, `AirPlaySession`, `AirPlayReceiver` and `AirPlayError`. That is the whole interface.
+`Sources/PlayableAirplay` is the library: `AirPlayDiscovery`, `AirPlaySession`, `AirPlayReceiver` and `AirPlayError`. That is the whole interface, and nothing from underneath reaches it: no opaque pointer, no C buffer, no `pa_` function.
 
-Underneath it sits a C module, `CPlayableAirplay`, and further down the C++ sender. C is what Swift imports directly on macOS and on Linux alike, with no bridging header and no C++ interoperability, which is why that layer exists at all. Nothing in it reaches the Swift interface: no opaque pointer, no C buffer, no `pa_` function. Nothing anywhere touches AVFoundation, CoreAudio or AppKit.
+Underneath sits a C module, `CPlayableAirplay`, and further down the C++ sender. C is what Swift imports directly on macOS and on Linux alike, with no bridging header and no C++ interoperability, which is why that layer exists at all. Nothing anywhere touches AVFoundation, CoreAudio or AppKit.
+
+That C module is offered as a product of its own for one case: an Objective-C application, which has no Swift to import the library from. Calling a C header is what Objective-C does with a C library, so it takes `CPlayableAirplay`, imports `PlayableAirplay.h`, and gets the same thing a step lower down.
 
 ## Using it in a project
 
