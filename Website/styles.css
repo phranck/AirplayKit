@@ -504,9 +504,9 @@ section + section { margin-top: var(--section-gap); }
 .variants {
     display: flex;
     gap: calc(var(--step) * 0.5);
-    /* Auto on both sides, so the group sits between the caption and the copy
-       button rather than pushing one of them about. */
-    margin-inline: auto;
+    /* Both controls belong at the right, together. This one takes the free
+       space, so the copy button beside it only needs a gap. */
+    margin-left: auto;
     padding: calc(var(--step) * 0.4);
     border: 1px solid var(--line);
     border-radius: 999px;
@@ -536,8 +536,7 @@ section + section { margin-top: var(--section-gap); }
 .copy {
     display: grid;
     place-items: center;
-    /* The far right of the caption, in every panel, whether or not there is a
-       switch between it and the caption's own words. */
+    /* The far right of the caption, in a panel that carries nothing else. */
     margin-left: auto;
     /* A finger is wider than a cursor, so the box round the mark is what grows
        rather than the mark. */
@@ -550,6 +549,10 @@ section + section { margin-top: var(--section-gap); }
     cursor: pointer;
     transition: color var(--duration) var(--ease);
 }
+
+/* Where there is a switch, it has already taken the space, so this sits beside
+   it rather than pushing it back to the middle. */
+.variants + .copy { margin-left: var(--gap-tight); }
 
 .copy:hover { color: var(--ink); }
 
