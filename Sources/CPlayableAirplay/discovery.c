@@ -7,7 +7,7 @@
 
 #include "PlayableAirplay.h"
 
-#include "receiver_name.h"
+#include "include/receiver_name.h"
 
 #include <arpa/inet.h>
 #include <dns_sd.h>

@@ -1,3 +1,5 @@
+.build/
+.build-linux/
 build/
 .serena/
 .DS_Store

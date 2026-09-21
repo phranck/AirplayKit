@@ -15,6 +15,17 @@ third_party/airplay2-sender-cpp/licenses/THIRD-PARTY-NOTICES.txt:
   ed25519                       zlib, (c) 2015 Orson Peters
   Mbed TLS (fetched at build)   Apache-2.0 OR GPL-2.0-or-later, used as Apache-2.0
 
+The site under Website/ carries three typefaces and a set of icons, each kept
+under its own licence:
+
+  Barlow and Barlow Condensed   SIL OFL 1.1, (c) 2017 The Barlow Project Authors
+                                https://github.com/jpt/barlow
+  Fira Code Nerd Font           SIL OFL 1.1, (c) 2014-2021 The Fira Code Project
+                                Authors, patched by the Nerd Fonts project
+                                https://github.com/tonsky/FiraCode
+  Phosphor Icons                MIT, (c) 2023 Phosphor Icons
+                                https://github.com/phosphor-icons/core
+
 This project is not affiliated with, authorized by, or endorsed by Apple Inc.
 AirPlay is a trademark of Apple Inc., named here only to say which protocol is
 spoken. It exists to talk to receivers their owner runs themselves.

@@ -1,6 +1,17 @@
+<div align="center">
+
+[![CI](https://img.shields.io/github/actions/workflow/status/phranck/PlayableAirplay/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=1c1c1c&color=e53935)](https://github.com/phranck/PlayableAirplay/actions/workflows/ci.yml)
+[![Last commit](https://img.shields.io/github/last-commit/phranck/PlayableAirplay?style=for-the-badge&label=Commit&labelColor=1c1c1c&color=fb8c00)](https://github.com/phranck/PlayableAirplay/commits/main)
+[![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux-fdd835?style=for-the-badge&labelColor=1c1c1c)](https://github.com/phranck/PlayableAirplay/actions/workflows/ci.yml)
+[![Language](https://img.shields.io/badge/Written%20in-Swift-43a047?style=for-the-badge&labelColor=1c1c1c)](https://swift.org)
+[![Documentation](https://img.shields.io/badge/Reference-DocC-1e88e5?style=for-the-badge&labelColor=1c1c1c)](https://playable-airplay.layered.work/docs/)
+[![License](https://img.shields.io/github/license/phranck/PlayableAirplay?style=for-the-badge&label=License&labelColor=1c1c1c&color=8e24aa)](https://layered.mit-license.org)
+
+</div>
+
 # PlayableAirplay
 
-Sends audio to an AirPlay 2 receiver from macOS and from Linux, behind one C header.
+Sends audio to an AirPlay 2 receiver from macOS and from Linux, from Swift.
 
 Apple's own route picker only moves the whole system's output, and the private entitlements that would let an app pick a receiver for itself are not in the public SDK. This library takes the other road: it speaks RAOP to the receiver directly, so one application streams to a speaker whilst everything else on the machine keeps playing through the built-in output.
 
@@ -8,83 +19,116 @@ Apple's own route picker only moves the whole system's output, and the private e
 
 Discovery finds every `_raop._tcp` receiver on the network, whether or not anything is currently connected to it, and says which of them speak AirPlay 2. A session pairs with one of them, takes 16 bit stereo frames at 44100 Hz, and carries the volume.
 
-The interface is C, and that is deliberate. Swift imports it without a bridging layer, the Objective-C side of an existing app calls it as it stands, and nothing about the C++ underneath reaches a caller.
+One session reaches one receiver. Several sessions at once would each start their own RTP timeline against their own clock, so the receivers would drift apart, and holding them together needs a single timeline shared between them. That is the multi-room work the sender underneath has not done yet, so this library does not offer it and does not pretend to.
 
-## Building
+## Documentation
 
-```bash
-git clone --recurse-submodules https://github.com/phranck/PlayableAirplay.git
-cd PlayableAirplay
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j8
+The site is at [playable-airplay.layered.work](https://playable-airplay.layered.work/), and the reference under [/docs](https://playable-airplay.layered.work/docs/). Both are built from the source by CI on every push to `main`.
+
+To read them locally, run `./Scripts/build-site.sh` and open `build/site`. That script is also what CI runs, so the two cannot drift apart.
+
+## How it is put together
+
+There are two layers, and only the upper one is meant to be called.
+
+`Sources/PlayableAirplay` is the library: `AirPlayDiscovery`, `AirPlaySession`, `AirPlayReceiver` and `AirPlayError`. That is the whole interface.
+
+Underneath it sits a C module, `CPlayableAirplay`, and further down the C++ sender. C is what Swift imports directly on macOS and on Linux alike, with no bridging header and no C++ interoperability, which is why that layer exists at all. Nothing in it reaches the Swift interface: no opaque pointer, no C buffer, no `pa_` function. Nothing anywhere touches AVFoundation, CoreAudio or AppKit.
+
+## Using it in a project
+
+### macOS and iOS
+
+Add the package to your project and that is the whole of it. In Xcode that is **File > Add Package Dependencies**, with `https://github.com/phranck/PlayableAirplay.git`, and then `import PlayableAirplay`. Nothing else is fetched at build time and there is nothing to configure.
+
+In a package of your own:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/phranck/PlayableAirplay.git", branch: "main"),
+],
+targets: [
+    .target(name: "YourTarget", dependencies: ["PlayableAirplay"]),
+]
 ```
 
-On Linux, `dns_sd.h` comes from Avahi's compatibility package:
+### Linux
+
+The same dependency line, and one system package first, because Bonjour on Linux is Avahi's compatibility library:
 
 ```bash
 sudo apt install libavahi-compat-libdnssd-dev
 ```
 
-The configure step fetches Mbed TLS, so the first build needs a network connection. Everything else is in the repository or in the submodule, and what comes out is `libPlayableAirplay.a` plus `include/PlayableAirplay.h`.
+Then `swift build` as usual. Browsing needs `avahi-daemon` running at the time, which is a runtime matter rather than a build one.
 
-## Using it
+### What comes with it
 
-Discovery runs in the background and calls back with the full list, sorted by name, each time it changes. That call comes on the library's own thread, and the list it carries lives only for the duration of the call, so copy what you want to keep and hop to your own thread before touching an interface.
+The C++ sender, ed25519 and Mbed TLS are built as part of the package from their own checkouts, so a clone and a build is all it takes and nothing is downloaded behind your back.
 
-```c
-#include "PlayableAirplay.h"
+## Writing against it
 
-static void onReceivers(void *context, const PAReceiver *receivers, size_t count) {
-    for (size_t index = 0; index < count; index++) {
-        printf("%s at %s:%u\n", receivers[index].name, receivers[index].host, receivers[index].port);
+Discovery reports the whole set each time it changes, sorted by name, on a queue you name. Browsing runs for as long as you hold on to the instance.
+
+```swift
+let discovery = AirPlayDiscovery { receivers in
+    for receiver in receivers {
+        print("\(receiver.name) at \(receiver.host):\(receiver.port)")
     }
 }
 
-PADiscovery *discovery = pa_discovery_start(onReceivers, NULL);
 // ...
-pa_discovery_stop(discovery);
+
+discovery.stop()
 ```
 
-Opening a session pairs with the receiver and blocks until it is playing or has refused, which takes a couple of seconds on a cold receiver. After that, write frames as they arrive:
+Opening a session pairs with the receiver and blocks until it is playing or has refused, which takes a couple of seconds on one that was asleep. After that, write frames as they arrive:
 
-```c
-PAResult result = PAResultOK;
-PASession *session = pa_session_open("Sonos-48A6B8F7CA56.local", 7000, "My App", &result);
-if (!session) {
-    fprintf(stderr, "%s\n", pa_result_description(result));
-    return 1;
-}
-
-pa_session_set_volume(session, 0.7f);
+```swift
+let session = try AirPlaySession(receiver: receiver, senderName: "My App")
+session.volume = 0.7
 
 // 16 bit, stereo, interleaved, 44100 Hz.
-if (!pa_session_write(session, frames, frameCount)) {
-    // The frames were not taken. See below for what that means.
-}
+switch session.write(frames) {
+case .taken:
+    break
 
-pa_session_close(session);
+case .bufferFull:
+    // The sender has not caught up. A live source drops these frames and
+    // carries on; one that can pause offers them again.
+    break
+
+case .ended:
+    session.close()
+}
 ```
 
-`pa_session_write` never waits, because the thread producing live audio must not. A `false` result therefore means one of two things. Either the session has ended, and the next call will say so as well, or the buffer is full because the sender is still working through the four seconds it holds. The second is back pressure rather than a failure, and what to do about it depends on where the audio comes from: a live source drops those frames and carries on, whilst a source reading a file faster than real time waits and offers them again.
+Writing never waits, because the thread producing live audio must not. `.bufferFull` is therefore back pressure rather than a failure, and it says the four seconds the sender holds are not yet spent. `.ended` is the receiver having hung up, and the answer to it is to close the session.
+
+In an audio callback the samples usually arrive as a pointer already, and there is a `write` for that which copies nothing on the way in.
 
 ## The example
 
-`pa_demo` is the whole interface exercised from a terminal.
+`Sources/Demo` is the whole interface exercised from a terminal.
 
 ```bash
-./build/pa_demo list
-./build/pa_demo play Sonos-48A6B8F7CA56.local 7000 5
+swift run Demo list
+swift run Demo play Sonos-48A6B8F7CA56.local 7000 5
+swift run Demo wave ~/Music/track.wav Sonos-48A6B8F7CA56.local
+swift run Demo file ~/Music/track.m4a Sonos-48A6B8F7CA56.local
 ```
 
-`list` browses for five seconds and prints what it found. `play` opens a session and sends a quiet 440 Hz tone at a tenth of full volume.
+`list` browses for five seconds and prints what it found. `play` opens a session and sends a quiet 440 Hz tone. `wave` plays a WAVE file that is already 16 bit stereo at 44100, using nothing but Foundation, so it runs wherever the library does. `file` takes any format the system can read and converts it, which is AVFoundation's work and therefore Apple's platforms only.
 
 ## Tests
 
 ```bash
-ctest --test-dir build --output-on-failure
+swift test
 ```
 
-They cover what can be checked without a receiver on the network: the parsing of a Bonjour instance name into an address and a name, the result descriptions, and what the session and discovery entry points do when they are handed nothing usable. Whether a particular speaker accepts a pairing is not something a test can settle, and `pa_demo` is how that gets answered.
+They cover what can be checked without a receiver on the network: the parsing of a Bonjour instance name into an address and a name, what the session and the discovery do when they are handed nothing usable, and that every failure says what it means. Whether a particular speaker accepts a pairing is not something a test can settle, and the example is how that gets answered.
+
+`Scripts/build-and-test.sh` is the whole gate, and `Scripts/check-linux.sh` runs that same script inside the Swift image CI uses, so Linux is checked here before anything is pushed.
 
 ## What it rests on
 
