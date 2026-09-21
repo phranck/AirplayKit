@@ -135,6 +135,18 @@ PASession *pa_session_open(const char *host, uint16_t port, const char *senderNa
 bool pa_session_write(PASession *session, const int16_t *frames, size_t frameCount);
 
 /**
+ Whether the session is still carrying audio.
+
+ This is what separates the two reasons pa_session_write refuses frames: a
+ session that is still running refused them because its buffer is full, and one
+ that is not has ended and wants closing.
+
+ @param session  The session, or NULL, which is not running.
+ @return Whether the receiver is still taking audio.
+ */
+bool pa_session_is_running(PASession *session);
+
+/**
  Sets the receiver's own volume.
 
  This is the device's volume rather than a gain applied to the samples, so it

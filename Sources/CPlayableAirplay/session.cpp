@@ -175,6 +175,13 @@ bool pa_session_write(PASession *session, const int16_t *frames, size_t frameCou
     return session->ring.tryPush(std::span<const int16_t>(frames, frameCount * PA_CHANNELS));
 }
 
+bool pa_session_is_running(PASession *session) {
+    if (!session) return false;
+
+    std::lock_guard<std::mutex> guard(session->mutex);
+    return session->running;
+}
+
 void pa_session_set_volume(PASession *session, float volume) {
     if (!session) return;
 

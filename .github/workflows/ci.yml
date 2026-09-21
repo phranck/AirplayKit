@@ -13,39 +13,68 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+
+    # Linux builds inside the official Swift image, which brings the toolchain
+    # with it. Installing one on a bare runner took a quarter of an hour, which
+    # is not a gate anybody waits for.
+    container: ${{ matrix.container }}
+
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: macOS
             runner: macos-15
+            container: ""
           - name: Linux
             runner: ubuntu-latest
+            container: swift:6.2
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
       # dns_sd.h ships with macOS. On Linux it comes from Avahi's compatibility
       # package, which is the same header and the same calls.
       - name: Install libdns_sd
-        if: matrix.runner == 'ubuntu-latest'
+        if: matrix.container != ''
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libavahi-compat-libdnssd-dev
+          apt-get update
+          apt-get install -y libavahi-compat-libdnssd-dev
 
-      - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      # The same script Scripts/check-linux.sh runs in this same image, so a red
+      # run here is one that could have been seen before the push.
+      - name: Build and test
+        run: ./Scripts/build-and-test.sh
 
+  site:
+    name: Site
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
+      # The page and the reference are built from the Swift sources, the header
+      # and Website/, all of which are in this repository, so the submodule
+      # stays where it is.
       - name: Build
-        run: cmake --build build -j4
+        run: ./Scripts/build-site.sh --host
 
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/site
 
-      # The example is the interface used from outside the library, so it is
-      # worth knowing that it links and runs. Called without arguments it prints
-      # its usage and exits with 2, and anything else means it is broken.
-      - name: Smoke-test the example
-        run: ./build/pa_demo || test $? -eq 2
+  publish:
+    name: Publish the site
+    needs: site
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5
