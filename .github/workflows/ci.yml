@@ -58,7 +58,7 @@ jobs:
       # and Website/, all of which are in this repository, so the submodule
       # stays where it is.
       - name: Build
-        run: ./Scripts/build-site.sh --host
+        run: ./Scripts/build-site.sh
 
       - uses: actions/upload-pages-artifact@v5
         with:
