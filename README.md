@@ -124,6 +124,8 @@ swiftc -O -I include Sources/PlayableAirplay.swift example/Demo.swift -o build/D
 
 `list` browses for five seconds and prints what it found. `play` opens a session and sends a quiet 440 Hz tone. `file` plays an audio file, converting it to what AirPlay carries on the way, and its `stream` function is the complete example the site shows.
 
+`file` is built on macOS only, because the conversion is AVFoundation's work and that framework is not on Linux. Everything else, including the library itself, is built and tested on both.
+
 ## Tests
 
 ```bash

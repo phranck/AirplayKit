@@ -91,6 +91,8 @@ func playTone(on host: String, port: UInt16, forSeconds seconds: Int) -> Int32 {
     return 0
 }
 
+#if canImport(AVFoundation)
+
 // MARK: - Sending a file
 
 /// Plays a file to a speaker, converting it to what AirPlay carries on the way.
@@ -156,6 +158,8 @@ func playFile(at path: String, on host: String, port: UInt16) -> Int32 {
     return 0
 }
 
+#endif
+
 // MARK: - What the command does
 
 @main
@@ -167,7 +171,7 @@ struct Demo {
             print("""
                   usage: Demo list
                          Demo play <host> [port] [seconds]
-                         Demo file <path> <host> [port]
+                         Demo file <path> <host> [port]   (macOS only)
                   """)
             exit(2)
         }
@@ -181,9 +185,11 @@ struct Demo {
             let seconds = Int(arguments.count > 4 ? arguments[4] : "5") ?? 5
             exit(playTone(on: arguments[2], port: port, forSeconds: seconds))
 
+        #if canImport(AVFoundation)
         case "file" where arguments.count > 3:
             let port = UInt16(arguments.count > 4 ? arguments[4] : "7000") ?? 7000
             exit(playFile(at: arguments[2], on: arguments[3], port: port))
+        #endif
 
         default:
             print("usage: Demo play <host> [port] [seconds]")
