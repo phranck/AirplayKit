@@ -8,6 +8,7 @@
 
 import Dispatch
 import Foundation
+import PlayableAirplay
 
 // The library runs on Linux as well, and AVFoundation does not. Everything that
 // reads any format and resamples it is Apple's framework doing the work, so

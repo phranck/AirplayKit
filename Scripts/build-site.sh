@@ -3,9 +3,9 @@
 #  build-site.sh
 #  Builds the site: the page at the root, the DocC reference under /docs.
 #
-#  This package is built by CMake rather than by SwiftPM, so there is no docc
-#  plugin to lean on. The symbol graph comes from the compiler and docc turns
-#  it, together with the catalogue, into a site of its own.
+#  The symbol graph comes from the compiler and docc turns it, together with the
+#  catalogue, into a site of its own. It does not go through the docc plugin,
+#  because one swiftc call over one file is less machinery than a plugin is.
 #
 #  Pass --host to build for the published site, where the reference is served
 #  from /docs and every link inside it has to say so. Without it the reference
@@ -38,8 +38,8 @@ trap 'rm -rf "$scratch"' EXIT
 
 swiftc -emit-symbol-graph -emit-symbol-graph-dir "$symbolDirectory" \
     -emit-module -module-name "$moduleName" \
-    -I include \
-    Sources/"$moduleName".swift \
+    -I Sources/CPlayableAirplay/include \
+    Sources/"$moduleName"/"$moduleName".swift \
     -o "$scratch/$moduleName.o"
 
 # docc lives in the toolchain, which is reached through xcrun on macOS and is
@@ -51,7 +51,7 @@ fi
 
 # A link to a symbol that was renamed away is documentation that lies, and the
 # only moment it is cheap to find is this one.
-"$docc" convert "Sources/$moduleName.docc" \
+"$docc" convert "Sources/$moduleName/$moduleName.docc" \
     --fallback-display-name "$moduleName" \
     --fallback-bundle-identifier "at.playable.airplay" \
     --fallback-bundle-version "1" \
@@ -64,7 +64,7 @@ cp -R Website/. "$siteDirectory/"
 
 # The page holds a marker where a snippet goes, and the snippet comes out of the
 # example that CI compiles. So the page cannot show code that stopped working.
-python3 Scripts/fill-snippets.py "$siteDirectory/index.html" example/Demo.swift
+python3 Scripts/fill-snippets.py "$siteDirectory/index.html" Sources/Demo/Demo.swift
 
 # DocC opens on its own landing page, which is one click further in than the
 # link from the site suggests. This sends a reader straight there.

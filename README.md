@@ -31,44 +31,42 @@ To read them locally, run `./Scripts/build-site.sh` and open `build/site`. That 
 
 There are two layers, and only the upper one is meant to be called.
 
-`Sources/PlayableAirplay.swift` is the library: `AirPlayDiscovery`, `AirPlaySession`, `AirPlayReceiver` and `AirPlayError`. That is the whole interface.
+`Sources/PlayableAirplay` is the library: `AirPlayDiscovery`, `AirPlaySession`, `AirPlayReceiver` and `AirPlayError`. That is the whole interface.
 
 Underneath it sits a C module, `CPlayableAirplay`, and further down the C++ sender. C is what Swift imports directly on macOS and on Linux alike, with no bridging header and no C++ interoperability, which is why that layer exists at all. Nothing in it reaches the Swift interface: no opaque pointer, no C buffer, no `pa_` function. Nothing anywhere touches AVFoundation, CoreAudio or AppKit.
 
-## Building
+## Using it in a project
 
-```bash
-git clone --recurse-submodules https://github.com/phranck/PlayableAirplay.git
-cd PlayableAirplay
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j8
+### macOS and iOS
+
+Add the package to your project and that is the whole of it. In Xcode that is **File > Add Package Dependencies**, with `https://github.com/phranck/PlayableAirplay.git`, and then `import PlayableAirplay`. Nothing else is fetched at build time and there is nothing to configure.
+
+In a package of your own:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/phranck/PlayableAirplay.git", branch: "main"),
+],
+targets: [
+    .target(name: "YourTarget", dependencies: ["PlayableAirplay"]),
+]
 ```
 
-On Linux, `dns_sd.h` comes from Avahi's compatibility package:
+### Linux
+
+The same dependency line, and one system package first, because Bonjour on Linux is Avahi's compatibility library:
 
 ```bash
 sudo apt install libavahi-compat-libdnssd-dev
 ```
 
-The configure step fetches Mbed TLS, so the first build needs a network connection. Everything else is in the repository or in the submodule.
+Then `swift build` as usual. Browsing needs `avahi-daemon` running at the time, which is a runtime matter rather than a build one.
 
-What comes out is `build/libPlayableAirplay.a`, and that archive holds the sender, the crypto, ed25519 and Mbed TLS as members, so linking it is the whole of it.
+### What comes with it
 
-To use the library, add `Sources/PlayableAirplay.swift` to your own target, put `include` on the import paths, and link the archive:
+The C++ sender, ed25519 and Mbed TLS are built as part of the package from their own checkouts, so a clone and a build is all it takes and nothing is downloaded behind your back.
 
-```bash
-# macOS
-swiftc -I include Sources/PlayableAirplay.swift YourFile.swift \
-    -Xlinker build/libPlayableAirplay.a -lc++ -framework CoreFoundation
-
-# Linux
-swiftc -I include Sources/PlayableAirplay.swift YourFile.swift \
-    -Xlinker build/libPlayableAirplay.a -lstdc++ -lpthread -ldns_sd
-```
-
-In Xcode, add the Swift file to the target, put `include` on the header search paths, add the archive to the link phase, and run the two CMake commands above from a build phase so the library is always current.
-
-## Using it
+## Writing against it
 
 Discovery reports the whole set each time it changes, sorted by name, on a queue you name. Browsing runs for as long as you hold on to the instance.
 
@@ -111,28 +109,26 @@ In an audio callback the samples usually arrive as a pointer already, and there 
 
 ## The example
 
-`example/Demo.swift` is the whole interface exercised from a terminal.
+`Sources/Demo` is the whole interface exercised from a terminal.
 
 ```bash
-swiftc -O -I include Sources/PlayableAirplay.swift example/Demo.swift -o build/Demo \
-    -Xlinker build/libPlayableAirplay.a -lc++ -framework CoreFoundation
-
-./build/Demo list
-./build/Demo play Sonos-48A6B8F7CA56.local 7000 5
-./build/Demo file ~/Music/track.m4a Sonos-48A6B8F7CA56.local
+swift run Demo list
+swift run Demo play Sonos-48A6B8F7CA56.local 7000 5
+swift run Demo wave ~/Music/track.wav Sonos-48A6B8F7CA56.local
+swift run Demo file ~/Music/track.m4a Sonos-48A6B8F7CA56.local
 ```
 
-`list` browses for five seconds and prints what it found. `play` opens a session and sends a quiet 440 Hz tone. `file` plays an audio file, converting it to what AirPlay carries on the way, and its `stream` function is the complete example the site shows.
-
-`file` is built on macOS only, because the conversion is AVFoundation's work and that framework is not on Linux. Everything else, including the library itself, is built and tested on both.
+`list` browses for five seconds and prints what it found. `play` opens a session and sends a quiet 440 Hz tone. `wave` plays a WAVE file that is already 16 bit stereo at 44100, using nothing but Foundation, so it runs wherever the library does. `file` takes any format the system can read and converts it, which is AVFoundation's work and therefore Apple's platforms only.
 
 ## Tests
 
 ```bash
-ctest --test-dir build --output-on-failure
+swift test
 ```
 
-They cover what can be checked without a receiver on the network: the parsing of a Bonjour instance name into an address and a name, the result descriptions, and what the session and discovery entry points do when they are handed nothing usable. Whether a particular speaker accepts a pairing is not something a test can settle, and the example is how that gets answered.
+They cover what can be checked without a receiver on the network: the parsing of a Bonjour instance name into an address and a name, what the session and the discovery do when they are handed nothing usable, and that every failure says what it means. Whether a particular speaker accepts a pairing is not something a test can settle, and the example is how that gets answered.
+
+`Scripts/build-and-test.sh` is the whole gate, and `Scripts/check-linux.sh` runs that same script inside the Swift image CI uses, so Linux is checked here before anything is pushed.
 
 ## What it rests on
 

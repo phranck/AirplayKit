@@ -7,7 +7,7 @@
 #  GitHub is one this machine could already have told you about. It needs Docker
 #  to be running and nothing else.
 #
-#  The build goes into build-linux, so it does not overwrite the macOS one and
+#  The build goes into .build-linux, so it does not overwrite the macOS one and
 #  the two can stand side by side.
 #
 #  Copyright © 2026 cocoa:naut. All rights reserved.
@@ -30,10 +30,11 @@ fi
 docker run --rm \
     --volume "$root:/src" \
     --workdir /src \
+    --env SWIFT_BUILD_DIR=/src/.build-linux \
     "$image" \
     bash -c '
         set -euo pipefail
         apt-get update -qq
-        apt-get install -y -qq cmake libavahi-compat-libdnssd-dev > /dev/null
-        Scripts/build-and-test.sh build-linux
+        apt-get install -y -qq libavahi-compat-libdnssd-dev > /dev/null
+        Scripts/build-and-test.sh .build-linux
     '

@@ -36,13 +36,12 @@ jobs:
           submodules: recursive
 
       # dns_sd.h ships with macOS. On Linux it comes from Avahi's compatibility
-      # package, which is the same header and the same calls. CMake is not in
-      # the Swift image either.
-      - name: Install what the image lacks
+      # package, which is the same header and the same calls.
+      - name: Install libdns_sd
         if: matrix.container != ''
         run: |
           apt-get update
-          apt-get install -y cmake libavahi-compat-libdnssd-dev
+          apt-get install -y libavahi-compat-libdnssd-dev
 
       # The same script Scripts/check-linux.sh runs in this same image, so a red
       # run here is one that could have been seen before the push.

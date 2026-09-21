@@ -151,18 +151,37 @@ session.volume = <span class="n">0.7</span>
 
   <section id="building" class="prose-section">
     <p class="section-number">04</p>
-    <h2>Building it</h2>
-    <p class="lead">CMake builds the library and everything underneath it, so what comes out is one archive and one import path. On Linux the Bonjour header comes from Avahi's compatibility package, and the first configure fetches Mbed TLS.</p>
+    <h2>How to use it</h2>
+    <p class="lead">It is a Swift package, and everything underneath it is built as part of that package. The C++ sender, ed25519 and Mbed TLS come from their own checkouts, so a clone and a build is the whole of it and nothing is fetched behind your back.</p>
 
-    <figure class="panel">
-      <figcaption><svg class="icon" aria-hidden="true"><use href="#ph-terminal-window"></use></svg>From nothing to a library<button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button></figcaption>
-<pre><code>git clone --recurse-submodules https://github.com/phranck/PlayableAirplay.git
-cd PlayableAirplay
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j8</code></pre>
+    <figure class="panel" data-variant="apple">
+      <figcaption>
+        <svg class="icon" aria-hidden="true"><use href="#ph-terminal-window"></use></svg>
+        <span class="variants" role="group" aria-label="Which platform">
+          <button class="variant" type="button" data-variant="apple" aria-pressed="true">macOS and iOS</button>
+          <button class="variant" type="button" data-variant="portable" aria-pressed="false">Linux</button>
+        </span>
+        <button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button>
+      </figcaption>
+<pre data-variant="apple"><code><span class="c">// In Xcode: File &gt; Add Package Dependencies, with this address.</span>
+<span class="c">// In a package of your own:</span>
+
+dependencies: [
+    .package(url: <span class="s">"https://github.com/phranck/PlayableAirplay.git"</span>, branch: <span class="s">"main"</span>),
+],
+targets: [
+    .target(name: <span class="s">"YourTarget"</span>, dependencies: [<span class="s">"PlayableAirplay"</span>]),
+]</code></pre>
+<pre data-variant="portable" hidden><code><span class="c"># Bonjour on Linux is Avahi's compatibility library.</span>
+sudo apt install libavahi-compat-libdnssd-dev
+
+<span class="c"># Then the same dependency, and swift build as usual.</span>
+dependencies: [
+    .package(url: <span class="s">"https://github.com/phranck/PlayableAirplay.git"</span>, branch: <span class="s">"main"</span>),
+],</code></pre>
     </figure>
 
-    <p>Then add <code>Sources/PlayableAirplay.swift</code> to your own target, put <code>include</code> on the import paths, and link <code>build/libPlayableAirplay.a</code>. That archive holds the sender, the crypto and Mbed TLS as members, so there is nothing else to find.</p>
+    <p>Then <code>import PlayableAirplay</code> and there is nothing else to set up. On Linux, browsing needs <code>avahi-daemon</code> running at the time, which is a matter of the machine rather than of the build.</p>
   </section>
 
 </main>
