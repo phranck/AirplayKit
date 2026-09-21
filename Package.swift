@@ -33,6 +33,16 @@ let package = Package(
     platforms: [.macOS(.v12), .iOS(.v15)],
     products: [
         .library(name: "PlayableAirplay", targets: ["PlayableAirplay"]),
+
+        /*
+         The layer underneath, offered on purpose rather than by accident.
+
+         Swift takes the library above and has no reason to look at this. An
+         Objective-C application has no Swift to import it from, and calling a C
+         header is what Objective-C does with a C library, so it takes this one
+         and gets the same thing a step lower down.
+         */
+        .library(name: "CPlayableAirplay", targets: ["CPlayableAirplay"]),
     ],
     targets: [
         // The Swift interface, and the only thing a caller sees.
