@@ -134,6 +134,17 @@
     :root { --duration: 1ms; }
 }
 
+/* A phone has no room to spend on insets, and the nested radius follows the
+   padding on its own. */
+@media (max-width: 34rem) {
+    :root {
+        --card-radius: 18px;
+        --card-padding: 10px;
+        --card-inner-radius: max(calc(var(--card-radius) - var(--card-padding)), 0px);
+        --card-text-inset: calc(var(--card-radius) / 2);
+    }
+}
+
 /* ---------------------------------------------------------------- base --- */
 
 *,
@@ -237,9 +248,15 @@ code {
     display: flex;
     align-items: center;
     gap: var(--gap);
+
+    /* Flex items hold their content width by default, which is how a row of
+       links pushes the switch off the edge rather than giving way. */
+    min-width: 0;
 }
 
 .wordmark {
+    flex: none;
+    padding-block: calc(var(--step) * 1.6);
     font-family: var(--font-mono);
     font-size: var(--type-small);
     letter-spacing: var(--tracking-wide);
@@ -257,6 +274,7 @@ code {
     display: flex;
     gap: var(--gap);
     margin-left: auto;
+    min-width: 0;
     font-size: var(--type-small);
 }
 
@@ -273,18 +291,41 @@ code {
     display: inline-flex;
     align-items: baseline;
     gap: calc(var(--step) * 0.9);
+    padding-block: calc(var(--step) * 1.6);
+    white-space: nowrap;
 }
 
-@media (max-width: 46rem) {
-    .masthead-links a:not([href="docs/"]) { display: none; }
+/* The row gives up its parts in the order they can be done without. The links
+   into the page go first, because the page is right there to scroll. Then the
+   source, which the reference links to anyway. The reference and the switch are
+   what is left, and they fit on the narrowest screen there is. */
+@media (max-width: 64rem) {
+    .masthead-links a[href^="#"] { display: none; }
+}
+
+@media (max-width: 34rem) {
+    .masthead-links a[href^="http"] { display: none; }
+}
+
+/* On a phone the row is the wordmark and the switch. The reference is the first
+   thing the page itself offers, a screen below, so a link to it in a row that
+   does not fit is not worth what it costs. */
+@media (max-width: 30rem) {
+    .masthead-links { display: none; }
+
+    .masthead-row { gap: var(--gap-tight); }
+
+    .wordmark { letter-spacing: 0.06em; }
 }
 
 /* -------------------------------------------------------- theme toggle --- */
 
 .theme-toggle {
     display: flex;
+    flex: none;
     align-items: center;
     gap: var(--gap-tight);
+    min-height: calc(var(--step) * 5.5);
     padding: 0;
     border: 0;
     background: none;
@@ -363,7 +404,7 @@ section + section { margin-top: var(--section-gap); }
     padding-top: clamp(3.5rem, 9vw, 7rem);
 }
 
-@media (max-width: 58rem) {
+@media (max-width: 68rem) {
     .hero { grid-template-columns: minmax(0, 1fr); }
 }
 
@@ -472,6 +513,7 @@ section + section { margin-top: var(--section-gap); }
 }
 
 .variant {
+    min-height: calc(var(--step) * 4.5);
     padding: calc(var(--step) * 0.4) calc(var(--step) * 1.6);
     border: 0;
     border-radius: 999px;
@@ -493,9 +535,14 @@ section + section { margin-top: var(--section-gap); }
 
 .copy {
     display: grid;
+    place-items: center;
     /* The far right of the caption, in every panel, whether or not there is a
        switch between it and the caption's own words. */
     margin-left: auto;
+    /* A finger is wider than a cursor, so the box round the mark is what grows
+       rather than the mark. */
+    min-width: calc(var(--step) * 5.5);
+    min-height: calc(var(--step) * 5.5);
     padding: calc(var(--step) * 0.5);
     border: 0;
     background: none;
@@ -529,6 +576,7 @@ section + section { margin-top: var(--section-gap); }
 .panel pre {
     margin: 0;
     padding: var(--gap);
+    padding: clamp(var(--gap-tight), 3vw, var(--gap));
     font-variant-ligatures: contextual;
     border-radius: var(--card-inner-radius);
     background: var(--paper);
@@ -557,7 +605,7 @@ section + section { margin-top: var(--section-gap); }
     margin-top: calc(var(--eyebrow-block) + var(--display-cap-inset) - var(--caption-cap-inset));
 }
 
-@media (max-width: 58rem) {
+@media (max-width: 68rem) {
     /* One column, so there is no headline beside it to line up with. */
     .hero-code { margin-top: 0; }
 }
