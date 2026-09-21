@@ -8,6 +8,8 @@ Apple's own route picker only moves the whole system's output, and the private e
 
 Discovery finds every `_raop._tcp` receiver on the network, whether or not anything is currently connected to it, and says which of them speak AirPlay 2. A session pairs with one of them, takes 16 bit stereo frames at 44100 Hz, and carries the volume.
 
+One session reaches one receiver. Several sessions at once would each start their own RTP timeline against their own clock, so the receivers would drift apart, and keeping them together needs a single timeline shared between them. That is the multi-room work the sender underneath has not done yet, so this library does not offer it and does not pretend to.
+
 The interface is C, and that is deliberate. Swift imports it without a bridging layer, the Objective-C side of an existing app calls it as it stands, and nothing about the C++ underneath reaches a caller.
 
 ## Building
@@ -25,7 +27,9 @@ On Linux, `dns_sd.h` comes from Avahi's compatibility package:
 sudo apt install libavahi-compat-libdnssd-dev
 ```
 
-The configure step fetches Mbed TLS, so the first build needs a network connection. Everything else is in the repository or in the submodule, and what comes out is `libPlayableAirplay.a` plus `include/PlayableAirplay.h`.
+The configure step fetches Mbed TLS, so the first build needs a network connection. Everything else is in the repository or in the submodule.
+
+What comes out is `libPlayableAirplay.a` and `include/PlayableAirplay.h`, and that archive holds the sender, the crypto and Mbed TLS as well, so linking it is the whole of it. On macOS add `-lc++` and the CoreFoundation framework, and on Linux `-lstdc++`, `-lpthread` and `-ldns_sd`.
 
 ## Using it
 

@@ -42,6 +42,37 @@ target_include_directories(PlayableAirplay
 
 target_link_libraries(PlayableAirplay PRIVATE raop_sender airplay_crypto)
 
+# A static library does not carry what it was linked against, so the archive is
+# rebuilt to hold those members too. Without it, linking libPlayableAirplay.a
+# alone leaves every RaopSender symbol undefined and a consumer has to learn the
+# names and the order of five more archives.
+set(PA_BUNDLED_TARGETS raop_sender airplay_crypto)
+foreach(candidate IN ITEMS ed25519 mbedcrypto everest p256m)
+    if(TARGET ${candidate})
+        list(APPEND PA_BUNDLED_TARGETS ${candidate})
+    endif()
+endforeach()
+
+set(PA_BUNDLED_ARCHIVES "")
+foreach(bundled IN LISTS PA_BUNDLED_TARGETS)
+    string(APPEND PA_BUNDLED_ARCHIVES "$<TARGET_FILE:${bundled}>\n")
+endforeach()
+
+# The archive paths go through a file rather than through the command line,
+# because a list on a -D argument is split by the generator before the script
+# ever sees it, and the script would silently bundle only the first one.
+set(PA_BUNDLE_LIST ${CMAKE_CURRENT_BINARY_DIR}/bundled-archives.txt)
+file(GENERATE OUTPUT ${PA_BUNDLE_LIST} CONTENT "${PA_BUNDLED_ARCHIVES}")
+
+add_custom_command(TARGET PlayableAirplay POST_BUILD
+    COMMAND ${CMAKE_COMMAND}
+            -DBUNDLE_OUTPUT=$<TARGET_FILE:PlayableAirplay>
+            -DBUNDLE_LIST=${PA_BUNDLE_LIST}
+            -DCMAKE_AR=${CMAKE_AR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/bundle_static.cmake
+    VERBATIM
+    COMMENT "Bundling the sender and its crypto into libPlayableAirplay.a")
+
 if(APPLE)
     # dns_sd is in the system library here. On Linux the same header comes from
     # Avahi's compatibility package, which is why the discovery is one file.
