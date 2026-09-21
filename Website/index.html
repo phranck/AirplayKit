@@ -125,11 +125,20 @@ session.volume = <span class="n">0.7</span>
   <section id="example" class="prose-section">
     <p class="section-number">02</p>
     <h2>A file, start to finish</h2>
-    <p class="lead">This is the whole of it: read a file, convert it to what AirPlay carries, open a session, and keep it fed until the file runs out. It is lifted straight out of <code>example/Demo.swift</code> when this page is built, so what stands here is what the compiler saw.</p>
+    <p class="lead">Read a file, turn it into what AirPlay carries, open a session, and keep it fed until the file runs out. On Apple's platforms AVFoundation does the conversion and takes any format the system can read. On Linux there is no AVFoundation, so the portable one takes a WAVE file that is already 16 bit stereo at 44100 and hands the bytes over as they are.</p>
+    <p>Both are lifted out of <code>example/Demo.swift</code> when this page is built, so what stands here is what the compiler saw. Both have been played to a speaker.</p>
 
-    <figure class="panel">
-      <figcaption><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>Playing a file to a speaker<button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button></figcaption>
-<pre><code><!--@snippet stream--></code></pre>
+    <figure class="panel" data-variant="apple">
+      <figcaption>
+        <svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>
+        <span class="variants" role="group" aria-label="Which platform">
+          <button class="variant" type="button" data-variant="apple" aria-pressed="true">macOS and iOS</button>
+          <button class="variant" type="button" data-variant="portable" aria-pressed="false">Linux</button>
+        </span>
+        <button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button>
+      </figcaption>
+<pre data-variant="apple"><code><!--@snippet stream--></code></pre>
+<pre data-variant="portable" hidden><code><!--@snippet streamWave--></code></pre>
     </figure>
   </section>
 
@@ -165,5 +174,6 @@ cmake --build build -j8</code></pre>
 
 <script src="theme.js"></script>
 <script src="copy.js"></script>
+<script src="variants.js"></script>
 </body>
 </html>

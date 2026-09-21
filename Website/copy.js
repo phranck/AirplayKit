@@ -14,14 +14,18 @@
 
     for (const button of document.querySelectorAll(".copy")) {
         const panel = button.closest(".panel");
-        const code = panel && panel.querySelector("pre");
-        if (!code) continue;
+        if (!panel) continue;
+
+        // A panel may hold several versions of the same thing, and what gets
+        // copied is the one on show.
+        const visibleCode = () => panel.querySelector("pre:not([hidden])");
+        if (!visibleCode()) continue;
 
         let goingBack = 0;
 
         button.addEventListener("click", async function copyThePanel() {
             try {
-                await navigator.clipboard.writeText(code.innerText);
+                await navigator.clipboard.writeText(visibleCode().innerText);
             } catch (error) {
                 // A browser that refuses the clipboard, usually because the page
                 // is not on a secure origin. Saying so beats a button that does

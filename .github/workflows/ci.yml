@@ -26,11 +26,9 @@ jobs:
           - name: macOS
             runner: macos-15
             container: ""
-            swiftFlags: -lc++ -framework CoreFoundation
           - name: Linux
             runner: ubuntu-latest
             container: swift:6.2
-            swiftFlags: -lstdc++ -lpthread -ldns_sd
 
     steps:
       - uses: actions/checkout@v7
@@ -46,33 +44,10 @@ jobs:
           apt-get update
           apt-get install -y cmake libavahi-compat-libdnssd-dev
 
-      # Printed so the two toolchains can be compared when they disagree.
-      - name: Say which Swift this is
-        run: swift --version
-
-      - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: cmake --build build -j4
-
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
-
-      # The README tells a consumer that the Swift wrapper, the one archive and a
-      # handful of system libraries are the whole of it. Building the example
-      # exactly that way is what keeps the instruction honest.
-      - name: Build the example
-        env:
-          SWIFT_FLAGS: ${{ matrix.swiftFlags }}
-        run: |
-          swiftc -O -I include Sources/PlayableAirplay.swift example/Demo.swift \
-              -o build/Demo -Xlinker build/libPlayableAirplay.a $SWIFT_FLAGS
-
-      # Called without arguments it prints its usage and exits with 2, and
-      # anything else means it is broken.
-      - name: Run the example
-        run: ./build/Demo || test $? -eq 2
+      # The same script Scripts/check-linux.sh runs in this same image, so a red
+      # run here is one that could have been seen before the push.
+      - name: Build and test
+        run: ./Scripts/build-and-test.sh
 
   site:
     name: Site

@@ -384,7 +384,7 @@ section + section { margin-top: var(--section-gap); }
     font-size: var(--type-display);
     line-height: var(--leading-tight);
     letter-spacing: var(--tracking-tight);
-    font-weight: 700;
+    font-weight: 600;
     text-wrap: balance;
 }
 
@@ -447,7 +447,7 @@ section + section { margin-top: var(--section-gap); }
 
 .panel figcaption {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: calc(var(--step) * 1.1);
     padding-left: var(--card-text-inset);
     padding-right: var(--card-text-inset);
@@ -460,9 +460,40 @@ section + section { margin-top: var(--section-gap); }
 
 /* -------------------------------------------------------- copy button --- */
 
+/* Which platform the code below is for. Two buttons rather than a menu, because
+   there are two and both fit. */
+.variants {
+    display: flex;
+    gap: calc(var(--step) * 0.5);
+    margin-left: auto;
+    padding: calc(var(--step) * 0.4);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+}
+
+.variant {
+    padding: calc(var(--step) * 0.4) calc(var(--step) * 1.6);
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: var(--ink-faint);
+    font: inherit;
+    font-size: var(--type-small);
+    cursor: pointer;
+    transition: background-color var(--duration) var(--ease),
+                color var(--duration) var(--ease);
+}
+
+.variant:hover { color: var(--ink); }
+
+.variant[aria-pressed="true"] {
+    background: var(--signal-quiet);
+    color: var(--signal);
+}
+
 .copy {
     display: grid;
-    margin-left: auto;
+    margin-left: calc(var(--step) * 1.5);
     padding: calc(var(--step) * 0.5);
     border: 0;
     background: none;
@@ -645,7 +676,7 @@ section + section { margin-top: var(--section-gap); }
     font-size: var(--type-title);
     line-height: 1.14;
     letter-spacing: var(--tracking-tight);
-    font-weight: 700;
+    font-weight: 600;
     text-wrap: balance;
 }
 

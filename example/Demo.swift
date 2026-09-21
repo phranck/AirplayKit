@@ -6,9 +6,15 @@
 //  Copyright © 2026 cocoa:naut. All rights reserved.
 //
 
-import AVFoundation
 import Dispatch
 import Foundation
+
+// The library runs on Linux as well, and AVFoundation does not. Everything that
+// reads any format and resamples it is Apple's framework doing the work, so
+// that half of this example is built only where the framework exists.
+#if canImport(AVFoundation)
+import AVFoundation
+#endif
 
 // MARK: - Listing what is on the network
 
@@ -98,35 +104,37 @@ func playTone(on host: String, port: UInt16, forSeconds seconds: Int) -> Int32 {
 /// Plays a file to a speaker, converting it to what AirPlay carries on the way.
 func stream(_ file: AVAudioFile, to host: String, port: UInt16) throws {
     // Interleaved 16 bit stereo at 44100 is the only thing that goes over the wire.
-    let wire = AVAudioFormat(commonFormat: .pcmFormatInt16,
-                             sampleRate: Double(AirPlaySession.sampleRate),
-                             channels: AVAudioChannelCount(AirPlaySession.channelCount),
-                             interleaved: true)!
-    let converter = AVAudioConverter(from: file.processingFormat, to: wire)!
+    let audioFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
+                                    sampleRate: Double(AirPlaySession.sampleRate),
+                                    channels: AVAudioChannelCount(AirPlaySession.channelCount),
+                                    interleaved: true)!
+    let converter = AVAudioConverter(from: file.processingFormat, to: audioFormat)!
 
     let session = try AirPlaySession(host: host, port: port, senderName: "My App")
-    session.volume = 0.7
+    session.volume = 0.2
 
     let framesPerChunk: AVAudioFrameCount = 4096
-    let ratio = wire.sampleRate / file.processingFormat.sampleRate
-    let read = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: framesPerChunk)!
-    let converted = AVAudioPCMBuffer(pcmFormat: wire,
-                                     frameCapacity: AVAudioFrameCount(Double(framesPerChunk) * ratio) + 1)!
+    let ratio = audioFormat.sampleRate / file.processingFormat.sampleRate
+    let readBuffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: framesPerChunk)!
+    let convertedCapacity = AVAudioFrameCount(Double(framesPerChunk) * ratio) + 1
+    let convertedBuffer = AVAudioPCMBuffer(pcmFormat: audioFormat, frameCapacity: convertedCapacity)!
 
-    while true {
-        try file.read(into: read)
-        if read.frameLength == 0 { break }   // the end of the file
+    // Read against the file's own length rather than until it complains: asking
+    // for one frame past the end throws rather than coming back empty.
+    while file.framePosition < file.length {
+        let remaining = file.length - file.framePosition
+        try file.read(into: readBuffer, frameCount: AVAudioFrameCount(min(Int64(framesPerChunk), remaining)))
 
         var handedOver = false
-        converter.convert(to: converted, error: nil) { _, status in
+        converter.convert(to: convertedBuffer, error: nil) { _, status in
             defer { handedOver = true }
             status.pointee = handedOver ? .noDataNow : .haveData
 
-            return handedOver ? nil : read
+            return handedOver ? nil : readBuffer
         }
 
-        let samples = converted.int16ChannelData![0]
-        let count = Int(converted.frameLength) * AirPlaySession.channelCount
+        let samples = convertedBuffer.int16ChannelData![0]
+        let count = Int(convertedBuffer.frameLength) * AirPlaySession.channelCount
 
         // A file can wait, so it offers the same frames again. A live source would drop them.
         var outcome = session.write(UnsafeBufferPointer(start: samples, count: count))
@@ -160,6 +168,95 @@ func playFile(at path: String, on host: String, port: UInt16) -> Int32 {
 
 #endif
 
+// MARK: - Sending a file anywhere
+
+/// What a WAVE file says about the audio in it, and where that audio starts.
+struct WaveFile {
+    let sampleRate: Int
+    let channelCount: Int
+    let bitsPerSample: Int
+    let frames: Data
+}
+
+/// Reads the two chunks of a WAVE file that matter: what the audio is, and the audio.
+func readWave(at path: String) throws -> WaveFile {
+    let data = try Data(contentsOf: URL(fileURLWithPath: path))
+
+    func number(at offset: Int, bytes: Int) -> Int {
+        (0..<bytes).reduce(0) { $0 | Int(data[offset + $1]) << (8 * $1) }
+    }
+
+    var sampleRate = 0, channelCount = 0, bitsPerSample = 0
+    var offset = 12   // past "RIFF", the size, and "WAVE"
+
+    while offset + 8 <= data.count {
+        let identifier = String(decoding: data[offset..<offset + 4], as: UTF8.self)
+        let size = number(at: offset + 4, bytes: 4)
+        let body = offset + 8
+
+        switch identifier {
+        case "fmt ":
+            channelCount = number(at: body + 2, bytes: 2)
+            sampleRate = number(at: body + 4, bytes: 4)
+            bitsPerSample = number(at: body + 14, bytes: 2)
+
+        case "data":
+            // Copied out of the slice, because a slice keeps the indices it had
+            // in the file and everything below counts from zero.
+            return WaveFile(sampleRate: sampleRate,
+                            channelCount: channelCount,
+                            bitsPerSample: bitsPerSample,
+                            frames: Data(data[body..<min(body + size, data.count)]))
+
+        default:
+            break
+        }
+
+        offset = body + size + (size % 2)   // chunks are padded to an even length
+    }
+
+    throw POSIXError(.EINVAL)
+}
+
+/// Plays a WAVE file to a speaker. Nothing here is Apple's, so it runs on Linux too.
+func streamWave(at path: String, to host: String, port: UInt16) throws {
+    let wave = try readWave(at: path)
+
+    // No resampling here: what the file holds has to be what AirPlay carries.
+    guard wave.sampleRate == AirPlaySession.sampleRate,
+          wave.channelCount == AirPlaySession.channelCount,
+          wave.bitsPerSample == 16 else {
+        print("this wants 16 bit stereo at \(AirPlaySession.sampleRate), and that file is "
+              + "\(wave.bitsPerSample) bit, \(wave.channelCount) channel, at \(wave.sampleRate)")
+        throw POSIXError(.EINVAL)
+    }
+
+    let session = try AirPlaySession(host: host, port: port, senderName: "My App")
+    session.volume = 0.2
+
+    let samplesPerChunk = 4096 * AirPlaySession.channelCount
+    let bytesPerChunk = samplesPerChunk * MemoryLayout<Int16>.size
+
+    for start in stride(from: 0, to: wave.frames.count, by: bytesPerChunk) {
+        let chunk = wave.frames[start..<min(start + bytesPerChunk, wave.frames.count)]
+        var samples = [Int16](repeating: 0, count: chunk.count / MemoryLayout<Int16>.size)
+        _ = samples.withUnsafeMutableBytes { chunk.copyBytes(to: $0) }
+
+        // A file can wait, so it offers the same frames again. A live source would drop them.
+        var outcome = session.write(samples)
+        while outcome == .bufferFull {
+            Thread.sleep(forTimeInterval: 0.01)
+            outcome = session.write(samples)
+        }
+
+        if outcome == .ended { break }
+    }
+
+    // The sender still holds what has not gone out, so closing now would cut the end off.
+    Thread.sleep(forTimeInterval: 4)
+    session.close()
+}
+
 // MARK: - What the command does
 
 @main
@@ -168,11 +265,18 @@ struct Demo {
         let arguments = CommandLine.arguments
 
         guard arguments.count > 1 else {
-            print("""
-                  usage: Demo list
-                         Demo play <host> [port] [seconds]
-                         Demo file <path> <host> [port]   (macOS only)
-                  """)
+            var usage = """
+                        usage: Demo list
+                               Demo play <host> [port] [seconds]
+                               Demo wave <path> <host> [port]   16 bit stereo at 44100
+                        """
+
+            // Only where AVFoundation is, because it does the conversion.
+            #if canImport(AVFoundation)
+            usage += "\n       Demo file <path> <host> [port]   any format the system reads"
+            #endif
+
+            print(usage)
             exit(2)
         }
 
@@ -184,6 +288,18 @@ struct Demo {
             let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000
             let seconds = Int(arguments.count > 4 ? arguments[4] : "5") ?? 5
             exit(playTone(on: arguments[2], port: port, forSeconds: seconds))
+
+        case "wave" where arguments.count > 3:
+            let port = UInt16(arguments.count > 4 ? arguments[4] : "7000") ?? 7000
+            do {
+                print("playing \(arguments[2]) on \(arguments[3]):\(port)")
+                try streamWave(at: arguments[2], to: arguments[3], port: port)
+                print("done")
+            } catch {
+                FileHandle.standardError.write(Data("\(error)\n".utf8))
+                exit(1)
+            }
+            exit(0)
 
         #if canImport(AVFoundation)
         case "file" where arguments.count > 3:
