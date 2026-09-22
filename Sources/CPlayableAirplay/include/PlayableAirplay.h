@@ -30,9 +30,10 @@ extern "C" {
  */
 
 /** How large a name or address may be, including its terminator. */
-#define PA_MAX_NAME 128
-#define PA_MAX_HOST 256
-#define PA_MAX_ID    64
+#define PA_MAX_NAME  128
+#define PA_MAX_HOST  256
+#define PA_MAX_ID     64
+#define PA_MAX_MODEL  64
 
 /** The audio the sender takes. Fixed, because this is what AirPlay carries. */
 #define PA_SAMPLE_RATE 44100
@@ -61,6 +62,16 @@ typedef struct PAReceiver {
     char name[PA_MAX_NAME];
     /** Where to reach it, as a host name rather than an address, since addresses move. */
     char host[PA_MAX_HOST];
+    /**
+     What it says it is, taken from the `am` field it announces.
+
+     Apple's receivers give a model identifier, such as `AudioAccessory5,1` for a
+     HomePod mini or `AppleTV11,1` for an Apple TV, which is the same code the
+     machine answers to elsewhere. Everybody else gives whatever they like: Sonos
+     announces product names such as `Arc` or `One`. Empty where a receiver
+     announced nothing, so a caller treats it as a hint rather than a fact.
+     */
+    char model[PA_MAX_MODEL];
     /** The port its RTSP service listens on. */
     uint16_t port;
     /** Whether it announced the AirPlay 2 pairing key. A receiver without one needs the older path. */

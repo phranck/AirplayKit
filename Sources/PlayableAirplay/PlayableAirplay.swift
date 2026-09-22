@@ -46,6 +46,19 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     /// The port its RTSP service listens on, which is 7000 on every receiver seen so far.
     public let port: UInt16
 
+    /// What the receiver says it is, or an empty string where it said nothing.
+    ///
+    /// Apple's receivers give a model identifier, such as `AudioAccessory5,1` for
+    /// a HomePod mini, `AppleTV11,1` for an Apple TV or `Mac16,11` for a Mac.
+    /// That is the same code macOS files a picture of the machine under, so it is
+    /// enough to draw a receiver as the thing it actually is.
+    ///
+    /// Everybody else gives whatever they like, and there is no register to check
+    /// it against. Sonos announces product names such as `Arc`, `One` or
+    /// `Bookshelf`. So this is a hint worth using where it is recognised and
+    /// worth ignoring where it is not, rather than something to branch on.
+    public let model: String
+
     /// Whether it announced the pairing key that AirPlay 2 is built on.
     ///
     /// The pairing this library performs needs that key. A receiver without one
@@ -346,6 +359,7 @@ private extension AirPlayReceiver {
                   name: Self.string(from: receiver.name, capacity: Int(PA_MAX_NAME)),
                   host: Self.string(from: receiver.host, capacity: Int(PA_MAX_HOST)),
                   port: receiver.port,
+                  model: Self.string(from: receiver.model, capacity: Int(PA_MAX_MODEL)),
                   supportsAirPlay2: receiver.supportsAirPlay2)
     }
 
