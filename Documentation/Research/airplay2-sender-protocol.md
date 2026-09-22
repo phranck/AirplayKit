@@ -58,12 +58,14 @@ sr=44100 ss=16 tp=UDP vn=65537 vs=130.14 am=AppleTV2,1 sf=0x4
 | `vs` | `130.14` | Server version, the AirTunes build. | confirmed |
 | `vn` | `65537` | Version number. | confirmed |
 | `am` | `AppleTV2,1` | Device model. | confirmed |
-| `da` | `true` | Listed in every published table and read by nothing. No primary source states its semantics, and pyatv does not consume it. | open |
+| `da` | `true` | The receiver accepts RFC 2617 digest authentication. Apple's own sender reads the key into a boolean it calls `rfc2617DigestAuthKey` ([Cozzi, Service discovery](https://web.archive.org/web/20220214214811/https://emanuelecozzi.net/docs/airplay2/discovery/)). pyatv does not consume it. | likely |
 | `sv` | `false` | No primary source states its semantics. | open |
 | `sf` | `0x4` | Status flags. See the table below. | confirmed |
 | `pk` | 64 hex characters | The receiver's Ed25519 long-term public key, 32 bytes hex encoded. Present on AirPlay 2 receivers. | confirmed |
 | `flags` | `0x404` | The AirPlay 2 spelling of `sf`, seen on `_airplay._tcp`. | likely |
 | `features` | `0x445F8A00,0x1C340` | The capability bitfield. See below. | confirmed |
+
+A second table of the same records exists, recovered from Apple's own sender, and it gives the name the sender reads each key into. It settles `da` as a boolean called `rfc2617DigestAuthKey`, and it carries three keys the table above does not: `ft` is the features bitfield in its `_raop._tcp` spelling, `ov` is the OS version, and `vv` is a number it calls the vodka version. `sv` appears in neither table, so it stays **open** ([Cozzi, Service discovery](https://web.archive.org/web/20220214214811/https://emanuelecozzi.net/docs/airplay2/discovery/), **likely**).
 
 ### The `_airplay._tcp` TXT keys
 
@@ -107,9 +109,13 @@ These are the bits an audio sender reads ([openairplay, Features](https://openai
 
 Two of these carry a note in the specification's own source that the rendered page drops. Bits 40 and 41, SupportsBufferedAudio and SupportsPTP, are each annotated as the bit "needed for device to show as supporting multi-room audio" ([openairplay, `src/features.md`](https://raw.githubusercontent.com/openairplay/airplay-spec/master/src/features.md), **confirmed**). That is the clearest published statement of what multi-room needs, and it names both bits rather than either one alone.
 
-**The bit names are not settled.** pyatv carries its own enumeration of the same field, and it disagrees with the openairplay table about at least two bits: pyatv calls bit 38 `SupportsUnifiedMediaControl` and bit 48 `SupportsCoreUtilsPairingAndEncryption`, whilst openairplay calls bit 38 `SupportsCoreUtilsPairingAndEncryption` and bit 48 `SupportsTransientPairing`. pyatv's own source comment says there "seems to be some inconsistencies" in the published tables ([pyatv, `pyatv/protocols/airplay/utils.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/airplay/utils.py), **open**). Treat any single bit name as a hypothesis and test the receiver's actual behaviour.
+**The bit names are not settled, and a sender does not need them to be.** Three published tables of this field exist, and they disagree about names whilst agreeing about numbers. openairplay calls bit 38 `SupportsCoreUtilsPairingAndEncryption` and bit 48 `SupportsTransientPairing`. pyatv swaps those two names round, and its own comment says there "seems to be some inconsistencies" in the published tables ([pyatv, `pyatv/protocols/airplay/utils.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/airplay/utils.py), **confirmed** as a description of pyatv). The third table was recovered from Apple's own sender by reverse engineering, and it agrees with pyatv: bit 38 is `SupportsUnifiedMediaControl` and bit 48 is `SupportsCoreUtilsPairingAndEncryption` ([Cozzi, Features](https://web.archive.org/web/20220214214810/https://emanuelecozzi.net/docs/airplay2/features/), **likely**).
 
-The same list classifies a receiver by kind. A `model` beginning with `AppleTV` is an Apple TV, one beginning with `AudioAccessory` is a HomePod, and a receiver with SupportsUnifiedPairSetupAndMFi or HasUnifiedAdvertiserInfo set is a third-party speaker ([openairplay, Features](https://openairplay.github.io/airplay-spec/features.html), **likely**, because the classification is stated but the consequences of getting it wrong are not).
+What settles the question is that neither property is a single bit. Cozzi's table carries a condition beside each name, and the two that matter read `48 || 43` for transient pairing and `38 || 46 || 43 || 48` for CoreUtils pairing and encryption, so transient pairing is not a bit at all but a property derived from two of them. openairplay's raw source says the same thing from the other side. Its note on bit 48 reads that `SupportsSystemPairing` implies `SupportsTransientPairing`, and its note on bit 38 reads that `SupportsHKPairingAndAccessControl`, `SupportsSystemPairing` and `SupportsTransientPairing` each imply `SupportsCoreUtilsPairingAndEncryption` ([openairplay, `src/features.md`](https://raw.githubusercontent.com/openairplay/airplay-spec/master/src/features.md), **confirmed**). Compute the derived property over all four bits and the naming disagreement stops mattering, which is what pyatv does in code.
+
+Cozzi's table also gives the minimal set a receiver must declare for multi-room audio as bits 9, 11, 30, 40, 41, and 51, which is `features=0x40000a00,0x80300` (**likely**). And it makes volume support the **absence** of bit 32 rather than its presence, because bit 32 set means CarPlay, so it gates both `SupportsVolume` and `SupportsInitialVolume` on that bit being clear.
+
+The same tables classify a receiver by kind. A `model` beginning with `AppleTV` is an Apple TV and one beginning with `AudioAccessory` is a HomePod. A receiver is a third-party speaker when bit 26 or bit 51 is set, and a third-party television when it sets bit 0 or bit 49 as well ([Cozzi, Features](https://web.archive.org/web/20220214214810/https://emanuelecozzi.net/docs/airplay2/features/), **likely**). Bit 26 is where the two tables part company hardest, since openairplay calls it `HasUnifiedAdvertiserInfo` and puts `RAOP` at bit 30, whilst Cozzi calls bit 26 MFi authentication and puts `HasUnifiedAdvertiserInfo` at bit 30. The condition is the same pair of bits either way.
 
 ### The `sf` and `flags` status bits
 
@@ -158,7 +164,7 @@ The decision a sender has to make from the TXT records is which authentication p
 | `pw=true`, or status bit 7 Password Required | RTSP digest authentication, reactive on the first 401 response. |
 | `am` beginning with `AirPort` | `POST /auth-setup`, the MFiSAP one-shot. |
 | `features` bit 46 SupportsHKPairingAndAccessControl set, and status bit 9 OneTimePairingRequired set | HomeKit pairing with the on-screen PIN, then pair-verify. |
-| `features` bit 48 SupportsTransientPairing set, and no pairing status bit set | HomeKit transient pairing, no user interaction. |
+| `features` bit 43 or bit 48 set, which is the derived transient-pairing property, and no pairing status bit set | HomeKit transient pairing, no user interaction. |
 | None of the above | Plain AirPlay 1 RTSP with no authentication. |
 
 pyatv makes the same decision from the same two fields and states its rules exactly, which is worth having beside the table above because the two agree on substance and differ on naming ([pyatv, `pyatv/protocols/airplay/utils.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/airplay/utils.py) and [`pyatv/protocols/airplay/auth/__init__.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/airplay/auth/__init__.py), **confirmed** as a description of pyatv).
@@ -221,7 +227,20 @@ pyatv carries one more type that Apple's accessory header does not list, `Name` 
 
 Every pairing request carries an `X-Apple-HKP` header saying which pairing mode the sender wants. A working sender sends `4` for transient pairing and `3` for pairing with a PIN ([airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp), **likely**). The openairplay specification names mode `4` as the transient mode used by HomePod and AirPort Express ([openairplay, HomeKit Based Pairings](https://openairplay.github.io/airplay-spec/pairing/hkp.html), **likely**).
 
-No primary source enumerates the full set of values and their names, so treat anything beyond `3` and `4` as **open**.
+One receiver enumerates the whole set in its own source ([openairplay, `airplay2-receiver`, `ap2-receiver.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2-receiver.py), **confirmed** as a statement about that implementation).
+
+| Value | Name it gives |
+|---|---|
+| 0 | Unauthenticated, for a receiver advertising neither transient nor system pairing. |
+| 2 | Pair-setup is complete and pair-verify begins. |
+| 3 | System pairing, which it ties to `features` bit 43. |
+| 4 | Transient pairing. |
+| 6 | HomeKit. |
+| 7 | HomeKit administration. |
+
+That receiver defines the constant and never reads it back, so the list documents what the values mean rather than what it enforces. pyatv labels `3` as HAP and `4` as transient, and it answers a `/pair-verify` that carries no such header with a 501 ([pyatv, `pyatv/protocols/airplay/server_auth.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/airplay/server_auth.py), **confirmed** as a description of pyatv). owntone picks between `3` and `4` on exactly the same split, normal against transient ([owntone, `src/outputs/airplay.c`](https://github.com/owntone/owntone-server/blob/master/src/outputs/airplay.c), **confirmed**).
+
+Which value the PIN path wants is the part still **open**. Three senders send `3` there and it works, whilst the receiver's own list reserves `3` for system pairing and puts HomeKit at `6`. Send `3` for the PIN and `4` for transient, because that is what every working sender does.
 
 Alongside `X-Apple-HKP`, a pairing request carries the sender's identity headers, and a receiver's access-control gate reads them before it reads the TLV body. Sending them matters: their absence is a documented cause of a 403 response ([airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp), **likely**).
 
@@ -327,13 +346,13 @@ Transient pairing exists so a sender can get an encrypted session without a user
 
 That leaves the SRP session key `K` as the session's shared secret, and `K` is 64 bytes.
 
-There is a genuine conflict in the sources about which HKDF strings derive the transient channel keys.
+**An AirPlay receiver wants the ordinary `Control-Salt` derivation, over the full 64-byte `K`, with nothing truncated.** The transient path and the pair-verify path derive the channel keys identically, and the only thing transient pairing changes is which secret goes in (**confirmed**).
 
-Apple's own HomeKit accessory implementation derives them with the salt `SplitSetupSalt` and the info strings `AccessoryEncrypt-Control` and `ControllerEncrypt-Control`, and the strings `Control-Write-Encryption-Key` and `Control-Read-Encryption-Key` appear nowhere in that file ([Apple, `HomeKitADK/HAP/HAPPairingPairSetup.c`](https://github.com/apple/HomeKitADK/blob/master/HAP/HAPPairingPairSetup.c), **confirmed** as a statement about that file).
+Four implementations say so and none disagrees. A receiver hard-codes the salt `Control-Salt` with the info strings `Control-Read-Encryption-Key` and `Control-Write-Encryption-Key`, and on transient completion it feeds the raw SRP session key straight into them, unmodified and 64 bytes long ([openairplay, `airplay2-receiver`, `ap2/pairing/hap.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2/pairing/hap.py), **confirmed**; its README records an iPhone X on iOS 13.3 as the sender it was tested against). pyatv's own receiver double does the same, using one pair of strings for both paths ([pyatv, `pyatv/protocols/airplay/server_auth.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/airplay/server_auth.py), **confirmed**). The pairing library that drives owntone's sender holds a single key table for both its normal and its transient client, and its header states outright that the shared secret is 32 bytes after a normal pairing and 64 after a transient one ([pair_ap, `pair_homekit.c` and `pair.h`](https://github.com/ejurgensen/pair_ap/blob/master/pair_homekit.c), **confirmed**). owntone passes that 64-byte secret on at its full length ([owntone, `src/outputs/airplay.c`](https://github.com/owntone/owntone-server/blob/master/src/outputs/airplay.c), **confirmed**).
 
-The AirPlay documentation and a working AirPlay sender both use the ordinary `Control-Salt` derivation over the SRP secret instead ([openairplay, HomeKit Based Pairings](https://openairplay.github.io/airplay-spec/pairing/hkp.html) and [airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp), **likely**).
+The `SplitSetupSalt` derivation is real Apple code and belongs to a different protocol. It lives in the HomeKit accessory library, which pairs an accessory to a HomeKit controller over HAP rather than over AirPlay's RTSP endpoints. Its own non-transient path uses `Control-Salt` with the same two info strings, so the AirPlay strings are the HomeKit strings, and the split-setup names exist only for HomeKit's own transient shortcut ([Apple, `HomeKitADK/HAP/HAPPairingPairSetup.c`](https://github.com/apple/HomeKitADK/blob/master/HAP/HAPPairingPairSetup.c) and [`HAP/HAPPairingPairVerify.c`](https://github.com/apple/HomeKitADK/blob/master/HAP/HAPPairingPairVerify.c), **confirmed** as a statement about those files). No AirPlay implementation examined here references `SplitSetupSalt` at all.
 
-The most plausible reading is that AirPlay's transient pairing is a different profile from HomeKit's split setup, and that AirPlay receivers use `Control-Salt`. That reading is not proven here and stays **open**. The practical answer for an implementation is to try `Control-Salt` first, because a real sender is known to work with it against a Mac and a HomePod, and to fall back to `SplitSetupSalt` if the first encrypted request is rejected.
+The one place the 64-byte length does matter is the audio key, which is clamped to 32 bytes and not derived. owntone's own comment says it plainly: after a transient pairing the key is 64 bytes long, and only the first 32 are used for the audio payload. That is the same clamp the `shk` section below arrives at from the other direction.
 
 ### Pair-verify
 
@@ -482,6 +501,10 @@ The response body is `application/x-apple-binary-plist` and carries at least the
 
 Reading `features` and `statusFlags` here rather than from the TXT record is the more reliable route, because the reply is generated on the spot and the TXT record can be stale.
 
+An Apple sender issues `GET /info` twice, and the two requests ask different questions ([Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **confirmed** from a capture of an iPhone against a Sonos One).
+
+The first carries a binary property list body of `{'qualifier': ['txtAirPlay']}` and asks for the `_airplay._tcp` TXT record as a plist, which is how a receiver with a thin TXT record can still declare everything about itself. The second carries no body at all and returns the keys that only exist at this point, of which `initialVolume` is the one a sender wants. The first reply is also where a receiver declares its output latency, in a key called `audioLatencies` holding one dictionary per audio type, each with `inputLatencyMicros`, `outputLatencyMicros`, an integer `type` naming the stream type it applies to, and an optional `audioType` of `default` or `media`. The captured Sonos One reports 400000 microseconds of output latency for every combination.
+
 ### SETUP, the session
 
 SETUP is an RTSP **method** on the session URI. It is not `POST /setup`, which returns 404 ([airplay2-sender-cpp, README](https://github.com/akustikrausch/airplay2-sender-cpp), **confirmed** as observed behaviour). The body is a binary property list with `Content-Type: application/x-apple-binary-plist` ([openairplay, SETUP](https://openairplay.github.io/airplay-spec/audio/rtsp_requests/setup.html), **likely**; the page documents the AirPlay 1 form in full and the AirPlay 2 form only by content type).
@@ -506,9 +529,18 @@ There are two SETUP requests. The first describes the session and the sender. Th
 | `senderSupportsRelay` | boolean | False for a sender that does not relay. |
 | `statsCollectionEnabled` | boolean | False. |
 
+A capture of an Apple sender carries four more keys that no open sender sends, and they are the ones the PTP path needs ([Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **confirmed** from that capture).
+
+| Key | Type | Value and meaning |
+|---|---|---|
+| `groupUUID` | string | The group's UUID in uppercase text form. The sender sends it even when addressing a single receiver. |
+| `timingPeerInfo` | dictionary | The sender's own timing identity: an `Addresses` array holding its IPv4 and IPv6 addresses, and an `ID`, which in the capture is the same UUID as `groupUUID`. |
+| `timingPeerList` | array | An array of dictionaries of that shape, one per timing peer. In the capture it holds the sender alone. |
+| `ekey`, `eiv`, `et` | data, data, integer | The AirPlay 1 audio key, its initialisation vector, and the encryption type. The capture carries `et: 0`, meaning none, with both byte strings present and unused. |
+
 The reply is a binary property list. The key that matters is `eventPort`, the TCP port for the event channel ([airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp), **likely**).
 
-`timingPort` in the reply is the receiver's own timing port, used on the PTP path. On the NTP path the sender is the one running a timing server, so the sender's `timingPort` in the request is what matters.
+`timingPort` means different things in the request and in the reply, and the reply's meaning is the opposite way round from what its name suggests. On the PTP path the reply carries `timingPort: 0`, because no timing channel is opened at all, and the reply's `timingPeerInfo` carries the receiver's own addresses instead. On the NTP path the receiver opens a timing channel and names its port there ([Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **confirmed** for the PTP half, which comes from a capture whose `timingProtocol` reads `PTP` and whose reply reads `timingPort: 0`, and **likely** for the NTP half, which that page states without a capture behind it). The request's `timingPort` is the sender's own, which is what the open senders fill in, because on their NTP path the sender is the one running a timing server.
 
 ### SETUP, the stream
 
@@ -517,7 +549,7 @@ The second SETUP carries a `streams` array holding one dictionary per stream. Fo
 | Key | Type | Value | Meaning |
 |---|---|---|---|
 | `type` | integer | 96 (0x60) | Realtime audio over UDP. |
-| `ct` | integer | 2 | Compression type. 1 is PCM, 2 is ALAC, 4 is AAC-LC, 8 is AAC-ELD. |
+| `ct` | integer | 2 | Compression type. 1 is PCM, 2 is ALAC, 4 is AAC-LC, 8 is AAC-ELD, and 32 is Opus. |
 | `audioFormat` | integer | 0x40000 | One bit per format. Bit 18 is ALAC at 44100 Hz, 16 bit, 2 channels. |
 | `audioMode` | string | `default` | |
 | `spf` | integer | 352 | Samples per frame. |
@@ -530,9 +562,21 @@ The second SETUP carries a `streams` array holding one dictionary per stream. Fo
 | `supportsDynamicStreamID` | boolean | false | |
 | `streamConnectionID` | integer | the session id | The numeric RTSP session identifier, not a separate string. |
 
-The `ct` values come from a receiver's own comment naming the table, and `audioFormat` is a bitfield with one bit per concrete format rather than a small enumeration ([openairplay, `airplay2-receiver`, `ap2-receiver.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2-receiver.py) and [`ap2/connections/audio.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2/connections/audio.py), **confirmed**). Bits 2 to 17 are PCM at various rates and channel counts, bits 18 to 21 are the four ALAC variants, bits 22 and 23 are AAC-LC at 44100 Hz and 48000 Hz, bits 24 to 27 and 31 to 32 are AAC-ELD variants, and bits 28 to 30 are Opus. Bit 18 is therefore ALAC at 44100 Hz, 16 bit, stereo, which is the value 0x40000 that a working sender sends ([airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp), **likely**, and the two agree).
+The `ct` values come from a receiver's own comment naming the table, and `audioFormat` is a bitfield with one bit per concrete format rather than a small enumeration ([openairplay, `airplay2-receiver`, `ap2-receiver.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2-receiver.py) and [`ap2/connections/audio.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2/connections/audio.py), **confirmed**). Bits 2 to 17 are PCM at various rates and channel counts, bits 18 to 21 are the four ALAC variants, bits 22 and 23 are AAC-LC at 44100 Hz and 48000 Hz, bits 24 to 27 and 31 to 32 are AAC-ELD variants, and bits 28 to 30 are Opus. Bit 18 is therefore ALAC at 44100 Hz, 16 bit, stereo, which is the value 0x40000 that a working sender sends ([airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp), **likely**, and the two agree). A third table, recovered from Apple's own sender, enumerates all thirty-one bits with the same meanings, so the mapping is settled ([Cozzi, Audio](https://web.archive.org/web/20220214214824/https://emanuelecozzi.net/docs/airplay2/audio/), **confirmed**).
 
-Two implementations fill this dictionary differently. pyatv sends `ct: 1` with `audioFormat: 0x800`, which is a PCM format ([pyatv, `pyatv/protocols/raop/protocols/airplayv2.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/raop/protocols/airplayv2.py), **confirmed** as a description of pyatv). The ALAC choice above is the safer one, for the reason given below under the payload.
+`type` names the kind of stream, and audio is two of five values ([Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **likely**).
+
+| Value | Stream |
+|---|---|
+| 96 | General audio, realtime. |
+| 103 | General audio, buffered. |
+| 110 | Screen. |
+| 120 | Playback. |
+| 130 | Remote control. |
+
+A capture of an Apple sender fills the realtime dictionary the same way the stream table above does: `ct: 2`, `audioFormat: 262144` which is 0x40000, `spf: 352`, `audioMode: default`, `isMedia: true`, `latencyMin: 11025`, `latencyMax: 88200`, `supportsDynamicStreamID: true`, its own `controlPort`, and a 32-byte `shk`. It carries no `shiv` and no `clientID`, and no `streamConnectionID` either ([Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **confirmed** from that capture).
+
+Two implementations fill this dictionary differently. pyatv sends `ct: 1` with `audioFormat: 0x800`, which is a PCM format ([pyatv, `pyatv/protocols/raop/protocols/airplayv2.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/raop/protocols/airplayv2.py), **confirmed** as a description of pyatv). The ALAC choice above is the safer one, for the reason given below under the payload, and it is also what Apple itself sends.
 
 The reply carries a `streams` array of its own. The sender reads `dataPort` from the first entry, which is the UDP port the audio goes to, and `controlPort`, which is where sync packets and retransmit requests go ([airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp), **likely**).
 
@@ -564,6 +608,8 @@ The order below is what a working sender uses against a current Apple TV, and it
 7.  SET_PARAMETER volume
 8.  first SYNC packet, then the RTP audio loop
 ```
+
+A capture of an Apple sender arrives at the same order independently. It sends `GET /info` with the `txtAirPlay` qualifier, then the session SETUP, then the second bodyless `GET /info`, then RECORD, then SETPEERS, then the volume requests and a `POST /feedback` loop. The stream SETUP comes later, at the moment audio is about to start, and FLUSH follows it ([Cozzi, Protocols](https://web.archive.org/web/20220214214828/https://emanuelecozzi.net/docs/airplay2/protocols/), **confirmed** as a description of that capture). That puts RECORD between the two SETUPs, which is the one ordering constraint the working sender calls load-bearing, and two independent sources now agree on it.
 
 What fails when it is done differently:
 
@@ -672,6 +718,8 @@ The counter is **appended to the packet after the ciphertext and the tag**, as e
         AAD = header bytes 4 to 11
 ```
 
+One published diagram of that trailer puts the nonce first and the tag after it. A receiver's own decryption reads it the other way round, taking the last eight bytes as the nonce and the sixteen before them as the tag, which is what the combined-mode AEAD call expects, so the order above is the one that works ([shairport-sync, `rtp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtp.c), **confirmed**, against [Cozzi, RTP](https://web.archive.org/web/20220214214827/https://emanuelecozzi.net/docs/airplay2/rtp/)). The same receiver code path serves both the realtime and the buffered stream, which is why the two constructions are identical.
+
 ### Pacing
 
 Frames must leave the machine at the rate wall-clock time advances, which is 44100 frames per second. A working sender runs an 8 millisecond deadline, which is about one packet per tick, and uses a token bucket so that a late tick is repaid rather than lost. The number of packets sent in one catch-up burst is capped, so a stalled thread cannot flood the network ([airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp), **likely**).
@@ -690,9 +738,15 @@ The reply differs from the realtime reply in two ways. `dataPort` names a **TCP*
 
 `audioBufferSize` is a capacity the receiver reports, not something the sender chooses. The receiver allocates a buffer of that size, and beyond it the TCP connection simply stops draining, so flow control falls out of the transport rather than out of a protocol message ([shairport-sync, `ap2_buffered_audio_processor.c`](https://github.com/mikebrady/shairport-sync/blob/master/ap2_buffered_audio_processor.c), **confirmed**).
 
-Several fields that appear in write-ups about this request are not read by either open receiver implementation, so their existence is **open**: `shiv`, `clientID`, `isMedia`, `latencyMin`, and `latencyMax` in the buffered case. `audioMode` is not a SETUP key at all, it is a separate `POST /audioMode` request, which both receivers accept and neither acts on ([shairport-sync, `rtsp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtsp.c) and [openairplay, `airplay2-receiver`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2-receiver.py), **confirmed** as a statement about those implementations).
+The fields that write-ups attach to this request sort themselves once a receiver's stream parser is read in one piece. Three of them are real and belong to the realtime stream rather than to the buffered one ([openairplay, `airplay2-receiver`, `ap2/connections/stream.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2/connections/stream.py), **confirmed** as a statement about that implementation).
 
-`streamConnectionID` and `supportsDynamicStreamID` are real, but they belong to the connection-level plist rather than to the per-stream dictionary, and they are gated behind a feature bit outside the set an audio sender otherwise reads ([openairplay, `airplay2-receiver`, `ap2/connections/stream_connection.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2/connections/stream_connection.py), **confirmed**).
+`shiv` is read only in the realtime branch, where it is the initialisation vector for the AES-CBC cipher that the older encryption types use. The buffered branch passes no initialisation vector at all, because its cipher is ChaCha20-Poly1305 keyed directly by `shk` ([openairplay, `airplay2-receiver`, `ap2/connections/audio.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2/connections/audio.py), **confirmed**). `latencyMin` and `latencyMax` are likewise realtime-only, and there they are mandatory rather than optional, whilst `shk`, `shiv`, and `controlPort` are optional even there. `isMedia` is read by neither receiver in either branch, although Apple's own sender does send it. `clientID` appears in no implementation examined here, so it stays **open**.
+
+`streamConnectionID` and `supportsDynamicStreamID` are read straight out of the per-stream dictionary, for both stream types, and neither is gated behind a feature bit. What sits at the connection level is a separate `streamConnections` key inside that same dictionary ([openairplay, `airplay2-receiver`, `ap2/connections/stream.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2/connections/stream.py), **confirmed**).
+
+`audioMode` is both a key and a request. Apple's own sender sends `audioMode: default` inside the realtime stream dictionary ([Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **confirmed** from a capture), and a separate `POST /audioMode` request exists beside it, which both receivers accept and neither acts on ([shairport-sync, `rtsp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtsp.c) and [openairplay, `airplay2-receiver`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2-receiver.py), **confirmed** as a statement about those implementations).
+
+The reply's stream descriptor carries a `streamID` as well as the ports, and that is the number a sender later names in a TEARDOWN body to take one stream down whilst leaving the session up ([openairplay, `airplay2-receiver`, `ap2/connections/stream.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2/connections/stream.py) and [Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **likely**, since the receiver that returns it and the capture that uses it are two different devices).
 
 ### The TCP framing
 
@@ -734,7 +788,7 @@ Buffered audio is ALAC when lossless and AAC when lossy ([shairport-sync, `AIRPL
 
 `features` bit 40, `SupportsBufferedAudio`. The specification's own note on that bit, and on bit 41 `SupportsPTP`, is that each is the bit "needed for device to show as supporting multi-room audio" ([openairplay, `src/features.md`](https://raw.githubusercontent.com/openairplay/airplay-spec/master/src/features.md), **confirmed**).
 
-Neither pyatv nor the C++ sender implements buffered audio at all ([pyatv](https://github.com/postlund/pyatv) and [airplay2-sender-cpp](https://github.com/akustikrausch/airplay2-sender-cpp), **confirmed** by their own documentation). A sender that wants multi-room is building this path from the receiver side of the sources, not from an existing sender.
+No open sender implements buffered audio at all. pyatv and the C++ sender say so in their own documentation, and owntone hardcodes the realtime payload type in a constant whose own comment names 103 as the alternative it does not take ([pyatv](https://github.com/postlund/pyatv), [airplay2-sender-cpp](https://github.com/akustikrausch/airplay2-sender-cpp), and [owntone, `src/outputs/airplay.c`](https://github.com/owntone/owntone-server/blob/master/src/outputs/airplay.c), **confirmed**). A sender that wants multi-room is building this path from the receiver side of the sources, not from an existing sender.
 
 ### FLUSHBUFFERED
 
@@ -748,7 +802,7 @@ Neither pyatv nor the C++ sender implements buffered audio at all ([pyatv](https
 
 The NTP model has not gone away. A sender that puts the string `NTP` in `timingProtocol` gets a working single-receiver session out of a current Apple TV, a HomePod, and a macOS receiver. That is what pyatv does and what the C++ sender does, and both work ([pyatv, `pyatv/protocols/raop/protocols/airplayv2.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/raop/protocols/airplayv2.py), **confirmed**, and [UxPlay wiki, AirPlay2](https://github.com/FDH2/UxPlay/wiki/AirPlay2) carries a capture with that exact value, **confirmed**).
 
-Two of the three values are attested literally. `NTP` appears in a capture and in pyatv's audio session, and `None` appears in pyatv's remote-control-only session ([pyatv, `pyatv/protocols/airplay/ap2_session.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/airplay/ap2_session.py), **confirmed**). No reachable source shows a capture carrying the literal string `PTP`, so that spelling is **likely** rather than confirmed, inferred from the field being a protocol name and from PTP being what AirPlay 2 uses.
+All three values are attested literally. `NTP` appears in a capture and in pyatv's audio session, and `None` appears in pyatv's remote-control-only session ([pyatv, `pyatv/protocols/airplay/ap2_session.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/airplay/ap2_session.py), **confirmed**). `PTP` appears in a capture of an iPhone addressing a Sonos One, in a session SETUP that carries `timingPeerInfo` and `timingPeerList` beside it ([Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **confirmed**).
 
 What the NTP path does not buy is multi-room, and it does not reach every receiver. shairport-sync refuses an NTP stream outright, logging that it cannot handle one. owntone's AirPlay 2 sender implements only NTP timing, and for exactly that reason cannot stream to a shairport-sync receiver ([music-assistant issue 6243](https://github.com/music-assistant/support/issues/6243) and [cliairplay issue 78](https://github.com/music-assistant/cliairplay/issues/78), **confirmed** as reports of behaviour).
 
@@ -766,7 +820,11 @@ nqptp is a passive monitor. It does not originate PTP messages, does not respond
 
 Put those two together and the shape of the sender's job follows. The receiver only listens. Something has to be originating the PTP messages, and the only other party is the sender. **The sender runs a real, message-originating PTP implementation and the receivers discipline their clocks to it** (**likely**, because it follows from two confirmed facts rather than from a statement).
 
-What is genuinely **open**: whether the sender becomes grandmaster through a real Best Master Clock Algorithm exchange or is simply given the role, which PTP domain number is used, whether the traffic is multicast or unicast and on which group if multicast, and which PTP profile applies. shairport-sync's author says plainly that it is not clear how potential clock masters are permitted to be used, and hedges the profile question with "possibly" 802.1AS ([shairport-sync discussion 1712](https://github.com/mikebrady/shairport-sync/discussions/1712), **confirmed** as a statement of what is unknown).
+Two more things follow from nqptp's own source. It binds UDP 319 and 320 and never joins a PTP multicast group, so the sender's messages reach it as unicast to each peer's address, which is also why a receiver has to be handed the peer list before any of the clock traffic means anything to it ([nqptp, `nqptp.c`](https://github.com/mikebrady/nqptp/blob/main/nqptp.c) and [`nqptp-utilities.c`](https://github.com/mikebrady/nqptp/blob/main/nqptp-utilities.c), **likely**, because it is an inference from what the code does not do). And the sender does send Announce messages. nqptp handles exactly three message types, Announce, Sync, and Follow_Up, and out of the Announce it reads `grandmasterIdentity`, `grandmasterPriority1`, `grandmasterPriority2`, the clock quality word, and `stepsRemoved` ([nqptp, `nqptp-message-handlers.c`](https://github.com/mikebrady/nqptp/blob/main/nqptp-message-handlers.c), **confirmed**).
+
+So the sender behaves as a two-step PTP master. It announces itself with the full Best Master Clock fields, then sends Sync and Follow_Up, and the receiver takes its offset from that pair. The receiver need never send Delay_Req: nqptp originates nothing at all beyond a single Announce it sends to wake a clock that has stopped talking.
+
+What is genuinely **open**: whether the receivers run a real Best Master Clock election or simply accept the sender that announces, which PTP domain number is used, and which PTP profile applies. shairport-sync's author says plainly that it is not clear how potential clock masters are permitted to be used, and hedges the profile question with "possibly" 802.1AS ([shairport-sync discussion 1712](https://github.com/mikebrady/shairport-sync/discussions/1712), **confirmed** as a statement of what is unknown).
 
 Apple publishes nothing about this. Its AirPlay deployment guide does not mention PTP, clock synchronisation, or timing at all, and its published table of ports lists AirPlay against 80, 443, 554, 3689, 5000, 5353, 6000, 7000, and the ephemeral range, with no 319 and no 320 ([Apple, Use AirPlay with Apple devices](https://support.apple.com/guide/deployment/use-airplay-dep9151c4ace/web) and [Apple, TCP and UDP ports used by Apple software products](https://support.apple.com/en-us/103229), **confirmed** as a negative finding).
 
@@ -785,6 +843,22 @@ On the PTP path it is the `SETRATEANCHORTIME` request. Its body carries these fi
 | `rate` | The low bit decides playback. Odd means play or resume, even means pause. |
 
 Given that pair, and the sample rate, a receiver computes the network time at which any other RTP timestamp should sound, by linear extrapolation from the anchor. Nothing else is needed to place a frame in time.
+
+The realtime AirPlay 2 stream carries the same anchor as a UDP packet on the receiver's control port instead, and its type is 215. It is the classic SYNC packet with the NTP time replaced by a network time in nanoseconds and the master's clock identity appended ([shairport-sync, `rtp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtp.c), **confirmed**, and a second source names the same type carrying the same triple of an RTP time, an eight-byte network time and a second RTP time, [Cozzi, RTCP](https://web.archive.org/web/20220214214831/https://emanuelecozzi.net/docs/airplay2/rtcp/), **confirmed**).
+
+```text
+offset  size  field
+  0      1    bit 0x10 marks the first packet of a session
+  1      1    215, the packet type
+  2      2    not read
+  4      4    the RTP timestamp that should be sounding at the network time
+              below, which is the anchor frame minus the stream latency
+  8      8    the network time in nanoseconds, on the master clock
+ 16      4    the RTP timestamp that network time refers to
+ 20      8    the 64-bit PTP clock identity of that master
+```
+
+The difference between the two RTP timestamps is the latency the sender is asking for, and a receiver expects 77175 frames there, which is one and three quarter seconds at 44100 Hz. shairport-sync logs anything else as unusual. Note also what its AirPlay 2 control receiver does not handle: it accepts type 215 and the retransmit reply, and logs every other type as unknown, so the classic SYNC packet reaches it and does nothing ([shairport-sync, `rtp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtp.c), **confirmed**). That is the mechanism behind its refusal of an NTP stream.
 
 On the NTP path the anchor is carried instead by the SYNC packet itself, which pairs the current NTP time with the RTP timestamp of the next audio packet, and is repeated once a second so the receiver can keep correcting ([openairplay, `src/audio/rtp_streams.md`](https://raw.githubusercontent.com/openairplay/airplay-spec/master/src/audio/rtp_streams.md), **confirmed**).
 
@@ -864,11 +938,24 @@ The RTP timestamp a sender writes into an audio packet starts at the latency val
 
 ### Retransmission
 
-The receiver asks for a lost packet with payload type 85 on the sender's control port, naming the first missing sequence number and how many are missing. The sender answers with payload type 86: a four-byte header, the original sequence number, and the complete original audio packet after it ([openairplay, `src/audio/rtp_streams.md`](https://raw.githubusercontent.com/openairplay/airplay-spec/master/src/audio/rtp_streams.md), **confirmed**).
+The receiver asks for a lost packet with payload type 85 on the sender's control port, naming the first missing sequence number and how many are missing. The sender answers with payload type 86: a four-byte header followed by the complete original audio packet, which brings its own RTP header with it, so the embedded sequence number sits at offset 6 of the reply. Both of a receiver's code paths read it at exactly that offset ([shairport-sync, `rtp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtp.c), **confirmed**). The last two bytes of that four-byte header are a 16-bit counter of the sender's own, which is what the specification means when it says the audio packet follows the sequence number ([openairplay, `src/audio/rtp_streams.md`](https://raw.githubusercontent.com/openairplay/airplay-spec/master/src/audio/rtp_streams.md), **likely**).
 
 A sender therefore has to keep a backlog of packets it has already sent. A ring of 1024 entries indexed by the low ten bits of the sequence number is enough, and a request for something older than that is simply not answered ([airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp), **likely**).
 
-The two sources disagree about the size of the request. openairplay describes a twelve-byte packet: the eight-byte header, then two bytes of first lost sequence number, then two bytes of count. pyatv and the C++ port read an eight-byte packet, with the sequence number at offset 4 and the count at offset 6, which is the same two fields occupying the header's timestamp slot ([openairplay, `src/audio/rtp_streams.md`](https://raw.githubusercontent.com/openairplay/airplay-spec/master/src/audio/rtp_streams.md) against [pyatv, `pyatv/protocols/raop/packets.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/raop/packets.py), **open**). Read the pair at offset 4 and accept a datagram of at least eight bytes, which satisfies both readings.
+**The request is eight bytes, and a receiver's own sending code settles it** ([shairport-sync, `rtp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtp.c), **confirmed**).
+
+```text
+offset  size  field
+  0      1    0x80
+  1      1    0xD5, which is payload type 85 with the marker bit set,
+              and the same byte on both AirPlay versions
+  2      2    a sequence number of the receiver's own, which
+              shairport-sync always sets to 1, big-endian
+  4      2    the first missing sequence number, big-endian
+  6      2    how many are missing, big-endian
+```
+
+pyatv reads the same eight bytes at the same offsets ([pyatv, `pyatv/protocols/raop/packets.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/raop/packets.py), **confirmed**). openairplay's twelve-byte description puts the two fields after an eight-byte header rather than inside it, and neither the receiver that sends these requests nor the sender that parses them uses that layout ([openairplay, `src/audio/rtp_streams.md`](https://raw.githubusercontent.com/openairplay/airplay-spec/master/src/audio/rtp_streams.md)). Read the pair at offset 4.
 
 Buffered audio needs none of this, because TCP recovers loss itself. No source states that outright, so treat it as **likely**.
 
@@ -879,6 +966,8 @@ Buffered audio needs none of this, because TCP recovers loss itself. No source s
 `SETPEERS` carries `Content-Type: /peer-list-changed` and a binary property list holding a flat array of IP address strings. That array is the list of PTP timing peers ([pyatv documentation](https://pyatv.dev/documentation/protocols/), [openairplay, `airplay2-receiver`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2-receiver.py), and [shairport-sync, `rtsp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtsp.c), **confirmed** by all three).
 
 What shairport-sync does with it settles what it is for. It takes the sender's own address together with every address in the array, and hands the whole list to nqptp, the PTP monitor ([shairport-sync, `rtsp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtsp.c), **confirmed**). The receiver is being told which addresses to watch for clock traffic.
+
+A capture of an Apple sender shows what goes in the array. Addressing one receiver, it lists that receiver's IPv4 address, its IPv6 link-local address, and then the sender's own two addresses. Adding a second speaker to the group adds that speaker's two addresses in the middle, and the message is resent to the receiver already playing ([Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **confirmed** from that capture). So the array is every party to the group including the sender and including the recipient, in address order rather than in role order, and it is resent on every change of membership.
 
 `SETPEERSX` is the extended form. It carries `Content-Type: /peer-list-changed-x` and requires `features` bit 52, `SupportsSetPeersExtendedMessage`. Its body is an array of dictionaries rather than of strings, and each dictionary carries these keys ([openairplay, `airplay2-receiver`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2-receiver.py), **confirmed**).
 
@@ -897,6 +986,8 @@ That is the whole published record. shairport-sync accepts `SETPEERSX` and parse
 
 The published sources do not state a rule, and this stays **open**. What they do show is that `SETPEERS` and `SETPEERSX` are about clock peers rather than about session topology: nothing in them nominates a receiver to relay audio to other receivers.
 
+A capture of a second speaker being added narrows it a little. The sender's `SETPEERS` goes out on the RTSP session of the receiver that is already playing, and it names the new speaker's addresses rather than handing anything over to it. The session SETUP that opened that same connection carried a `timingPeerList` naming the sender itself as the timing peer. Both observations fit one session per receiver, and neither of them rules out a leader ([Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **likely**).
+
 The reading the evidence supports, and it is **likely** rather than confirmed, is that a sender opens a full session to every receiver separately, sends each of them the same `SETRATEANCHORTIME` values, and uses `SETPEERS` to tell each receiver about the others so that all of them lock to the same clock. Each receiver then works out for itself when to play each frame.
 
 ### The grouping fields
@@ -905,14 +996,14 @@ The reading the evidence supports, and it is **likely** rather than confirmed, i
 |---|---|---|---|
 | TXT | `gid` | The group's UUID. A receiver that is not in a group publishes its own `pi` value here instead. | confirmed |
 | TXT | `igl` | Is group leader, `0` or `1`. | confirmed |
-| TXT | `gcgl` | Group contains group leader, `0` or `1`. | confirmed |
+| TXT | `gcgl` | Group contains a discoverable leader, `0` or `1`. Apple's sender reads it into a field it calls `groupContainsDiscoverableLeader`, whilst the session SETUP key of nearly the same name is spelled `groupContainsGroupLeader`. | confirmed |
 | TXT | `pi` | The receiver's own persistent identifier. | confirmed |
 | TXT | `psi` | The public AirPlay pairing identifier, a separate persistent value. | confirmed |
 | plist | `isGroupLeader` | The same idea as `igl`, spelled out, seen in an `updateInfo` event body rather than in a TXT record. | confirmed |
 | plist | `groupContainsGroupLeader` | Sent by the sender in the session SETUP. | likely |
-| plist | `isMultiSelectAirPlay` | Sent by the sender in the session SETUP. No receiver implementation reads it. | open |
+| plist | `isMultiSelectAirPlay` | Sent by the sender in the session SETUP. Apple's own sender sends it true, and so does pyatv. One receiver parses it into a field and never reads that field again, and no source says what it means, so send it true and expect nothing of it. | confirmed as a field |
 
-Sources: [shairport-sync, `bonjour_strings.c`](https://github.com/mikebrady/shairport-sync/blob/master/bonjour_strings.c) for what a receiver actually publishes, and [pyatv documentation](https://pyatv.dev/documentation/protocols/) for the captured examples.
+Sources: [shairport-sync, `bonjour_strings.c`](https://github.com/mikebrady/shairport-sync/blob/master/bonjour_strings.c) for what a receiver actually publishes, [pyatv documentation](https://pyatv.dev/documentation/protocols/) for the captured examples, [Cozzi, Service discovery](https://web.archive.org/web/20220214214811/https://emanuelecozzi.net/docs/airplay2/discovery/) for the name Apple's sender reads each key into, and [openairplay, `airplay2-receiver`, `ap2/connections/session_properties.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2/connections/session_properties.py) for the one field a receiver parses and never uses.
 
 ## Volume
 
@@ -938,7 +1029,9 @@ percentage p in 0..100  ->  (p * 3.0 - 300.0) / 10.0
 
 The arrangement of that expression matters on Apple silicon. Written as `-30 + 0.3 * p`, a compiler that fuses the multiply and the add lands a hair below zero at one hundred per cent, and the text that goes on the wire becomes `-0.000000` ([airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp), **confirmed** as a diagnosed case on Apple clang for arm64).
 
-A current value can be read back with `GET_PARAMETER` and a body naming `volume` ([UxPlay wiki, AirPlay2](https://github.com/FDH2/UxPlay/wiki/AirPlay2), **confirmed** from a capture).
+A current value can be read back with `GET_PARAMETER` and a body naming `volume` ([UxPlay wiki, AirPlay2](https://github.com/FDH2/UxPlay/wiki/AirPlay2), **confirmed** from a capture). What comes back can sit below the range a sender writes: a captured Sonos One answers with `volume: -100`, and the same page gives `initialVolume` as an integer from -144 to 0 ([Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **confirmed** from that capture). Treat -30 as the floor of what a sender sets and not as the floor of what it may read.
+
+`SET_PARAMETER` carries the rest of the per-session parameters under other content types, which is worth knowing so the volume request is not mistaken for a request of its own. `text/parameters` also carries `progress: start/current/end`, an `image/jpeg` body is the artwork, and `application/x-dmap-tagged` is now-playing information in DAAP form ([Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **confirmed**). Those three are what the `md` TXT key says a receiver accepts.
 
 Two TXT keys decide whether the sender has to attenuate for itself. `sv` is software volume and `sm` is software mute, and each says whether the receiver can attenuate in hardware or whether the sender must scale the samples before they leave ([pyatv documentation](https://pyatv.dev/documentation/protocols/), **confirmed**).
 
@@ -950,13 +1043,13 @@ How per-device volume works across a group is **open**. `SET_PARAMETER` is a per
 
 A sender proposes a range in the stream SETUP with `latencyMin` and `latencyMax`, in frames. The values a working sender uses are 11025 and 88200, which at 44100 Hz are a quarter of a second and two seconds ([pyatv, `pyatv/protocols/raop/protocols/airplayv2.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/raop/protocols/airplayv2.py) and [airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp), **confirmed** for both senders).
 
-On AirPlay 1 the receiver answers RECORD with an `Audio-Latency` header ([openairplay, RECORD](https://openairplay.github.io/airplay-spec/audio/rtsp_requests/record.html), **confirmed**). The captured example value is 2205, which the page labels milliseconds. At 44100 Hz that number is exactly 50 milliseconds expressed in frames, and a working sender reads it as frames ([airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp), **likely**). The unit is **open**, and the safe reading is frames.
+On AirPlay 1 the receiver answers RECORD with an `Audio-Latency` header ([openairplay, RECORD](https://openairplay.github.io/airplay-spec/audio/rtsp_requests/record.html), **confirmed**). **The unit is frames**, and a receiver's own code settles it. shairport-sync answers RECORD with `Audio-Latency: 11025`, and the comment beside that line reads the number as the receiver's absolute minimum latency, to which the sender adds whatever latency it asks for. Its arithmetic is in frames throughout: AirPlay's figure of 77175 plus 11025 is exactly 88200, which is two seconds at 44100 Hz ([shairport-sync, `rtsp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtsp.c), **confirmed**). openairplay labels its captured value of 2205 as milliseconds, which is a mislabel, since read as frames it is 50 milliseconds. On the AirPlay 2 path the same receiver answers `Audio-Latency: 0`.
 
 Neither sender uses the announced value. Both run a fixed latency of 22050 plus the sample rate ([pyatv, `pyatv/protocols/raop/protocols/__init__.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/raop/protocols/__init__.py), **confirmed**).
 
 What a receiver typically wants is documented in round terms. An AirPlay 1 source sets around 2.0 to 2.25 seconds. AirPlay 2 can use much shorter latencies, around half a second ([shairport-sync, README](https://github.com/mikebrady/shairport-sync/blob/master/README.md), **confirmed**).
 
-The field names `audioLatencies` and `outputLatencyMicros` appear in secondary write-ups and in no primary source that could be reached. They are **open**.
+`audioLatencies` and `outputLatencyMicros` are real, and they come from the receiver rather than from the sender. They appear in the reply to the first `GET /info`, where `audioLatencies` is an array of dictionaries and each one carries `inputLatencyMicros`, `outputLatencyMicros`, an integer `type` naming the stream type it applies to, and an optional `audioType` of `default` or `media`. A captured Sonos One reports 400000 microseconds of output latency for every combination it lists ([Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/), **confirmed** from that capture). Neither open sender reads them.
 
 How a sender reconciles different latencies across several receivers in a group is **open**, and nothing in the reachable record addresses it. The mechanism that makes reconciliation unnecessary is worth stating, though, because it is what the anchor is for: the sender tells every receiver the same network time for the same RTP timestamp, and each receiver subtracts its own output latency locally. On that model the sender never needs to know any receiver's latency, and the differences cancel inside each device.
 
@@ -964,20 +1057,19 @@ How a sender reconciles different latencies across several receivers in a group 
 
 These could not be settled from the sources named below. Each carries what would settle it.
 
-1. **Which PTP domain, which multicast address or unicast arrangement, and which profile AirPlay 2 uses.** Nothing in shairport-sync, nqptp, or the openairplay specification states any of the three, and Apple publishes nothing. A packet capture between a Mac and two HomePods playing as a group would settle all three at once.
-2. **Whether the sender becomes PTP grandmaster through a Best Master Clock Algorithm exchange or by convention.** The same capture settles it, by showing whether Announce messages are exchanged and what priority fields they carry. shairport-sync's author states outright that this is unknown.
-3. **Whether the AirPlay 2 NTP path reuses the classic SYNC and timing packet layouts byte for byte.** It works against Apple receivers in two independent senders, which is strong evidence, but no source documents the AirPlay 2 NTP packets themselves. A capture of a session whose SETUP said `NTP` settles it.
-4. **How transient pairing derives its channel keys.** Apple's HomeKit accessory implementation uses the salt `SplitSetupSalt` with the info strings `AccessoryEncrypt-Control` and `ControllerEncrypt-Control`, whilst the AirPlay documentation and a working AirPlay sender both use `Control-Salt` over the SRP session key. Trying `Control-Salt` first against a HomePod and a macOS receiver, and watching whether the first encrypted request is accepted, settles it in one run.
-5. **The correct names of `features` bits 38 and 48.** openairplay and pyatv disagree, and pyatv's own comment admits the published tables are inconsistent. Only Apple can settle the names. A sender can sidestep it by probing behaviour rather than trusting a name.
-6. **Whether `shiv`, `clientID`, `isMedia`, `latencyMin`, and `latencyMax` are real fields of a buffered stream SETUP.** Neither open receiver reads them. Sending them and watching for a rejection costs one request.
-7. **Whether `isMultiSelectAirPlay` means anything.** No receiver implementation reads it. Same test.
-8. **Whether a sender opens one session per receiver or addresses a group through a leader.** `SETPEERS` is a clock peer list and settles nothing about session topology. A capture of a Mac playing to a two-speaker group settles it by counting RTSP connections.
+1. **Which PTP domain number and which PTP profile AirPlay 2 uses.** The transport is settled: the traffic is unicast to each peer, because nqptp receives it without ever joining a multicast group. The domain number is a header field, so one captured packet between a Mac and a HomePod names it, and the profile follows from the intervals and the fields in the same capture.
+2. **Whether the receivers run a Best Master Clock election or simply accept the sender that announces.** Announce messages are exchanged and they carry the full grandmaster identity, both priority fields, the clock quality word and `stepsRemoved`, so the question is no longer whether they exist. A capture of a Mac and two HomePods settles it by showing whether either speaker ever announces a clock of its own.
+3. **Whether an AirPlay 2 session that declares `NTP` uses the classic SYNC and timing packet layouts byte for byte.** The PTP path is settled, and its anchor is the type 215 control packet described under the anchor above. Two independent senders drive Apple receivers with the classic 0xD4 SYNC packet and the audio plays in step, which is strong evidence for the NTP path, but no capture of such a session is published. A capture of one settles it.
+4. **The true names of `features` bits 26, 30, 38 and 48.** Three tables disagree and only Apple can settle them. This no longer blocks a sender, because every table agrees on the numbers and the properties a sender reads are derived over several bits rather than carried by one.
+5. **Whether `clientID` is a field of any SETUP.** It appears in no receiver, no sender, and no capture examined here. Sending it and watching for a rejection costs one request.
+6. **What `isMultiSelectAirPlay` does.** Apple's own sender sends it true and one receiver parses it and never reads it again. Copy Apple until something behaves differently.
+7. **Which `X-Apple-HKP` value the PIN path wants.** A receiver's own list reserves 3 for system pairing and puts HomeKit at 6 and 7, whilst three senders send 3 for the PIN path and are answered. Pairing with a PIN against an Apple TV whilst sending 6 settles it.
+8. **Whether a sender opens one session per receiver or addresses a group through a leader.** A capture of a second speaker joining shows `SETPEERS` going out on the existing receiver's own session, which fits one session each without proving it. Counting RTSP connections in a capture of a Mac playing to two speakers settles it.
 9. **Per-device volume inside a group.** No source describes it. The same capture settles it.
-10. **The size of the retransmit request packet.** openairplay says twelve bytes and pyatv reads eight. Reading the pair at offset 4 and accepting at least eight bytes satisfies both, so this is cheap to leave open.
-11. **The unit of the AirPlay 1 `Audio-Latency` header.** The specification says milliseconds and the captured value reads as frames. Comparing the header against a measured playback delay on one receiver settles it.
-12. **Whether the full set of `X-Apple-HKP` values means anything beyond 3 and 4.** No reachable source enumerates them, and pyatv's own receiver implementation rejects everything else.
 
-One source could not be reached at all. `emanuelecozzi.net/docs/airplay2` is the most frequently cited unofficial AirPlay 2 field reference, and its DNS did not resolve during this work, nor was an archive copy reachable. Several of the open items above are exactly the kind of detail that site is cited for, so retrying it later is worth doing before any packet capture.
+The source that could not be reached during the first pass is reachable after all. `emanuelecozzi.net` still does not resolve, with or without the `www.` prefix, and no mirror or fork of its content was found. The Internet Archive holds every page of `emanuelecozzi.net/docs/airplay2` as it stood in February 2022, and those pages are cited throughout the sections above. They carry what a reverse engineer read out of Apple's own sender, plus captures of an iPhone streaming to a Sonos One, and between them they settled the `da` TXT key, the `features` bit names, the literal `PTP` spelling, the four session SETUP fields the open senders never send, the two forms of `GET /info`, the stream type numbers, the message order, and what goes in a `SETPEERS` array.
+
+What that site does not carry is pairing. Its pairing page is four headings with the word TODO under each, so the most cited unofficial AirPlay 2 reference says nothing about pair-setup, pair-verify, transient pairing, or the channel keys. Those were settled from implementations instead.
 
 ## Sources
 
@@ -1000,16 +1092,19 @@ One source could not be reached at all. `emanuelecozzi.net/docs/airplay2` is the
 
 - [openairplay, Unofficial AirPlay Specification](https://openairplay.github.io/airplay-spec/). Service discovery, the features bits, the status flags, volume control, RTP streams, GET /info, RECORD, and ANNOUNCE. Its SETPEERS, POST /command, POST /feedback, and POST /audioMode pages are empty stubs, which is itself worth knowing.
 - [openairplay, `src/features.md`](https://raw.githubusercontent.com/openairplay/airplay-spec/master/src/features.md) and [`src/audio/rtp_streams.md`](https://raw.githubusercontent.com/openairplay/airplay-spec/master/src/audio/rtp_streams.md). The raw sources carry per-bit notes and packet layouts that the rendered pages drop.
+- [Cozzi, AirPlay 2 Internals](https://web.archive.org/web/20220214214810/https://emanuelecozzi.net/docs/airplay2/), read through the Internet Archive because the site itself no longer resolves. Its [Features](https://web.archive.org/web/20220214214810/https://emanuelecozzi.net/docs/airplay2/features/) page carries the bit names and the conditions Apple's own sender evaluates, its [Service discovery](https://web.archive.org/web/20220214214811/https://emanuelecozzi.net/docs/airplay2/discovery/) page maps every TXT key to the field the sender reads it into, its [RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/) page is a capture of an iPhone streaming to a Sonos One with full request and reply bodies, its [Protocols](https://web.archive.org/web/20220214214828/https://emanuelecozzi.net/docs/airplay2/protocols/) page gives the message order, its [Audio](https://web.archive.org/web/20220214214824/https://emanuelecozzi.net/docs/airplay2/audio/) page enumerates every `audioFormat` bit, and its [RTCP](https://web.archive.org/web/20220214214831/https://emanuelecozzi.net/docs/airplay2/rtcp/) page names the control packet types including the type 215 anchor. Its [pairing](https://web.archive.org/web/20220214214819/https://emanuelecozzi.net/docs/airplay2/pairing/) page is a stub and carries nothing.
 
 ### Receiver implementations
 
 - [shairport-sync](https://github.com/mikebrady/shairport-sync). An AirPlay 2 receiver. `AIRPLAY2.md` for the two stream types and the latencies, `rtsp.c` for the SETUP handling and `SETRATEANCHORTIME` and `FLUSHBUFFERED` and `SETPEERS`, `ap2_buffered_audio_processor.c` for the buffered TCP framing, `rtp.c` for the realtime framing, and `bonjour_strings.c` for what a receiver actually publishes in its TXT records.
-- [nqptp](https://github.com/mikebrady/nqptp). shairport-sync's PTP helper. Its README is the clearest published statement of what the receiver side of AirPlay 2 timing does, and by omission of what the sender must do.
+- [nqptp](https://github.com/mikebrady/nqptp). shairport-sync's PTP helper. Its README is the clearest published statement of what the receiver side of AirPlay 2 timing does, and by omission of what the sender must do. Its `nqptp-message-handlers.c` names the three PTP message types an AirPlay sender actually sends and the Announce fields it fills in, and `nqptp-utilities.c` shows it binding both ports without joining any multicast group.
 - [shairport-sync discussion 1712](https://github.com/mikebrady/shairport-sync/discussions/1712). The maintainer's own account of what is known and unknown about AirPlay 2 PTP. The most honest source in this list.
-- [openairplay, `airplay2-receiver`](https://github.com/openairplay/airplay2-receiver). A Python AirPlay 2 receiver. The `ct` value table, the `audioFormat` bit table, `SETPEERSX`, `FLUSHBUFFERED`, and the connection-level stream fields.
+- [openairplay, `airplay2-receiver`](https://github.com/openairplay/airplay2-receiver). A Python AirPlay 2 receiver, tested against an iPhone X on iOS 13.3 by its own README. The `ct` value table, the `audioFormat` bit table, `SETPEERSX`, and `FLUSHBUFFERED`. Its `ap2/pairing/hap.py` carries the transient channel-key derivation, its `ap2/connections/stream.py` shows which SETUP keys each stream type actually reads, and its `ap2-receiver.py` enumerates the `X-Apple-HKP` values.
 - [UxPlay wiki, AirPlay2](https://github.com/FDH2/UxPlay/wiki/AirPlay2). Real captures, including a SETUP whose `timingProtocol` reads `NTP`, the timing packet exchange, and volume requests.
 
 ### Sender implementations
 
+- [pair_ap](https://github.com/ejurgensen/pair_ap). The pairing library owntone's sender uses. It settles the transient channel keys, because it derives them with one key table for both the normal and the transient client, and its header states that the resulting secret is 32 bytes after a normal pairing and 64 after a transient one.
+- [owntone](https://github.com/owntone/owntone-server), `src/outputs/airplay.c`. An AirPlay 2 sender built on pair_ap. It passes the full 64-byte transient secret to the control channel whilst clamping the audio key to 32 bytes, it chooses `X-Apple-HKP` 3 or 4 on the same split as everyone else, and it records an Apple TV 4 answering a transient pair-setup with 470.
 - [pyatv](https://github.com/postlund/pyatv) and its [protocol documentation](https://pyatv.dev/documentation/protocols/). The most complete open sender for AirPlay 2 realtime audio, with an unusually frank record of what it does not implement. Its TXT key table, its HKDF strings, its TLV8 tags, its volume mapping, and its SETUP bodies were all read directly.
 - [airplay2-sender-cpp](https://github.com/akustikrausch/airplay2-sender-cpp), which sits in this repository at `third_party/airplay2-sender-cpp` under Apache-2.0. A working AirPlay 2 realtime sender, verified by its author against an Apple TV 4K, a HomePod, and a macOS receiver. It is the only source in this list that reports the request order, the event-channel keep-alive, the minimal 200 OK, and the audio key clamp as measured behaviour from the sending side. Its RAOP transport is in part a C++ port of pyatv, and its crypto core was reconstructed from the documentation sources above. Read here as one source among others; none of its code is reproduced in this document.
