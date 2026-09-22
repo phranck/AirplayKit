@@ -69,4 +69,12 @@ Opening and closing a session are the two calls that wait, so neither belongs on
 
 ### The protocol
 
-- <doc:AirPlay-2-Measured>
+- <doc:AirPlay-2-Protocol>
+- <doc:Protocol-Finding-Receivers>
+- <doc:Protocol-Pairing>
+- <doc:Protocol-Session>
+- <doc:Protocol-Timing>
+- <doc:Protocol-Audio>
+- <doc:Protocol-Control>
+- <doc:Protocol-Open-Questions>
+- <doc:Protocol-Sources>
