@@ -489,6 +489,18 @@ The audio service carries the name its owner gave, so a merge that has seen both
 
 The cost was invisible until the second service doubled the number of resolves. A blocking call on the thread that also has to notice a stop is the defect; the stale record only made it show.
 
+## 2026-09-22 18:30, what a refused browse actually reports
+
+**What was done.** Built the example into a bundle, signed it ad hoc with the App Sandbox entitlement and nothing else, and ran it. Then signed the same bundle again with the two network entitlements and ran it again. The bundle was deleted afterwards.
+
+**F-091 A sandboxed application denied the network gets the same error as a machine with no responder (confirmed).** Without `com.apple.security.network.client`, `DNSServiceBrowse` returned `-65563`, which the SDK header calls `kDNSServiceErr_ServiceNotRunning`. With the entitlement, the same bundle browsed and found receivers.
+
+So a refusal does not report itself as a refusal. The one code covers both a machine that has no responder and a process that is not allowed to reach the one it has, and nothing in the answer separates them. A library can say which of the two is likely from the platform it is on, since macOS always runs a responder and Linux often does not, and it cannot do better than that.
+
+**F-092 The codes that do say denied exist and were not produced (open).** `kDNSServiceErr_PolicyDenied` is `-65570` and `kDNSServiceErr_NotPermitted` is `-65571`, both declared in the SDK header, alongside `kDNSServiceErr_NoAuth` and `kDNSServiceErr_Refused`. None appeared in either run. Whether a local network denial under the privacy settings produces one of them is not settled here, because the bundle was never denied at that level: it inherited the grant of the terminal that started it.
+
+What settles it: a signed application denied local network access in the privacy settings, browsing and printing the raw code. The library maps all four to a refusal already, so the answer changes what it says and not what it does.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
