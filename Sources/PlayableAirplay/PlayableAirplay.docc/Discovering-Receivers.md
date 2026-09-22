@@ -84,6 +84,25 @@ In practice the distinction rarely bites. On the network this was written agains
 
 ``AirPlayReceiver/id`` is taken from the part of the service instance name that identifies the hardware. It stays the same across sightings, which is what lets a selection survive a receiver going away and coming back.
 
+### Which speakers are already in use
+
+``AirPlayReceiver/hasSender`` says that somebody holds a session with a receiver, and ``AirPlayReceiver/isPlaying`` says that audio is reaching it right now. The two are separate because a sender that has stopped keeps its session, so a receiver can be held by somebody and silent.
+
+Both come out of the same record the name comes out of, and a receiver rewrites that record as its state changes. So a list learns that a speaker has become busy through an ordinary browse update, without asking anything and without polling.
+
+```swift
+let discovery = AirPlayDiscovery { receivers in
+    for receiver in receivers {
+        let state = receiver.isPlaying ? "playing" : (receiver.hasSender ? "in use" : "free")
+        print("\(receiver.name) is \(state)")
+    }
+}
+```
+
+Only Apple's receivers report this. Everything else publishes a value that never moves, so both answers are false for them whatever they are doing. Read a false as a receiver not saying it is busy rather than as one saying it is free, and do not refuse to send to a receiver on the strength of it: taking a speaker from somebody else is allowed, and this is what lets you warn them first.
+
+The bits behind it were measured rather than taken from a table, because the published tables disagree and none of them was checked against a device. <doc:Protocol-Finding-Receivers> carries the four readings they come from.
+
 ### What a receiver says it is
 
 ``AirPlayReceiver/model`` carries whatever the receiver announced about itself, and the useful thing about it is that Apple's receivers announce the identifier their hardware is known by everywhere else. Measured on one network: `AppleTV11,1` for an Apple TV, `AudioAccessory5,1` for a HomePod mini, and `Mac16,11` and `Macmini9,1` for two Macs.

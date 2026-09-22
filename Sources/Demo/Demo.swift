@@ -29,7 +29,8 @@ func listReceivers(forSeconds seconds: Int) -> Int32 {
             let generation = receiver.supportsAirPlay2 ? "AirPlay 2" : "AirPlay 1"
             let name = receiver.name.padding(toLength: 24, withPad: " ", startingAt: 0)
             let model = receiver.model.isEmpty ? "unknown model" : receiver.model
-            print("  \(name) \(receiver.host):\(receiver.port)  \(generation)  \(model)")
+            let state = receiver.isPlaying ? "playing" : (receiver.hasSender ? "in use" : "free")
+            print("  \(name) \(receiver.host):\(receiver.port)  \(generation)  \(model)  \(state)")
         }
     }
 

@@ -17,7 +17,7 @@ Apple's own route picker only moves the whole system's output, and the private e
 
 ## What it does
 
-Discovery finds every `_raop._tcp` receiver on the network, whether or not anything is currently connected to it, says which of them speak AirPlay 2, and reports what each one says it is. A session pairs with one of them, takes 16 bit stereo frames at 44100 Hz, and carries the volume.
+Discovery finds every `_raop._tcp` receiver on the network, whether or not anything is currently connected to it, says which of them speak AirPlay 2, reports what each one says it is, and says which of them are already in use. A session pairs with one of them, takes 16 bit stereo frames at 44100 Hz, and carries the volume.
 
 One session reaches one receiver. Several sessions at once would each start their own RTP timeline against their own clock, so the receivers would drift apart, and holding them together needs a single timeline shared between them. That is the multi-room work the sender underneath has not done yet, so this library does not offer it and does not pretend to.
 

@@ -8,6 +8,7 @@
 #include "PlayableAirplay.h"
 
 #include "include/receiver_name.h"
+#include "include/receiver_state.h"
 
 #include <arpa/inet.h>
 #include <dns_sd.h>
@@ -106,6 +107,12 @@ static void DNSSD_API onResolved(DNSServiceRef service, DNSServiceFlags flags, u
         memcpy(receiver.model, model, taken);
         receiver.model[taken] = '\0';
     }
+
+    // What it is doing, out of the `sf` field. The reading of it sits in
+    // receiver_state.c, which is where it can be tested without a network.
+    uint8_t stateLength = 0;
+    const void *state = TXTRecordGetValuePtr(txtLength, txt, "sf", &stateLength);
+    pa_read_receiver_state(state, stateLength, &receiver.hasSender, &receiver.isPlaying);
 
     strncpy(instance, fullName, sizeof(instance) - 1);
     instance[sizeof(instance) - 1] = '\0';

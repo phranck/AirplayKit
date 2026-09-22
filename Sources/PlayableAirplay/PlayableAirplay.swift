@@ -65,6 +65,27 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     /// speaks the older protocol, which used an RSA challenge instead, and
     /// opening a session with it fails rather than falling back.
     public let supportsAirPlay2: Bool
+
+    /// Whether a sender currently holds a session with it.
+    ///
+    /// A receiver publishes its state in the same record it publishes its name
+    /// in, and changes it as the state changes, so this arrives with an ordinary
+    /// Bonjour update and costs no request at all. It is what lets a list say
+    /// which speakers are already in use rather than offering all of them as
+    /// though every one were free.
+    ///
+    /// Only Apple's receivers say anything. Everybody else publishes a value
+    /// that never moves, so this is false for them whatever they are doing. Read
+    /// it as a receiver saying it is busy, never as one saying it is free.
+    public let hasSender: Bool
+
+    /// Whether audio is reaching it at this moment.
+    ///
+    /// Separate from ``hasSender``, because a sender that has stopped keeps its
+    /// session. A receiver can therefore be held by somebody and silent.
+    ///
+    /// False for a receiver that does not report its state, exactly as above.
+    public let isPlaying: Bool
 }
 
 // MARK: - Failures
@@ -360,7 +381,9 @@ private extension AirPlayReceiver {
                   host: Self.string(from: receiver.host, capacity: Int(PA_MAX_HOST)),
                   port: receiver.port,
                   model: Self.string(from: receiver.model, capacity: Int(PA_MAX_MODEL)),
-                  supportsAirPlay2: receiver.supportsAirPlay2)
+                  supportsAirPlay2: receiver.supportsAirPlay2,
+                  hasSender: receiver.hasSender,
+                  isPlaying: receiver.isPlaying)
     }
 
     /// The fixed C buffers arrive in Swift as tuples of CChar, and this is where they stop being that.

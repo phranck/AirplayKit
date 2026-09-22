@@ -39,6 +39,16 @@ extern "C" {
 #define PA_SAMPLE_RATE 44100
 #define PA_CHANNELS        2
 
+/**
+ The bits of a receiver's status field that move with the state of a session.
+
+ Named for what they were measured to indicate rather than for what the
+ published tables call them, because those tables disagree and none of them was
+ checked against a device. The two connection bits are only ever seen together.
+ */
+#define PA_STATE_SENDER_CONNECTED 0x20800u
+#define PA_STATE_PLAYING          0x100000u
+
 /** What went wrong, where anything did. */
 typedef enum PAResult {
     PAResultOK = 0,
@@ -76,6 +86,29 @@ typedef struct PAReceiver {
     uint16_t port;
     /** Whether it announced the AirPlay 2 pairing key. A receiver without one needs the older path. */
     bool supportsAirPlay2;
+    /**
+     Whether a sender currently holds a session with it.
+
+     Read from the status field the receiver advertises, which changes as its
+     state changes, so this arrives with an ordinary Bonjour update and costs no
+     request. Measured on a HomePod mini: two bits appear together when a sender
+     connects and clear again when it disconnects.
+
+     False for a receiver that does not report its state, which is every receiver
+     that is not Apple's. Treat it as a receiver saying it is busy rather than as
+     a receiver saying it is free.
+     */
+    bool hasSender;
+    /**
+     Whether audio is flowing to it at this moment.
+
+     A third bit of that same field, which appears whilst something is playing
+     and clears when it stops whilst the sender stays connected. So a receiver
+     can have a sender and not be playing.
+
+     False for a receiver that does not report its state, exactly as above.
+     */
+    bool isPlaying;
 } PAReceiver;
 
 /** Finds receivers on the network and reports them as they come and go. */

@@ -13,8 +13,9 @@ module CPlayableAirplay {
     header "PlayableAirplay.h"
     export *
 
-    // Internal to this package. It is named here so the tests can reach the one
-    // piece that can be checked without a receiver on the network, and it is
+    // Internal to this package. They are named here so the tests can reach the
+    // pieces that can be checked without a receiver on the network, and they are
     // not part of what a consumer is offered.
     header "receiver_name.h"
+    header "receiver_state.h"
 }
