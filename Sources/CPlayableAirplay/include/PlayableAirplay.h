@@ -181,6 +181,18 @@ typedef struct PADiscovery PADiscovery;
 PADiscoveryProblem pa_discovery_problem(PADiscovery *discovery, int32_t *code);
 
 /**
+ What one of the responder's error numbers means.
+
+ Exposed because it is the only part of reporting a problem that can be checked
+ without a network, a responder, or a sandbox to be refused by. Discovery reads
+ every error through it.
+
+ @param error  The number the responder returned.
+ @return What to tell somebody holding an empty list.
+ */
+PADiscoveryProblem pa_discovery_problem_for_error(int32_t error);
+
+/**
  Called whenever the set of receivers changes.
 
  The array belongs to the discovery and is valid only for the duration of the

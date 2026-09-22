@@ -120,7 +120,7 @@ struct PADiscovery {
  None of them was produced in either run, so that mapping comes from the SDK
  header rather than from an observation.
  */
-static PADiscoveryProblem problemForError(DNSServiceErrorType error) {
+PADiscoveryProblem pa_discovery_problem_for_error(int32_t error) {
     switch (error) {
         case kDNSServiceErr_NoError:
             return PADiscoveryProblemNone;
@@ -352,7 +352,7 @@ static void DNSSD_API onBrowsed(DNSServiceRef service, DNSServiceFlags flags, ui
         // network access arrives, so the reason is kept and reported rather
         // than dropped, and the caller is told so it can read it.
         pthread_mutex_lock(&discovery->mutex);
-        discovery->problem = problemForError(error);
+        discovery->problem = pa_discovery_problem_for_error(error);
         discovery->problemCode = error;
         pthread_mutex_unlock(&discovery->mutex);
 
@@ -498,7 +498,7 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
     // its own. Nothing at all is a machine that cannot browse, and the reason
     // the responder gave is what tells a refusal from an absent responder.
     if (started == 0) {
-        if (problem) *problem = problemForError(lastError);
+        if (problem) *problem = pa_discovery_problem_for_error(lastError);
         if (code) *code = lastError;
 
         pthread_mutex_destroy(&discovery->mutex);

@@ -5,6 +5,7 @@
 //  Copyright © 2026 cocoa:naut. All rights reserved.
 //
 
+import CPlayableAirplay
 import XCTest
 
 @testable import PlayableAirplay
@@ -50,6 +51,30 @@ final class SessionTests: XCTestCase {
         } else {
             XCTAssertNotNil(discovery.problem)
         }
+    }
+
+    // What the responder's numbers are read as. The numbers themselves are the
+    // ones Apple's `dns_sd.h` declares, and -65563 is the one measured coming
+    // out of a sandboxed application that was denied the network.
+
+    func testTheCodeThatMeansDeniedAndTheCodeThatMeansAbsentReadTheSame() {
+        XCTAssertEqual(pa_discovery_problem_for_error(-65563), PADiscoveryProblemNoResponder)
+    }
+
+    func testTheCodesThatSayDeniedAreReadAsARefusal() {
+        for code in [Int32(-65570), -65571, -65555, -65553] {
+            XCTAssertEqual(pa_discovery_problem_for_error(code), PADiscoveryProblemRefused,
+                           "\(code) is not read as a refusal")
+        }
+    }
+
+    func testAnythingElseIsAFailureThatCarriesItsNumber() {
+        XCTAssertEqual(pa_discovery_problem_for_error(-65537), PADiscoveryProblemFailed)
+        XCTAssertEqual(pa_discovery_problem_for_error(-1), PADiscoveryProblemFailed)
+    }
+
+    func testNoErrorIsNoProblem() {
+        XCTAssertEqual(pa_discovery_problem_for_error(0), PADiscoveryProblemNone)
     }
 
     func testEveryReasonCarriesTheRespondersOwnNumber() {
