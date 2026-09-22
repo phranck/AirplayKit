@@ -21,7 +21,7 @@ Take the port from the SRV record rather than assuming it. Port 7000 for `_airpl
 
 A sender ignores TXT keys it does not know, and assumes no key is present. The record is extensible and Apple has added keys across releases (reported confirmed, [openairplay, Service Discovery](https://openairplay.github.io/airplay-spec/service_discovery.html)).
 
-## The `_raop._tcp` TXT keys
+## The _raop._tcp TXT keys
 
 A TXT record is a set of `key=value` pairs published alongside the service. A representative record from an Apple TV 2 reads as follows (reported confirmed, [openairplay, Service Discovery](https://openairplay.github.io/airplay-spec/service_discovery.html)).
 
@@ -57,7 +57,7 @@ sr=44100 ss=16 tp=UDP vn=65537 vs=130.14 am=AppleTV2,1 sf=0x4
 
 The `cn` and `et` values, and the three keys `ft`, `ov` and `vv`, come from two tables read side by side ([pyatv, protocol documentation](https://pyatv.dev/documentation/protocols/) and [Cozzi, Service discovery](https://web.archive.org/web/20220214214811/https://emanuelecozzi.net/docs/airplay2/discovery/)). `sv` and `sm` come from pyatv's documentation, and the reading that no source gives `sv` a meaning is what the openairplay table says about its own coverage rather than about the key.
 
-### What `am` is worth
+### What the am field is worth
 
 `am` is the model, and Apple's receivers put into it the identifier their hardware is known by everywhere else, such as `AudioAccessory5,1` for a HomePod mini or `AppleTV11,1` for an Apple TV 4K (measured 2026-09-22, browsed, F-001). macOS files a picture of every model it knows under exactly that identifier, so the string out of the service record resolves to a picture without asking the device anything (measured 2026-09-22, queried, F-002).
 
@@ -78,11 +78,11 @@ A Sonos will say what it really is if asked over its own UPnP device description
 
 Only the coordinator of a bonded set advertises `_raop._tcp` at all. Five of those eight speakers publish the service and the other three are reachable only through the zone topology that any one of them will answer for the whole network (measured 2026-09-22, queried, F-055).
 
-### What `pk` is worth
+### What the pk field is worth
 
 `pk` is the pairing key. Every one of the nine receivers on the measured network advertises one (measured 2026-09-22, browsed, F-001). Its presence is what says a receiver speaks AirPlay 2, and a receiver without one runs the older RSA challenge instead (reported confirmed, [openairplay, Unofficial AirPlay Specification](https://openairplay.github.io/airplay-spec/)). No receiver without one was seen, so that half is not measured here.
 
-## The `_airplay._tcp` TXT keys
+## The _airplay._tcp TXT keys
 
 | Key | Meaning | Mark |
 |---|---|---|
@@ -101,7 +101,7 @@ Only the coordinator of a bonded set advertises `_raop._tcp` at all. Five of tho
 
 Source for the table: [openairplay, Service Discovery](https://openairplay.github.io/airplay-spec/service_discovery.html), with the grouping keys corroborated by [shairport-sync, `bonjour_strings.c`](https://github.com/mikebrady/shairport-sync/blob/master/bonjour_strings.c) for what a receiver publishes and by [Cozzi, Service discovery](https://web.archive.org/web/20220214214811/https://emanuelecozzi.net/docs/airplay2/discovery/) for the field Apple's sender reads each one into.
 
-## The `features` bitfield
+## The features bitfield
 
 `features` is a 64-bit bitmask written as two 32-bit hexadecimal values separated by a comma. The value before the comma is the low word, holding bits 0 to 31. The value after it is the high word, holding bits 32 to 63. Both the comma and the high word are optional, because the field was 32 bits originally and was widened later (reported confirmed, [openairplay, Service Discovery](https://openairplay.github.io/airplay-spec/service_discovery.html)).
 
@@ -156,7 +156,7 @@ The same table makes volume support the absence of bit 32 rather than its presen
 
 A `model` beginning with `AppleTV` is an Apple TV and one beginning with `AudioAccessory` is a HomePod. A receiver is a third-party speaker when bit 26 or bit 51 is set, and a third-party television when it sets bit 0 or bit 49 as well (reported likely, [Cozzi, Features](https://web.archive.org/web/20220214214810/https://emanuelecozzi.net/docs/airplay2/features/)). Bit 26 is where the two tables part company hardest, since openairplay calls it `HasUnifiedAdvertiserInfo` and puts `RAOP` at bit 30, whilst the other calls bit 26 MFi authentication and puts `HasUnifiedAdvertiserInfo` at bit 30. The condition is the same pair of bits either way.
 
-## The `sf` and `flags` status bits
+## The sf and flags status bits
 
 `sf` on `_raop._tcp`, and `flags` on `_airplay._tcp`, hold a status value. Each bit is a state rather than a capability (reported confirmed, [openairplay, Status Flags](https://openairplay.github.io/airplay-spec/status_flags.html)).
 

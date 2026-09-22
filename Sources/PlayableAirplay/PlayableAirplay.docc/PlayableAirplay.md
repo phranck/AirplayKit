@@ -1,4 +1,4 @@
-# ``PlayableAirplay``
+# PlayableAirplay
 
 Send audio to an AirPlay 2 receiver from macOS and from Linux.
 

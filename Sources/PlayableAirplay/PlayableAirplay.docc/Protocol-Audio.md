@@ -80,7 +80,7 @@ The element tag numbers come from the same project (reported confirmed, [Apple, 
 
 Two details are worth stating because they are easy to get wrong. The two channels are interleaved one sample at a time rather than written as two blocks. And `mixBits` and `mixRes` are not present at all in the uncompressed case, because Apple's decoder sets them to zero rather than reading them (reported confirmed, [Apple, `macosforge/alac`, `ALACDecoder.cpp`](https://github.com/macosforge/alac/blob/master/codec/ALACDecoder.cpp)).
 
-### The ALAC configuration, and the `fmtp` parameter list
+### The ALAC configuration, and the fmtp parameter list
 
 The eleven numbers in an AirPlay `a=fmtp:96` line are the fields of Apple's `ALACSpecificConfig`, in declaration order (reported confirmed for the struct, [Apple, `macosforge/alac`, `ALACAudioTypes.h`](https://github.com/macosforge/alac/blob/master/codec/ALACAudioTypes.h), and reported confirmed for the example line, [openairplay, ANNOUNCE](https://openairplay.github.io/airplay-spec/audio/rtsp_requests/announce.html)).
 
@@ -104,7 +104,7 @@ a=fmtp:96 352 0 16 40 10 14 2 255 0 0 44100
 
 AirPlay 2 sends no SDP, so this line matters only on the AirPlay 1 path and as the definition of what `audioFormat` and `spf` describe.
 
-### The `audioFormat` bitfield
+### The audioFormat bitfield
 
 `audioFormat` is a bitfield with one bit per concrete format rather than a small enumeration. Three tables give the same mapping, so it is settled (reported confirmed, [openairplay, `airplay2-receiver`, `ap2-receiver.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2-receiver.py) and [`ap2/connections/audio.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2/connections/audio.py), and [Cozzi, Audio](https://web.archive.org/web/20220214214824/https://emanuelecozzi.net/docs/airplay2/audio/)).
 

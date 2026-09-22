@@ -183,7 +183,7 @@ What sits at the connection level is a separate `streamConnections` key inside t
 
 `audioMode` is both a key and a request. Apple's own sender sends `audioMode: default` inside the realtime stream dictionary (reported confirmed from a capture, [Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/)), and a separate `POST /audioMode` request exists beside it, which both receivers accept and neither acts on (reported confirmed as a statement about those implementations, [shairport-sync, `rtsp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtsp.c) and [openairplay, `airplay2-receiver`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2-receiver.py)).
 
-## The audio key, `shk`
+## The audio key, shk
 
 `shk` is the ChaCha20-Poly1305 key for the audio payload, sent in the stream SETUP body as 32 bytes of data. It is not derived with HKDF.
 
@@ -203,7 +203,7 @@ The clamp to 32 bytes is what makes the two pairing paths behave the same. After
 
 ## Groups
 
-### `SETPEERS` is a clock peer list, not a session
+### SETPEERS is a clock peer list, not a session
 
 `SETPEERS` carries `Content-Type: /peer-list-changed` and a binary property list holding a flat array of IP address strings. That array is the list of PTP timing peers (reported confirmed by all three, [pyatv, protocol documentation](https://pyatv.dev/documentation/protocols/), [openairplay, `airplay2-receiver`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2-receiver.py) and [shairport-sync, `rtsp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtsp.c)).
 
@@ -237,7 +237,7 @@ The new member is listed first and the sender last. Every member contributes eve
 
 A speaker joining an existing session changes nothing else. No second SETUP, no further RECORD, no new anchor and no interruption. One `SETPEERS` arrives with the enlarged list and the session carries on, and the same holds in reverse when it leaves (measured 2026-09-22, decrypted, F-034).
 
-### `SETPEERSX`
+### SETPEERSX
 
 `SETPEERSX` is the extended form. It carries `Content-Type: /peer-list-changed-x` and requires `features` bit 52. Its body is an array of dictionaries rather than of strings, and each dictionary carries these keys (reported confirmed, [openairplay, `airplay2-receiver`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2-receiver.py)).
 

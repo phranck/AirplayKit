@@ -28,43 +28,43 @@ The same gap, asked as a design question. Whether the sender is a plain slave of
 
 What settles it: the same off-machine recording.
 
-### 4. Whether an `NTP` session uses the classic packet layouts byte for byte
+### 4. Whether an NTP session uses the classic packet layouts byte for byte
 
 Two independent senders drive Apple receivers with the classic 0xD4 SYNC packet and the audio plays in step, which is strong evidence. No capture of such a session is published, and the PTP path is the one that was measured.
 
 What settles it: a capture of a session whose session SETUP carries `timingProtocol: NTP`.
 
-### 5. What `X-Apple-HKP: 8` means
+### 5. What X-Apple-HKP: 8 means
 
 Apple's own sender sends 8 on every pair-verify request (measured 2026-09-22, captured, F-021). The published record names only 3 and 4 as values a sender sends, and one receiver's own list of the constant stops at 7.
 
 What settles it: a receiver that logs the value and accepts 3, 4 and 8 in turn, showing whether any of them changes what it does.
 
-### 6. Which `X-Apple-HKP` value the PIN path wants
+### 6. Which X-Apple-HKP value the PIN path wants
 
 A receiver's own list reserves 3 for system pairing and puts HomeKit at 6 and 7, whilst three senders send 3 for the PIN path and are answered.
 
 What settles it: pairing with a PIN against an Apple TV whilst sending 6.
 
-### 7. What `networkTimeFlags` is for
+### 7. What networkTimeFlags is for
 
 It appears in every measured anchor and it was 0 every time (measured 2026-09-22, decrypted, F-035). No published source names the field at all.
 
 What settles it: a value other than 0 turning up, which most likely needs a receiver logging anchors across a wider range of sender behaviour than pause, resume, seek and track change.
 
-### 8. Whether `clientID` is a field of any SETUP
+### 8. Whether clientID is a field of any SETUP
 
 It appears in no receiver, no sender and no capture examined here.
 
 What settles it: sending it and watching for a rejection, which costs one request.
 
-### 9. What `isMultiSelectAirPlay` does
+### 9. What isMultiSelectAirPlay does
 
 Apple's own sender sends it true and one receiver parses it and never reads it again.
 
 What settles it: sending it false whilst addressing two receivers and seeing whether either refuses. Until then, copy Apple.
 
-### 10. The true names of `features` bits 26, 30, 38 and 48
+### 10. The true names of features bits 26, 30, 38 and 48
 
 Three tables disagree and only Apple can settle them. This blocks nothing, because every table agrees on the numbers, and the properties a sender reads are derived over several bits rather than carried by one. <doc:Protocol-Finding-Receivers> gives those derivations.
 

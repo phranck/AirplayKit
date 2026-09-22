@@ -69,7 +69,7 @@ The Method type carries one of these (reported confirmed, [pyatv, `pyatv/auth/ha
 | 0x04 | RemovePairing |
 | 0x05 | ListPairing |
 
-## The `X-Apple-HKP` header
+## The X-Apple-HKP header
 
 Every pairing request carries an `X-Apple-HKP` header saying which pairing mode the sender wants. One receiver enumerates the whole set in its own source (reported confirmed as a statement about that implementation, [openairplay, `airplay2-receiver`, `ap2-receiver.py`](https://github.com/openairplay/airplay2-receiver/blob/master/ap2-receiver.py)).
 
