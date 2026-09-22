@@ -1,8 +1,133 @@
 diff --git a/ap2-receiver.py b/ap2-receiver.py
-index e7e6c4d..5ae0d3e 100644
+index e7e6c4d..a5c8213 100644
 --- a/ap2-receiver.py
 +++ b/ap2-receiver.py
-@@ -750,7 +750,7 @@ class AP2Handler(http.server.BaseHTTPRequestHandler):
+@@ -181,19 +181,25 @@ def setup_global_structs(args, isDebug=False):
+         'nameIsFactoryDefault': False,
+         'pi': PI.decode(),  # UUID generated casually..
+         # 'psi': PI.decode(),  # ?
++        # The long term public key belongs here as raw bytes, the way a shipping
++        # receiver answers. A sender reads it before pair-verify, and the hex
++        # spelling in the service record is a different encoding of the same key.
++        'pk': LTPK_OBJ.get_pub_bytes(),
+         'protocolVersion': '1.1',
+         'sdk': 'AirPlay;2.0.2',
+         'sourceVersion': SERVER_VERSION,
+         'statusFlags': get_hex_bitmask(STATUS_FLAGS),
+-        # 'supportedFormats': {
+-        #     'lowLatencyAudioStream': 0,
+-        #     # 'screenStream': 21235712,
+-        #     'audioStream': 21235712,
+-        #     'bufferStream': 14680064,
+-        # },
++        # What a sender may send. A receiver that names none offers a sender
++        # nothing to choose, which is where a macOS sender stops.
++        'supportedFormats': {
++            'lowLatencyAudioStream': 0,
++            # 'screenStream': 21235712,
++            'audioStream': 21235712,
++            'bufferStream': 14680064,
++        },
+         # 'statusFlags': 0x404 # Sonos One
+-        # 'volumeControlType': 4,  # 1-4 all seem to behave the same.
+-        # 'vv': 2,
++        'volumeControlType': 4,  # 1-4 all seem to behave the same.
++        'vv': 1,
+     }
+ 
+     if DISABLE_VM:
+@@ -299,6 +305,51 @@ def setup_global_structs(args, isDebug=False):
+     }
+ 
+ 
++# A RAOP record names the same facts under shorter keys. This receiver keeps one
++# set of properties, so the RAOP view is derived from it rather than kept beside
++# it, and only from keys that are actually set: a made up encryption or metadata
++# capability would have a sender ask for something this receiver cannot do.
++RAOP_KEYS_FROM_AIRPLAY = {
++    "ft": "features",
++    "sf": "flags",
++    "am": "model",
++    "vs": "srcvers",
++    "cn": "cn",
++    "pk": "pk",
++    "ch": "ch",
++}
++
++# Keys that belong to the AirPlay record alone, so the RAOP view drops them.
++AIRPLAY_ONLY_KEYS = ("ch", "cn", "sf")
++
++
++def encode_txt(props):
++    """Pack properties the way DNS-SD carries them, each entry counted."""
++    blob = b""
++    for key, value in props.items():
++        entry = f"{key}={value}".encode()
++        blob += bytes([len(entry)]) + entry
++    return blob
++
++
++def txt_records():
++    """The two service records this receiver stands for, as a sender reads them.
++
++    A macOS sender asks `/info?txtAirPlay&txtRAOP` before it pairs, and it goes
++    no further when the answer carries neither. Returns the AirPlay record and
++    the RAOP one, both packed.
++    """
++    airplay = {key: value for key, value in mdns_props.items()
++               if key not in AIRPLAY_ONLY_KEYS}
++
++    raop = {short: mdns_props[long] for short, long in RAOP_KEYS_FROM_AIRPLAY.items()
++            if long in mdns_props}
++    raop["tp"] = "UDP"
++    raop["vn"] = "65537"
++
++    return encode_txt(airplay), encode_txt(raop)
++
++
+ class AP2Handler(http.server.BaseHTTPRequestHandler):
+     aeskeyobj = None
+     pp = pprint.PrettyPrinter()
+@@ -352,6 +403,10 @@ class AP2Handler(http.server.BaseHTTPRequestHandler):
+             path = self.path.split('?')[0]
+             paramStr = self.path.split('?')[1]
+ 
++        # Kept because `/info` answers differently depending on what is asked
++        # for, and the handler cannot see the request line.
++        self.query = paramStr
++
+         self.logger.debug(f'{self.command}: {path}')
+         self.logger.debug(f'!Dropped parameters: {paramStr}') if paramStr else self.logger.debug('')
+         self.logger.debug(self.headers)
+@@ -368,13 +423,26 @@ class AP2Handler(http.server.BaseHTTPRequestHandler):
+             self.hap = None
+ 
+     def parse_request(self):
++        # A sender asks `/info` over plain HTTP before any RTSP session exists,
++        # and it wants an HTTP answer. Answering that one in RTSP is a protocol
++        # a client is entitled to refuse, so the reply speaks whichever was
++        # asked in rather than RTSP always.
++        asked_in_rtsp = b"RTSP/1.0" in self.raw_requestline
+         self.raw_requestline = self.raw_requestline.replace(b"RTSP/1.0", b"HTTP/1.1")
+ 
+         r = http.server.BaseHTTPRequestHandler.parse_request(self)
+-        self.protocol_version = "RTSP/1.0"
++        self.protocol_version = "RTSP/1.0" if asked_in_rtsp else "HTTP/1.1"
+         self.close_connection = 0
+         return r
+ 
++    def send_header(self, keyword, value):
++        # Several handlers echo `CSeq` straight back, and an HTTP request does
++        # not carry one, so the value is None there. A header reading `None` is
++        # worse than an absent header.
++        if value is None:
++            return
++        http.server.BaseHTTPRequestHandler.send_header(self, keyword, value)
++
+     def process_info(self, device_name):
+         self.logger.info('Process info called')
+         device_info["name"] = "TODO"
+@@ -750,7 +818,7 @@ class AP2Handler(http.server.BaseHTTPRequestHandler):
                              for s in self.server.streams:
                                  if s.isAudio() and s.isInitialized():
                                      s.getAudioConnection().send("pause")
@@ -11,3 +136,22 @@ index e7e6c4d..5ae0d3e 100644
                          self.logger.error(f'SETRATEANCHORTIME error: {repr(e)}')
  
                      self.logger.info(self.pp.pformat(plist))
+@@ -1169,7 +1237,17 @@ class AP2Handler(http.server.BaseHTTPRequestHandler):
+                 self.logger.error(f"Content-Type: {self.headers['Content-Type']} | Not implemented")
+                 self.send_error(404)
+         else:
+-            res = writePlistToString(device_info)
++            answer = dict(device_info)
++            query = getattr(self, 'query', '')
++            if 'txtAirPlay' in query or 'txtRAOP' in query:
++                airplay, raop = txt_records()
++                if 'txtAirPlay' in query:
++                    answer['txtAirPlay'] = airplay
++                if 'txtRAOP' in query:
++                    answer['txtRAOP'] = raop
++                self.logger.info(f'Sending our service records: {query}')
++
++            res = writePlistToString(answer)
+             self.send_response(200)
+             self.send_header("Content-Length", len(res))
+             self.send_header("Content-Type", HTTP_CT_BPLIST)

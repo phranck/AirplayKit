@@ -9,6 +9,11 @@ step, and everything until the next gap belongs to that one.
 Reads standard input and writes standard output, a line at a time and without
 buffering, so the time on a line is when it happened rather than when the buffer
 happened to flush.
+
+`readline` rather than iterating over the stream, because the iterator reads
+ahead by a block and holds every line until that block is full. Against a
+receiver that writes a dozen lines and then waits for somebody to press a
+button, that is the whole log sitting in a buffer with nothing to read.
 """
 
 import sys
@@ -18,7 +23,11 @@ import time
 def main() -> None:
     previous = None
 
-    for line in sys.stdin:
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            return
+
         now = time.time()
         gap = 0.0 if previous is None else now - previous
         previous = now

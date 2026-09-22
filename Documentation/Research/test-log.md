@@ -372,6 +372,98 @@ So the anchor names the clock its times are expressed against, and that clock be
 
 So there is no group command. A device's own volume control moves every member by sending each of them its own `SET_PARAMETER` on its own session, and a per device change is addressed to that device and reaches nobody else. This was narrated at the time and not written down, and the reference cited it before it existed here, which is the reason it is numbered now rather than left as prose.
 
+## 2026-09-22 12:45, a receiver we control on a second machine
+
+**What was done.** Set the same `openairplay/airplay2-receiver` up on the second Mac, a Mac mini M1 running macOS 27.0 build 26A428, reached over SSH. Started it as `ProbeTwo` on `en0`, address `192.0.2.11`. Then browsed both service types from this Mac and from that one, and read every TXT record of both.
+
+This run exists to separate the two causes F-062 left standing, because there a macOS sender and the receiver sat on one machine.
+
+**F-065 (method) `brew --prefix <formula>` answers a path whether or not the formula is installed (confirmed).** It printed `/opt/homebrew/opt/portaudio` with nothing behind it, so the compiler was handed an include path to a directory that did not exist and the build failed on a missing header rather than on a missing package. The check is `ls "$(brew --prefix portaudio)/include"`, not the prefix on its own.
+
+**F-066 This receiver advertises `_airplay._tcp` and never `_raop._tcp` (confirmed).** `register_mdns` publishes one service and it is `_airplay._tcp.local.`. A browse for `_raop._tcp` from either machine found the eight real receivers and not this one; a browse for `_airplay._tcp` found nine. So a sender that browses only the RAOP type cannot see it, and this library browses only that type.
+
+What this does not settle is whether any shipping hardware does the same. All eight real receivers on this network publish both, so the case is demonstrated by an implementation rather than found in the wild.
+
+**F-067 The two service types carry the same facts under different keys, and the status word appears in both and agrees (confirmed).** Read at the same minute off three receivers. `am` in the RAOP record is `model` in the AirPlay one, and carried the same value each time: `Arc`, `AudioAccessory5,1`, `Macmini9,1`. `ov` is `osvers`, both `26.6` on the HomePod mini. `ft` is `features`, `vs` is `srcvers`, and `pk` and `pi` keep their names.
+
+`sf` and `flags` are the same word. The Sonos read `0x4` in both, the second Mac `0x204` in both, and the HomePod mini `0x98404` in both, at the same moment. So the state this library reads out of `sf` can be read out of an AirPlay record as `flags` without a second model of what it means.
+
+**F-068 The group identity is published in the AirPlay record and nowhere in the RAOP one (confirmed).** Every `_airplay._tcp` record carried `gid`, `gcgl` and, on the Apple devices, `igl`. The Sonos Arc's `gid` equalled its own `pi`, which is a receiver in a group of itself. The HomePod mini's `gid` held two identifiers joined by `+`, with `igl=1` and `gcgl=1` beside it. None of `gid`, `gcgl` or `igl` appears in any `_raop._tcp` record on this network.
+
+What `igl` and `gcgl` stand for is not measured here. What is measured is that a receiver publishes which group it belongs to, and that the RAOP record this library reads does not carry it.
+
+**F-069 A resting HomePod mini does not always report the same status word (confirmed).** F-045 and F-050 read `0x80404` off it at rest this morning, and F-050 read it again at the end of a session. At 13:03 the same device at rest read `0x98404`, so bits `0x8000` and `0x10000` had appeared. Its group identity now holds two members where the earlier readings were taken with it alone, which is a cause worth suspecting and not one this run establishes.
+
+Neither bit falls inside the two masks this library uses, so both readings answer free and not playing, which is what the device was. The finding is a warning rather than a defect: the word carries more than the two answers taken from it, and a reading that tested the whole value against `0x80404` would already be wrong.
+
+## 2026-09-22 13:23, what a macOS sender asks a receiver before it will send
+
+**What was done.** Selected the receiver on the second Mac as the sound output of this Mac, four times, correcting what the receiver answered between attempts. The receiver was started fresh each time, so every attempt is an unpaired device.
+
+Device identifiers below are replaced the way the table at the top of this file replaces them. The hardware address of this Mac is written `02:00:00:00:00:01` throughout.
+
+**F-070 A macOS sender's first request is a plain HTTP `GET /info?txtAirPlay&txtRAOP` (confirmed).** Not RTSP, and no body. It carries exactly one header, `X-Apple-QR: BT`, and no `CSeq`. An iPhone asks the same thing differently: over RTSP, with a binary plist body reading `{'qualifier': ['txtAirPlay']}`, and it asks for the AirPlay record alone.
+
+**F-071 Both service records can be fetched over HTTP from the receiver itself (confirmed).** Measured against the HomePod mini. `/info` answers 1453 bytes and neither record; `/info?txtAirPlay&txtRAOP` answers 2140 bytes with two extra keys, `txtAirPlay` and `txtRAOP`, each holding that Bonjour TXT record verbatim in its counted DNS-SD form. Their contents matched what the device advertises, key for key, at the same minute.
+
+So everything this library reads out of discovery can also be read from a known host with one request, which is what a refresh of one selected receiver looks like without waiting for a Bonjour update.
+
+**F-072 A macOS sender reads `supportedFormats` out of `/info` and stops there when it is absent (confirmed).** Compared the two `/info` answers key by key. The HomePod mini names `supportedFormats`, `supportedAudioFormatsExtended`, `pk`, `volumeControlType`, `vv`, `initialVolume`, `featuresEx`, `psi`, `macAddress` and `osBuildVersion`; the Python receiver named none of them. With those absent, three attempts ended at `/info` with nothing following it. Adding `supportedFormats`, `pk`, `volumeControlType` and `vv` took the next attempt through pairing and into the session, so the four together are what was missing. Which one alone is the gate was not separated, and `supportedFormats` is the one a sender has to read to know what it may send.
+
+**F-073 A macOS sender pairs transiently, on the spot, with no stored pairing (confirmed).** `POST /pair-setup` carrying `X-Apple-HKP: 4`, in two stages, the second answering 64 bytes. The encrypted channel is open immediately afterwards. The request names the sender in its own headers, `X-Apple-Client-Name` and `X-Apple-Client-ID`, and `User-Agent: AirPlay/1005.7.1`.
+
+**F-074 FairPlay runs twice before the session, over the encrypted channel (confirmed).** `POST /fp-setup` with `X-Apple-ET: 32`, first with a 16 byte body and then with a 164 byte one. Both are inside the encrypted channel, so nothing outside the receiver could have seen them.
+
+**F-075 The session SETUP says what the sender is and what it wants, and the timing is PTP (confirmed).** One `SETUP rtsp://<receiver>/<session id>` with a 930 byte binary plist, carrying `timingProtocol: 'PTP'` and, beside it, `asyncPTPClockConfig: True`, `combinedGetInfoWithControlSetup: True`, `isMultiSelectAirPlay: True`, `senderSupportsRelay: True`, `groupUUID`, `groupContainsGroupLeader: False`, `updateSessionRequest: False`, `diagnosticsAndUsage: True`, `statsCollectionEnabled: False` and `internalBuild: False`.
+
+It also describes itself completely: `model`, `name`, `osName: 'macOS'`, `osVersion`, `osBuildVersion`, `sourceVersion`, `deviceID` and `macAddress`, plus `sessionUUID` and `sessionCorrelationUUID`. A receiver therefore learns what kind of sender it is talking to, which nothing on the network says.
+
+`timingPeerInfo` and `timingPeerList` both hold one entry, the sender: `{ClockID: <int64>, DeviceType: 0, ID: <uuid>, SupportsClockPortMatchingOverride: True}`. The `ID` there is the `sessionCorrelationUUID`, not a hardware address.
+
+**F-076 The PTP clock identity is the device's hardware address with `0008` after it (confirmed).** The `ClockID` in that plist, read as unsigned, is the sender's own hardware address followed by two bytes `00 08`. Written with this file's placeholder address that is `0x0200000000010008`.
+
+This settles what F-057 observed without explaining: every clock identity measured that day ended in `0008`, and this is why. It is not the standard EUI-64 expansion, which inserts `FFFE` in the middle; it is the six address bytes with `0008` appended.
+
+**F-077 The sender stops after the session SETUP is answered, and it is not about sharing a machine (confirmed, and it narrows F-062).** The receiver answered `{'eventPort': <port>, 'timingPort': 0, 'timingPeerInfo': {'Addresses': ['<ipv4>'], 'ID': '<hardware address>'}}`. The sender waited eight seconds, made one more `GET /info?txtAirPlay&txtRAOP`, and showed "Could not connect". No stream level SETUP ever followed.
+
+F-062 saw the same stop and could not tell whether macOS refuses a receiver on its own machine or wants something the receiver does not answer. The receiver is on a different machine here and it stops in the same place, so the first cause is ruled out. The eight second wait is the shape of a timeout, which points at something the sender expects to arrive rather than at the answer being rejected outright.
+
+The same receiver completes a full session with an iPhone on iOS 18.7 and the same reply, so a macOS sender wants something at this point that an iOS sender does not.
+
+**F-078 A receiver that reports `02:00:00:00:00:00` as its hardware address gets nothing from a macOS sender (confirmed, and it does not hold for iOS).** `netifaces` read no address on the second Mac, so the receiver published that value as its `deviceid`. Three connections arrived from this Mac and not one byte followed on any of them. Starting the receiver with a random address produced `GET /info` on the first connection. An iPhone had completed a whole session against a receiver advertising that same all zero value earlier the same day, so this is a macOS sender being stricter rather than a rule of the protocol.
+
+**F-079 (method) The Python receiver answers an HTTP request in RTSP, and sends a header reading `None` (confirmed).** It forces `protocol_version = "RTSP/1.0"` for every reply, so a plain `GET /info HTTP/1.1` is answered `RTSP/1.0 200 OK`, which `curl` refuses outright. The HomePod mini answers the same request `HTTP/1.1 200 OK`. Several handlers also echo `CSeq` straight back, and an HTTP request carries none, so the reply read `CSeq: None`. Both are corrected in the patch kept beside this log.
+
+`/info` is therefore an HTTP request answered in HTTP, before any RTSP session exists, and a receiver has to speak both on the same port.
+
+**F-080 (method) Python's line iterator holds a log in its buffer (confirmed).** `stamp.py` read its input with `for line in sys.stdin`, which reads ahead by a block, so a receiver that writes a dozen lines and then waits produced an empty log file. `readline` returns what has arrived. The cost was one run spent thinking the receiver had not started.
+
+**F-081 An iPhone playing music asks for the buffered stream, type 103 (confirmed).** Read back out of the three sessions recorded this morning, all of them from an iPhone on iOS 18.7 to the receiver on this Mac. Each teardown named the stream it was closing, and all three read `{'streams': [{'streamID': 1, 'type': 103}]}`. None used 96.
+
+So the buffered path over TCP is what a current Apple sender uses for music, and the realtime path is not what a receiver will be offered first. What this does not say is what a sender does with a live source that cannot be buffered ahead, because all three sessions played from a library.
+
+## 2026-09-22 13:45, what the published record says about the stop at the session SETUP
+
+**What was done.** Read the two open senders and the two open receivers that implement this, and Apple's own symbol and string tables, against the question F-077 leaves open. The whole of it is written up beside this log as `sources/session-setup-ptp-research.md`, with a source and a confidence for every claim. Only what changes a finding here is repeated.
+
+**F-082 F-077 and F-078 compared two things at once, and the comparison does not carry (confirmed).** Both were written as a macOS sender being stricter than an iOS one. The macOS sender is on OS 27.2 and the iPhone is on iOS 18.7, so platform and version moved together and neither finding can separate them.
+
+It is worse than an ordinary confound, because two of the keys in the session SETUP are new in OS 27. `AsyncPTPClockConfig` and `CombinedGetInfoWithControlSetup` appear as added entries in Apple's own feature plist in the published iOS 26.5 to 27.0 diff, together with `CombinedGetInfoWithPairing` and `SkipRecord`. An iPhone on iOS 18.7 cannot send either key, so the iPhone was not taking a more lenient path through the same protocol. It was speaking an older one. Settling whether macOS is stricter needs an iOS 27 device against the same receiver, and nothing here has one.
+
+**F-083 The receiver's reply shape is not what stops the sender (likely).** Shairport Sync answers the session SETUP with exactly the same three keys the Python receiver does, `eventPort`, a `timingPort` of zero, and a `timingPeerInfo` holding only `Addresses` and `ID`. It is documented as working with Macs from macOS 10.15 onwards. So a reply without `ClockID`, `DeviceType` or `SupportsClockPortMatchingOverride` is one Apple senders have long accepted.
+
+Two open senders disagree about whether `ClockID` is needed, and the disagreement is about them rather than about Apple: OwnTone reads only `eventPort` and `timingPeerInfo.Addresses`, whilst Doubletake refuses a reply without `ClockID` because it derives its timeline from the receiver instead of running a clock of its own.
+
+**F-084 The likely cause is a message the receiver never sends, not an answer it gets wrong (likely).** `asyncPTPClockConfig: True` asks the receiver to set its clock up in the background and then push its `timingPeerInfo` to the sender over the event channel, as a `POST /command` carrying `{type: 'updateTimingPeerInfo', value: <dict>}`. Two independent sources say the same thing: Apple's own receiver carries `_SendTimingPeerInfoAsyncIfNeeded` and logs `Sending timingPeerInfo to event connection`, whilst the sender side carries `Expecting Timing Peer Info async` and `eventStream didn't provide timingPeerInfo`; and Doubletake describes the identical message in prose and implements a handler for it.
+
+The Python receiver's event channel accepts one connection, reads bytes into a file, and never writes anything at all. It cannot send that message whatever else is fixed, which fits the eight second wait exactly. This is marked likely rather than confirmed because what a sender does when the message never comes was not observed.
+
+**F-085 A receiver does not have to speak PTP to be sent audio (confirmed).** NQPTP, which is what Shairport Sync uses for timing, says of itself that it is not a PTP clock. Read as code it handles `Announce`, `Follow_Up` and `Sync` and answers none of them; it has no `Delay_Req` at all, and the only two transmissions in the daemon are in a path that fires when a clock has gone silent. The sender is the grandmaster and the receiver listens. Shairport Sync does not even name the timing peers until the stream level SETUP, and when its timing fails outright the session still reaches playback with the audio missing.
+
+So the Python receiver's complete absence of PTP is not on its own a reason for a sender to stop before the stream level SETUP.
+
+**F-086 Ignoring `combinedGetInfoWithControlSetup` is not fatal (confirmed).** It asks the receiver to fold what `GET /info` would have answered into the SETUP reply under an `Info` key, saving a round trip. A receiver that ignores it gets one separate `GET /info` instead, which is exactly the request F-077 recorded arriving eight seconds later. UxPlay implements the key nowhere and an iPadOS 27 client works against it.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
@@ -384,10 +476,11 @@ So there is no group command. A device's own volume control moves every member b
 
 ## Still open
 
-These need the receiver run, or a vantage point off this machine.
-
-1. Which PTP domain number and profile a group uses beyond domain 0, and whether the receivers contest the election with a full Best Master Clock exchange or accept the first announcement.
-2. What this Mac transmits as PTP, which decides whether a sender is a plain slave of the elected master or a boundary clock passing the time on to the other members.
-3. Whether a sender addresses each member separately for volume, and what it sends.
-4. How a member leaves a group.
-5. Why the transport is IPv6 link-local in one direction and IPv4 in the other.
+1. Whether a receiver that answers `updateTimingPeerInfo` on the event channel gets the session through. F-084 says this is the candidate, F-083 rules out the reply shape and F-085 rules out the absence of PTP, so the event channel is what is left. Settling it means making the Python receiver write on that channel, which it has never done.
+2. Whether a macOS sender is stricter than an iOS one at all, which F-082 says nothing measured so far can answer. It needs an iOS 27 device against the same receiver.
+3. Which stream type a macOS sender asks for. F-081 answers it for an iPhone playing music, which used 103 three times out of three, and the macOS sender never reached the stream level SETUP.
+4. Whether two receivers in one group are given the same anchor. This needs two receivers under our control in one session, which an iPhone can drive as soon as the second machine's receiver is usable.
+5. Which PTP domain number and profile a group uses beyond domain 0, and whether the receivers contest the election with a full Best Master Clock exchange or accept the first announcement.
+6. What this Mac transmits as PTP, which decides whether a sender is a plain slave of the elected master or a boundary clock passing the time on to the other members.
+7. How a member leaves a group.
+8. Why the transport is IPv6 link-local in one direction and IPv4 in the other.

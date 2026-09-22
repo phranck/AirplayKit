@@ -21,6 +21,25 @@ Take the port from the SRV record rather than assuming it. Port 7000 for `_airpl
 
 A sender ignores TXT keys it does not know, and assumes no key is present. The record is extensible and Apple has added keys across releases (reported confirmed, [openairplay, Service Discovery](https://openairplay.github.io/airplay-spec/service_discovery.html)).
 
+### Browsing one type is not enough
+
+A receiver can publish `_airplay._tcp` and no `_raop._tcp` at all, and macOS still offers it as a sound output. Measured on one network: a browse for the RAOP type found eight receivers and a browse for the AirPlay type found nine, the extra one being a receiver that publishes only the latter (measured 2026-09-22, browsed, F-066). Every shipping device there published both, so the case is shown by an implementation rather than found in the wild, and a sender that browses one type will still miss it.
+
+The two records name the same facts under different keys, and the values agreed on all three receivers checked at the same minute (measured 2026-09-22, browsed, F-067).
+
+| `_raop._tcp` | `_airplay._tcp` | Value seen on all three |
+|---|---|---|
+| `am` | `model` | `Arc`, `AudioAccessory5,1`, `Macmini9,1` |
+| `sf` | `flags` | `0x4`, `0x98404`, `0x204` |
+| `ft` | `features` | identical hexadecimal pairs |
+| `vs` | `srcvers` | identical |
+| `ov` | `osvers` | `26.6` on the HomePod mini |
+| `pk`, `pi` | `pk`, `pi` | identical |
+
+So a receiver found through either type can be read the same way once the names are mapped, and nothing is lost by finding it through the AirPlay record alone.
+
+What is lost the other way round is the grouping. `gid`, `gcgl` and `igl` appeared in every `_airplay._tcp` record and in no `_raop._tcp` record on that network (measured 2026-09-22, browsed, F-068). Anything that wants to know which receivers belong together has to read the AirPlay record.
+
 ## The _raop._tcp TXT keys
 
 A TXT record is a set of `key=value` pairs published alongside the service. A representative record from an Apple TV 2 reads as follows (reported confirmed, [openairplay, Service Discovery](https://openairplay.github.io/airplay-spec/service_discovery.html)).
@@ -207,6 +226,8 @@ A HomePod mini was read four times, through `GET /info` and through its Bonjour 
 
 Bits 11 and 17 move together and say that a sender holds a session. Bit 20 says audio is flowing at this moment. The value returns exactly to its resting one, so nothing is left behind and the reading repeats.
 
+The resting value itself is not fixed. The same device at rest four hours later read `0x98404`, with bits 15 and 16 set that had been clear, and its group identity then held two members where the earlier readings were taken with it alone (measured 2026-09-22, browsed, F-069). Neither bit falls inside the three above, so both readings answer the same question the same way. Test the bits that were measured rather than the whole value, because a reading that compared against `0x80404` would already be wrong.
+
 Two things follow that the published table does not carry. Bit 20 sits outside its 20-bit width altogether, so it has no published name. And bit 11's published name, `DeviceSupportsRelay`, reads as a capability, whilst the bit was observed changing four times in ten minutes on one unchanged device. What the bits are called stays open, because the published tables disagree and none of them was checked against a device. What each one indicates is not open, because it was measured.
 
 The Bonjour record carries the same number that `GET /info` returns as `statusFlags`, and it follows the state live (measured 2026-09-22, queried, F-045 and F-050). A browse therefore learns that a speaker has become busy without asking it anything, because the change arrives as an ordinary Bonjour update.
@@ -277,6 +298,24 @@ The qualified reply is also where a receiver declares its own output latency, un
 A captured Sonos One reports 400000 microseconds of output latency for every combination it lists (reported confirmed from that capture, [Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/)).
 
 Apple's own sender asks repeatedly and asks for both TXT records at once. One session held eight requests carrying `?txtAirPlay&txtRAOP` and two carrying nothing (measured 2026-09-22, captured, F-023).
+
+### The query names what comes back, and both records come back whole
+
+The query string is not decoration. `GET /info` on a HomePod mini answered 1453 bytes with neither TXT record in it; `GET /info?txtAirPlay&txtRAOP` answered 2140 bytes with two extra keys, `txtAirPlay` and `txtRAOP`, holding those Bonjour TXT records verbatim in their counted DNS-SD form. Their contents matched what the device advertised, key for key, at the same minute (measured 2026-09-22, queried, F-071).
+
+So everything discovery reads can also be read from a known host with one request. That is how the state of one selected receiver is refreshed without waiting for a browse update, and it is how a receiver that publishes a thin record still declares everything about itself.
+
+### The two senders ask differently
+
+A macOS sender opens with a plain HTTP `GET /info?txtAirPlay&txtRAOP`, not RTSP, with no body and exactly one header, `X-Apple-QR: BT`, and no `CSeq`. An iPhone asks over RTSP with a binary plist body reading `{'qualifier': ['txtAirPlay']}`, and asks for the AirPlay record alone (measured 2026-09-22, read off a receiver, F-070).
+
+A receiver therefore has to answer both on the same port, and answer each in the protocol it was asked in. A receiver that answered a plain HTTP request with `RTSP/1.0 200 OK` was refused outright by an ordinary HTTP client, whilst a HomePod mini answered `HTTP/1.1 200 OK` to the same request (measured 2026-09-22, queried, F-079).
+
+### What a sender reads out of the answer before it will pair
+
+A macOS sender stopped at `/info` three times against a receiver whose reply named no audio formats, and went through pairing and into the session once four keys were added: `supportedFormats`, `pk`, `volumeControlType` and `vv` (measured 2026-09-22, read off a receiver, F-072). Which one alone is the gate was not separated. `supportedFormats` is the one a sender has to read in order to know what it may send, and a HomePod mini carries it beside `supportedAudioFormatsExtended`, `initialVolume`, `featuresEx`, `psi`, `macAddress` and `osBuildVersion`.
+
+One value below the protocol is worth naming, because it costs a whole session. A receiver that published `02:00:00:00:00:00` as its `deviceid` received three connections from a macOS sender and not one byte on any of them; the same receiver with a real address got `GET /info` on the first connection. An iPhone had completed a whole session against that same all zero value earlier the same day (measured 2026-09-22, read off a receiver, F-078).
 
 ### What other devices answer
 

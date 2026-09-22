@@ -57,6 +57,19 @@ SETRATEANCHORTIME
 SET_PARAMETER                    volume
 ```
 
+A macOS sender on OS 27.2, reaching a receiver it has never met, opens with a shorter run (measured 2026-09-22, decrypted, F-070, F-073 and F-074).
+
+```text
+GET /info?txtAirPlay&txtRAOP     plain HTTP, not RTSP, one header and no CSeq
+POST /pair-setup                 X-Apple-HKP: 4, two stages
+                                 the channel is encrypted from here on
+POST /fp-setup                   X-Apple-ET: 32, a 16 byte body
+POST /fp-setup                   X-Apple-ET: 32, a 164 byte body
+SETUP                            the session
+```
+
+Two things separate it from the iPhone run above. It pairs on the spot with `X-Apple-HKP: 4` rather than verifying an existing pairing with `X-Apple-HKP: 8`, which is what transient pairing looks like from the outside. And FairPlay runs twice before the session rather than not at all, inside the encrypted channel, so nothing outside a receiver could have seen it.
+
 Three differences from the published order matter, and the measured order is what the wire did.
 
 `GET /info` comes before pairing, not after it. Every `GET /info` in the measured sessions was sent in the clear, before `POST /pair-verify`, and a receiver answers it to anybody without pairing at all (measured 2026-09-22, captured, F-020 and F-043). The published order puts it after the channel is encrypted. Both work, because the request is answered either way, and a sender that asks before pairing learns what it needs in order to choose a pairing path.
@@ -119,6 +132,34 @@ A capture of an Apple sender carries four more keys that no open sender sends, a
 | `timingPeerInfo` | dictionary | The sender's own timing identity: an `Addresses` array holding its IPv4 and IPv6 addresses, and an `ID`, which in the capture is the same UUID as `groupUUID`. |
 | `timingPeerList` | array | An array of dictionaries of that shape, one per timing peer. In the capture it holds the sender alone. |
 | `ekey`, `eiv`, `et` | data, data, integer | The AirPlay 1 audio key, its initialisation vector and the encryption type. The capture carries `et: 0`, meaning none, with both byte strings present and unused. |
+
+### What a macOS sender actually sends
+
+Read off a receiver that held the pairing keys, from macOS 27.2 build 26B5086k, `sourceVersion` 1005.7.1 (measured 2026-09-22, decrypted, F-075). The body is 930 bytes and it carries every key in both tables above except the AirPlay 1 audio key, plus four that nothing published names.
+
+```text
+timingProtocol                    PTP
+asyncPTPClockConfig               true
+combinedGetInfoWithControlSetup   true
+isMultiSelectAirPlay              true
+senderSupportsRelay               true
+groupUUID                         a UUID
+groupContainsGroupLeader          false
+updateSessionRequest              false
+diagnosticsAndUsage               true
+statsCollectionEnabled            false
+internalBuild                     false
+```
+
+It describes itself completely, with `model`, `name`, `osName: macOS`, `osVersion`, `osBuildVersion`, `sourceVersion`, `deviceID` and `macAddress`, and it carries both `sessionUUID` and a `sessionCorrelationUUID`. A receiver therefore learns what kind of sender it is talking to, which nothing on the network tells it.
+
+`timingPeerInfo` and `timingPeerList` both hold one entry, the sender itself, shaped `{ClockID, DeviceType: 0, ID, SupportsClockPortMatchingOverride: true}`. The `ID` there is the `sessionCorrelationUUID` rather than a hardware address, which is worth knowing because the capture in the table above read that field as the `groupUUID` instead. <doc:Protocol-Timing> covers what the `ClockID` is made of.
+
+**Two of those keys are new in OS 27.** `AsyncPTPClockConfig` and `CombinedGetInfoWithControlSetup` appear as added entries in Apple's own feature plist in the published iOS 26.5 to 27.0 diff, together with `CombinedGetInfoWithPairing` and `SkipRecord` (reported confirmed, [blacktop, ipsw-diffs, `AirPlay.plist`](https://github.com/blacktop/ipsw-diffs/blob/61157ab6a859ee24ae8c2e9a2ba08b9a5f47c991/26_5_23F77_vs_27_0_24A5355q/FEATURES/filesystem/Domain/AirPlay.plist.md)). A sender on an older release sends neither, so a receiver written against an older capture will meet them for the first time now.
+
+`combinedGetInfoWithControlSetup` asks the receiver to fold what `GET /info` would have answered into the SETUP reply under an `Info` key, saving one round trip. Ignoring it is not fatal: the sender then makes the separate `GET /info` instead, which is what the measured session shows happening, and an iPadOS 27 client works against a receiver that implements the key nowhere (reported confirmed, [UxPlay issue 535](https://github.com/FDH2/UxPlay/issues/535)).
+
+`asyncPTPClockConfig` is the one that changes the receiver's obligations, and <doc:Protocol-Timing> covers it.
 
 The reply is a binary property list. The key that matters is `eventPort`, the TCP port for the event channel that <doc:Protocol-Pairing> describes (reported likely, [airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp)).
 
