@@ -99,14 +99,14 @@ typedef struct PAReceiver {
      for a receiver found only through the older service and for one that
      announced nothing. Empty means unknown rather than alone.
 
-     Measured on one network of eight receivers, none of them grouped at the
-     time. Every Sonos published its own `pi` value here, which is a receiver in
-     a group of itself. Apple's devices published a different value from their
+     Measured on one network of eight receivers. Every Sonos published its own
+     `pi` value here. Apple's devices published a different value from their
      `pi`, and a HomePod mini published two identifiers joined by `+`.
 
-     What is not established here is what two receivers sharing a value means,
-     because no two of those eight shared one. Comparing the value is the
-     obvious thing to do with it and it is not a tested thing to do with it.
+     What two receivers sharing a value means is not established, and for a
+     Sonos it is known not to mean grouping: three of them playing together as
+     one group each published a different value, and each was its own. Comparing
+     the value is the obvious thing to do with it and it is not a tested one.
      */
     char groupID[PA_MAX_GROUP];
     /** The port its RTSP service listens on. */

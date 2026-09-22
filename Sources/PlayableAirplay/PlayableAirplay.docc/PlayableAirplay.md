@@ -66,6 +66,7 @@ Opening and closing a session are the two calls that wait, so neither belongs on
 
 - <doc:Discovering-Receivers>
 - <doc:Playing-Audio>
+- <doc:Asking-A-Sonos>
 
 ### The protocol
 

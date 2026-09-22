@@ -120,7 +120,9 @@ The two services can disagree about the name. Bonjour settles a clash inside one
 
 ``AirPlayReceiver/groupID`` is what a receiver says about the group it is in, and it comes from the general service, so it is empty for a receiver found only through the audio one.
 
-What it is worth is honestly limited, and its own documentation says so. On the network this was written against, eight receivers published eight different values whilst none of them was grouped, so what two receivers sharing a value means was never seen. Compare it if you like, and treat a match as something to check rather than as a fact.
+What it is worth is honestly limited, and its own documentation says so. On the network this was written against, eight receivers published eight different values whilst none of them was grouped, so what two receivers sharing a value means was never seen.
+
+For a Sonos it is worse than unproven. Three Sonos playing together as one group, measured at that moment, each published a different value, and each was the speaker's own. So the AirPlay field says nothing about which Sonos are playing together, and the answer has to come from the speaker itself, which <doc:Asking-A-Sonos> covers.
 
 ### Which speakers are already in use
 

@@ -501,6 +501,22 @@ So a refusal does not report itself as a refusal. The one code covers both a mac
 
 What settles it: a signed application denied local network access in the privacy settings, browsing and printing the raw code. The library maps all four to a refusal already, so the answer changes what it says and not what it does.
 
+## 2026-09-22 19:10, what a Sonos says when asked properly
+
+**What was done.** Called every UPnP action the Sonos work turns on against one speaker, whilst three of them were playing together as a group, and read the topology back. Then read the AirPlay group identity of every speaker at the same minute.
+
+**F-093 A Sonos playback group is invisible in the AirPlay record (confirmed).** Three speakers were in one group at 19:10, with a fourth group holding a soundbar and its surrounds and a fifth holding one speaker alone. Every one of the five published an AirPlay `gid` equal to its own `pi`, so all five said they were a group of themselves whilst three of them were plainly not.
+
+This overturns nothing and settles what F-087 left open from one side. A shared `gid` was never seen because a Sonos never publishes one, and the field says nothing at all about which Sonos play together. Their own topology says it exactly, so that is where it has to come from.
+
+**F-094 A bonded set is one member with satellites inside it, not several members (confirmed).** `GetZoneGroupState` puts a `Satellite` element inside the `ZoneGroupMember` it belongs to, carrying `Invisible="1"`, and the member carries `HTSatChanMapSet` naming the channel each one takes. A soundbar with two surrounds is therefore one member with two satellites and reads as one room playing by itself, whilst three grouped rooms are three members. Anything counting members without that distinction reports a home theatre as three rooms grouped together.
+
+**F-095 A speaker in a group reports the coordinator in place of a track (confirmed).** `GetPositionInfo` on a follower answered `TrackURI` of `x-rincon:<coordinator identifier>`, with `TrackDuration`, `TrackMetaData`, `RelTime` and `AbsTime` all reading `NOT_IMPLEMENTED`. So a follower reports playing and has nothing of its own to report about what, and everything about the audio belongs to the coordinator.
+
+**F-096 A speaker serves a picture of itself, and says where (confirmed).** The device description carries `/img/icon-S18.png` for a Sonos One, alongside `modelName` of `Sonos One` and `modelNumber` of `S18`. One plain request to the same host fetches it, so nothing has to be shipped with an application and a model that did not exist when the application was written still draws.
+
+**F-097 (method) The description nests three devices and repeats its element names in each (confirmed).** The speaker, its media server and its media renderer each carry `modelName`, `modelNumber` and `UDN`. The outermost is the speaker. A reader taking the last of each would describe a service instead, and the difference is invisible in the values, because they read like plausible answers.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
