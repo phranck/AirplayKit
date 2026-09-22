@@ -464,6 +464,31 @@ So the Python receiver's complete absence of PTP is not on its own a reason for 
 
 **F-086 Ignoring `combinedGetInfoWithControlSetup` is not fatal (confirmed).** It asks the receiver to fold what `GET /info` would have answered into the SETUP reply under an `Info` key, saving a round trip. A receiver that ignores it gets one separate `GET /info` instead, which is exactly the request F-077 recorded arriving eight seconds later. UxPlay implements the key nowhere and an iPadOS 27 client works against it.
 
+## 2026-09-22 16:20, browsing both services, and what the group fields say
+
+**What was done.** Made discovery browse `_airplay._tcp` beside `_raop._tcp` and merge the two sightings of one receiver, then ran it against the network and read every receiver's group fields directly to check what the merged values mean.
+
+**F-087 The group fields are published by everybody and none of the eight receivers shared one (confirmed).** Read at 16:20 off every `_airplay._tcp` record on the network.
+
+| Receiver | `gid` against `pi` | `igl` | `gcgl` |
+|---|---|---|---|
+| All five Sonos | equal | not published | `0` |
+| The Apple TV | different | `1` | `1` |
+| The HomePod mini | two identifiers joined by `+` | `1` | `1` |
+| The second Mac | different | `0` | `0` |
+
+So a Sonos publishes itself as a group of one, and Apple's devices publish something else. Nothing here says what two receivers sharing a value would mean, because no two of the eight shared one and none of them was grouped at the time. A comparison is the obvious use of the field and remains an untested one, which is what the library's own documentation of it says.
+
+**F-088 The two services disagree about a receiver's display name when it clashes (confirmed).** The Apple TV announced `Room A` on the audio service and `Room A (2)` on the AirPlay service, because a Sonos in the same room already held `Room A` on the latter. Bonjour settles a clash inside one service by putting a number after the name and settles each service on its own.
+
+The audio service carries the name its owner gave, so a merge that has seen both takes the name from there.
+
+**F-089 (method) A name arrives from a resolve in its wire form (confirmed).** `Room A (2)` arrives as `Room\032A\032(2)`, with a space written as a backslash and three decimal digits, and a dot inside a name written `\.`. The browse callback hands over the readable form and the resolve callback does not, so anything reading the resolve undoes it or puts the escaping on screen. This was already true of the one service browsed before and had never shown, because no receiver on this network has a space in its name.
+
+**F-090 (method) A resolve blocks until it is answered, and a stale announcement is never answered (confirmed).** Processing a resolve waits for a result, and a receiver that goes away without withdrawing its record leaves an announcement that resolves to nothing. One test run took 82 seconds instead of 0.013 because the discovery thread sat in such a resolve, and the stop waiting for that thread waited with it. Waiting on the socket with a bound first, and giving up when nothing arrives, takes it back to 0.013.
+
+The cost was invisible until the second service doubled the number of resolves. A blocking call on the thread that also has to notice a stop is the defect; the stale record only made it show.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
