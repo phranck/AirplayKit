@@ -308,6 +308,29 @@ So the state that `sf` never reports for a Sonos is readable from the speaker it
 
 **F-053 (method) The receiver's port is fixed in its source (confirmed).** `ap2-receiver.py` hard codes 7000 in two places and takes no option for it, so two instances on one machine need a patch of two lines. That is what stands between here and watching one sender address two receivers that we control.
 
+## 2026-09-22 09:45, every Sonos on the network, one by one
+
+**What was done.** Each Sonos asked for its own device description, and then the zone topology used to find the ones that do not advertise AirPlay at all.
+
+**F-054 The device description names the model properly, whilst the AirPlay record gives a short label (confirmed).** `am` in the Bonjour record carries `Arc`, `One` or `Bookshelf`, which is the same string the description calls `displayName`. The description also carries `modelName` and `modelNumber`, and those are the ones that identify the hardware.
+
+| Room | Address | Kind | `modelName` | `modelNumber` | `am` |
+|---|---|---|---|---|---|
+| Room A | 192.0.2.41 | member | Sonos Arc | S19 | `Arc` |
+| Room A | 192.0.2.42 | satellite | Sonos One | S18 | not advertised |
+| Room A | 192.0.2.43 | satellite | Sonos One | S13 | not advertised |
+| Room B | 192.0.2.44 | member | Sonos One | S18 | `One` |
+| Room B | 192.0.2.45 | invisible | Sonos One SL | S22 | not advertised |
+| Room C | 192.0.2.46 | member | Sonos One | S18 | `One` |
+| Room D | 192.0.2.47 | member | SYMFONISK Bookshelf | S33 | `Bookshelf` |
+| Room E | 192.0.2.48 | member | SYMFONISK Bookshelf | S33 | `Bookshelf` |
+
+`Bookshelf` is IKEA's SYMFONISK, and nothing in the AirPlay record says so. A list drawing from `am` alone calls two different products by the same word, and calls an IKEA speaker by a word IKEA does not use.
+
+**F-055 A bonded set is made of different models, and only the coordinator is on the network as far as AirPlay is concerned (confirmed).** The Room B stereo pair is a Sonos One and a Sonos One SL. The Room A set is an Arc with two Sonos One as surrounds, and those two are different generations, S18 and S13. Five of the eight speakers advertise `_raop._tcp`, and the other three are reachable only through the topology.
+
+So a bonded set can be named for what it actually is rather than as one speaker, and its picture could be made from the pictures of its members, each of which serves its own.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
