@@ -175,12 +175,73 @@ public enum AirPlayError: Error, Sendable {
 /// change to a queue the caller names, so a list on screen never updates from
 /// the wrong place.
 public final class AirPlayDiscovery {
+    /// Why a browse is finding nothing.
+    ///
+    /// An empty list has several causes that look identical from outside and
+    /// want opposite answers. A quiet network is not a problem; a machine that
+    /// withheld local network access is one only a person can clear, and saying
+    /// so is the difference between an application that looks broken and one
+    /// that says what to do.
+    public enum Problem: Equatable, Sendable {
+        /// The responder said in as many words that this application may not look.
+        ///
+        /// Nothing the application does clears it. The person has to allow it in
+        /// the system's privacy settings, and saying so is the whole point of
+        /// telling this apart from an empty network.
+        ///
+        /// The number is the responder's own, kept for a log.
+        case refused(code: Int32)
+
+        /// No mDNS responder this application can reach.
+        ///
+        /// Two different things arrive here and the responder does not separate
+        /// them. There may be none at all, which is the ordinary Linux case
+        /// without `avahi-daemon` and the ordinary container case. Or there is
+        /// one and this application is not allowed to reach it, which is what a
+        /// sandboxed application without network access was measured getting.
+        ///
+        /// On macOS read it as the second, because macOS always runs one. On
+        /// Linux read it as the first.
+        case noResponder(code: Int32)
+
+        /// Something else failed, and the number is what the system called it.
+        ///
+        /// Worth a line in a log rather than a sentence on screen, because
+        /// nothing a person does is likely to change it.
+        case failed(code: Int32)
+    }
+
     /// The receivers currently visible, sorted by name.
     ///
     /// Read this on the queue changes are delivered to, which is where it is written.
     public private(set) var receivers: [AirPlayReceiver] = []
 
+    /// Why the list is empty, or `nil` when nothing is wrong with the browse.
+    ///
+    /// Written on the delivery queue before each change is handed over, so a
+    /// handler that arrives with an empty set can read it there and say what
+    /// happened. A browse can also be refused after it started, which is what a
+    /// machine withholding local network access does, so this is worth reading
+    /// on every change rather than once at the beginning.
+    ///
+    /// ```swift
+    /// let discovery = AirPlayDiscovery { [weak self] receivers in
+    ///     guard receivers.isEmpty, let problem = self?.discovery?.problem else {
+    ///         self?.show(receivers)
+    ///         return
+    ///     }
+    ///
+    ///     switch problem {
+    ///     case .refused, .noResponder: self?.askForLocalNetworkAccess()
+    ///     case .failed(let code):      self?.log("browsing failed with \(code)")
+    ///     }
+    /// }
+    /// ```
+    public private(set) var problem: Problem?
+
     /// Whether browsing could be started at all, which needs an mDNS responder on the machine.
+    ///
+    /// False means nothing will ever arrive, and ``problem`` says why.
     public var isBrowsing: Bool { handle != nil }
 
     private var handle: OpaquePointer?
@@ -204,17 +265,31 @@ public final class AirPlayDiscovery {
         // afterwards, so there is no window in which the pointer is stale.
         let context = Unmanaged.passUnretained(self).toOpaque()
 
+        var problem = PADiscoveryProblemNone
+        var code: Int32 = 0
+
         handle = pa_discovery_start({ context, receivers, count in
             guard let context, let receivers else { return }
 
             let discovery = Unmanaged<AirPlayDiscovery>.fromOpaque(context).takeUnretainedValue()
             let found = (0..<count).map { AirPlayReceiver(receivers[$0]) }
 
+            // Read here rather than on the delivery queue, because by the time
+            // that block runs the discovery may already have been stopped and
+            // the handle released.
+            var code: Int32 = 0
+            let problem = pa_discovery_problem(discovery.handle, &code)
+
             discovery.queue.async {
                 discovery.receivers = found
+                discovery.problem = Problem(problem, code: code)
                 discovery.onChange(found)
             }
-        }, context)
+        }, context, &problem, &code)
+
+        // A start that failed leaves no discovery to ask, so the reason is
+        // taken from the call itself and stands from the beginning.
+        if handle == nil { self.problem = Problem(problem, code: code) ?? .failed(code: code) }
     }
 
     deinit {
@@ -418,6 +493,18 @@ private extension AirPlayReceiver {
     static func string<Buffer>(from buffer: Buffer, capacity: Int) -> String {
         withUnsafePointer(to: buffer) { pointer in
             pointer.withMemoryRebound(to: CChar.self, capacity: capacity) { String(cString: $0) }
+        }
+    }
+}
+
+private extension AirPlayDiscovery.Problem {
+    /// Nothing wrong answers nil, so a caller tests for a problem rather than for a case.
+    init?(_ problem: PADiscoveryProblem, code: Int32) {
+        switch problem {
+        case PADiscoveryProblemNone: return nil
+        case PADiscoveryProblemRefused: self = .refused(code: code)
+        case PADiscoveryProblemNoResponder: self = .noResponder(code: code)
+        default: self = .failed(code: code)
         }
     }
 }

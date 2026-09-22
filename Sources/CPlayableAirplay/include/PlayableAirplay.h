@@ -138,8 +138,47 @@ typedef struct PAReceiver {
     bool isPlaying;
 } PAReceiver;
 
+/**
+ Why a browse is finding nothing.
+
+ An empty list has several causes that look identical from outside, and they
+ want opposite answers. A network with nothing on it is not a problem at all; a
+ machine that refused the application access to the local network is one only a
+ person can clear.
+ */
+typedef enum PADiscoveryProblem {
+    /** Nothing is wrong. The browse is running and the network is as it is. */
+    PADiscoveryProblemNone = 0,
+    /** The responder said in as many words that this application may not look. */
+    PADiscoveryProblemRefused,
+    /**
+     No mDNS responder this application can reach.
+
+     Two things arrive here and the responder does not separate them: a machine
+     with none at all, and a machine with one that this application is not
+     allowed to reach. Measured: a sandboxed application denied the network gets
+     exactly the same code as a machine running nothing.
+     */
+    PADiscoveryProblemNoResponder,
+    /** Something else failed, and the code says what the system called it. */
+    PADiscoveryProblemFailed,
+} PADiscoveryProblem;
+
 /** Finds receivers on the network and reports them as they come and go. */
 typedef struct PADiscovery PADiscovery;
+
+/**
+ Why this discovery is finding nothing, or PADiscoveryProblemNone.
+
+ A browse can start and be refused afterwards, which is what a machine that
+ withholds local network access does, so this is worth reading whenever the set
+ of receivers arrives rather than only once at the start.
+
+ @param discovery  The discovery, or NULL, which has no problem to report.
+ @param code       Where the system's own error number is written, for a log. May be NULL.
+ @return What is wrong.
+ */
+PADiscoveryProblem pa_discovery_problem(PADiscovery *discovery, int32_t *code);
 
 /**
  Called whenever the set of receivers changes.
@@ -158,9 +197,12 @@ typedef void (*PADiscoveryHandler)(void *context, const PAReceiver *receivers, s
 
  @param handler  Called on a thread of the discovery's own, whenever the set changes.
  @param context  Passed back to the handler untouched.
+ @param problem  Where the reason is written when nothing could be started. May be NULL.
+ @param code     Where the system's own error number is written alongside it. May be NULL.
  @return The discovery, or NULL when it could not be started.
  */
-PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context);
+PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
+                                PADiscoveryProblem *problem, int32_t *code);
 
 /**
  Stops looking and releases the discovery. The handler is not called again, and

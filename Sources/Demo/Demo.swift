@@ -19,11 +19,33 @@ import AVFoundation
 
 // MARK: - Listing what is on the network
 
+/// Says what stopped a browse, in the words somebody could act on.
+func describe(_ problem: AirPlayDiscovery.Problem) -> String {
+    switch problem {
+    case .refused(let code):
+        return "this program is not allowed to look at the local network, "
+             + "which is granted in the system's privacy settings (\(code))"
+    case .noResponder(let code):
+        return "no mDNS responder this program can reach, which is either a machine "
+             + "without one or a sandbox that will not let this program reach it (\(code))"
+    case .failed(let code):
+        return "the responder answered with error \(code)"
+    }
+}
+
 /// Browses for a while and prints the set each time it changes.
 func listReceivers(forSeconds seconds: Int) -> Int32 {
     let printing = DispatchQueue(label: "at.playable.airplay.demo")
 
-    let discovery = AirPlayDiscovery(deliveringOn: printing) { receivers in
+    var discovery: AirPlayDiscovery?
+    discovery = AirPlayDiscovery(deliveringOn: printing) { receivers in
+        // An empty list has more than one cause, and they want different
+        // answers, so the reason is read before the list is believed.
+        if receivers.isEmpty, let problem = discovery?.problem {
+            print("nothing found: \(describe(problem))")
+            return
+        }
+
         print("\(receivers.count) receiver(s):")
 
         // Receivers that name the same group as each other. Nothing measured
@@ -41,8 +63,9 @@ func listReceivers(forSeconds seconds: Int) -> Int32 {
         }
     }
 
-    guard discovery.isBrowsing else {
-        print("could not start looking, is there an mDNS responder running?")
+    guard let discovery, discovery.isBrowsing else {
+        let reason = discovery?.problem.map(describe) ?? "no reason was given"
+        print("could not start looking: \(reason)")
         return 1
     }
 
