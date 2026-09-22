@@ -83,3 +83,27 @@ In practice the distinction rarely bites. On the network this was written agains
 ``AirPlayReceiver/name`` is what its owner called it, such as "Dining Room", and it is what belongs on screen. ``AirPlayReceiver/host`` is a host name rather than an address, because an address on a home network is a lease and can change between one sighting and the next, whilst the name keeps resolving.
 
 ``AirPlayReceiver/id`` is taken from the part of the service instance name that identifies the hardware. It stays the same across sightings, which is what lets a selection survive a receiver going away and coming back.
+
+### What a receiver says it is
+
+``AirPlayReceiver/model`` carries whatever the receiver announced about itself, and the useful thing about it is that Apple's receivers announce the identifier their hardware is known by everywhere else. Measured on one network: `AppleTV11,1` for an Apple TV, `AudioAccessory5,1` for a HomePod mini, and `Mac16,11` and `Macmini9,1` for two Macs.
+
+That is the code macOS files a picture of the machine under, so a list can draw a receiver as the thing it actually is rather than as a generic speaker.
+
+```swift
+import UniformTypeIdentifiers
+
+func picture(of receiver: AirPlayReceiver) -> NSImage? {
+    guard let type = UTType(tag: receiver.model,
+                            tagClass: UTTagClass(rawValue: "com.apple.device-model-code"),
+                            conformingTo: nil),
+          type.isDeclared
+    else {
+        return nil
+    }
+
+    return NSWorkspace.shared.icon(for: type)
+}
+```
+
+Everybody else announces whatever they like, and there is no register to check it against. The Sonos speakers on that same network announced `Arc`, `One` and `Bookshelf`, which are product names rather than model codes, and macOS has never heard of them. So treat this as a hint that is worth using where it is recognised and worth ignoring where it is not. A receiver that announced nothing leaves it empty.
