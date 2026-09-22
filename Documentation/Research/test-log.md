@@ -331,6 +331,41 @@ So the state that `sf` never reports for a Sonos is readable from the speaker it
 
 So a bonded set can be named for what it actually is rather than as one speaker, and its picture could be made from the pictures of its members, each of which serves its own.
 
+## 2026-09-22 09:53, pause, resume, a track change and a seek
+
+**What was done.** An iPhone played to this receiver, then paused, resumed, skipped to the next track, sought within it, and stopped. Every anchor read out in full.
+
+**F-056 Playing and pausing are the same request with different bodies, and the pause carries nothing but the rate (confirmed).**
+
+```text
+09:53:43  start    {'networkTimeFlags': 0, 'networkTimeFrac': -8768708216239423488,
+                    'networkTimeSecs': 1410493, 'networkTimeTimelineID': -2267142311769604088,
+                    'rate': 1, 'rtpTime': 1442375314}
+09:53:48  pause    {'rate': 0}
+09:53:54  resume   {... 'networkTimeSecs': 1410503, ... 'rate': 1, 'rtpTime': 1442542965}
+09:54:03  track    {... 'networkTimeSecs': 1410512, ... 'rate': 1, 'rtpTime': 3133593496}
+09:54:10  seek     {'rate': 0}
+09:54:12  seek     {... 'networkTimeSecs': 1410521, ... 'rate': 1, 'rtpTime': 2969409775}
+```
+
+Every `rate: 1` carries the whole set. Every `rate: 0` carries the one key and nothing else, so a receiver told to stop is not told when to stop: it stops now.
+
+**F-057 The timeline identity is the sender's PTP clock, and it outlives the session (confirmed).** `networkTimeTimelineID` read `-2267142311769604088` in every anchor of this session and in every session recorded today, five of them over an hour, including ones to a differently named receiver. As an unsigned value that is `0xE0897E144BB70008`, which is the shape of the PTP clock identities measured from the receivers earlier: `0xF434F09B9D400008`, `0x9C3E53A0AD550008` and `0xD011E56376620008`. All of them end in `0008`.
+
+So the anchor names the clock its times are expressed against, and that clock belongs to the sender. This is the join between the two halves of the investigation: the timing traffic on ports 319 and 320 and the anchor in the control channel refer to the same identity.
+
+**F-058 A track change is a flush followed by a fresh anchor (confirmed).** The metadata arrives first, with the player state going to `Paused` and the new title beside it, then `FLUSHBUFFERED`, then an anchor at `rate: 1` whose `rtpTime` bears no relation to the previous one. Each track gets a timeline of its own.
+
+**F-059 A seek is a pause and then a new anchor (confirmed).** Exactly the same two requests as a resume, two seconds apart, with the new position in `rtpTime`. Nothing distinguishes a seek from a resume except where the timeline is put.
+
+**F-060 Metadata arrives as DMAP, and the player state comes with it (confirmed).** `dmap.persistentid` identifies the item, `dmap.itemname` names it, and `dacp.playerstate` reads `Playing` or `Paused`. It is re-sent repeatedly whilst playing rather than only when something changes.
+
+**F-061 Stopping is a flush and then the teardown (confirmed).** `FLUSHBUFFERED` at 09:54:18 and `TEARDOWN` at the same second.
+
+**F-062 (method) A macOS sender reaches this receiver and stops at the session SETUP (confirmed).** It resolved the receiver, fetched its device information, completed pair-verify and opened the encrypted channel, sent `SETUP`, and then showed "Could not connect". Nothing followed and it did not try again. Two causes are possible and this run cannot separate them: macOS may refuse a session to an address on the same machine, or a macOS sender may want something in the session SETUP that this receiver does not answer, since its own record says it was tested against an iPhone. Running the receiver on a second machine separates them.
+
+**F-063 (method) The receiver dropped every session at the first anchor, through a fault of its own (confirmed).** `do_SETRATEANCHORTIME` catches the broken audio pipe and then formats a name that is not bound, so a `NameError` escapes and takes the connection with it. One word fixes it, and the patch is kept beside this log as `sources/airplay2-receiver-local.patch`. The failure looked like a protocol problem and was not one, which is the reason to read the whole traceback rather than the last line.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.

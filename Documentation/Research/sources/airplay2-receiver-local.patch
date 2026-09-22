@@ -1,0 +1,13 @@
+diff --git a/ap2-receiver.py b/ap2-receiver.py
+index e7e6c4d..5ae0d3e 100644
+--- a/ap2-receiver.py
++++ b/ap2-receiver.py
+@@ -750,7 +750,7 @@ class AP2Handler(http.server.BaseHTTPRequestHandler):
+                             for s in self.server.streams:
+                                 if s.isAudio() and s.isInitialized():
+                                     s.getAudioConnection().send("pause")
+-                    except OSError:
++                    except OSError as e:
+                         self.logger.error(f'SETRATEANCHORTIME error: {repr(e)}')
+ 
+                     self.logger.info(self.pp.pformat(plist))
