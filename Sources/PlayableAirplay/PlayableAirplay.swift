@@ -72,14 +72,17 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     /// }
     /// ```
     ///
-    /// **What sharing a value means is not established.** On the network this
-    /// was written against, eight receivers published eight different values and
-    /// none was grouped at the time. Every Sonos published its own persistent
-    /// identifier here, which is a receiver in a group of itself; Apple's devices
-    /// published something else, and a HomePod mini published two identifiers
-    /// joined by `+`. Comparing the value is the obvious thing to do with it and
-    /// it is an untested thing to do with it, so treat a match as a hint worth
-    /// checking rather than as a fact about what will play together.
+    /// **What sharing a value means is not established, and for a Sonos it is
+    /// known not to mean grouping.** Three Sonos playing together as one group,
+    /// measured at that moment, each published a different value, and each was
+    /// the speaker's own. Their own services answer that question properly, and
+    /// `PlayableAirplayUPnP` in this package is where that lives.
+    ///
+    /// On the same network, eight receivers published eight different values.
+    /// Apple's devices published something other than their own identifier, and
+    /// a HomePod mini published two identifiers joined by `+`. What a shared
+    /// value would mean for them was never seen, so treat a match as a hint
+    /// worth checking rather than as a fact about what will play together.
     ///
     /// The same record carries two further grouping fields, `igl` and `gcgl`,
     /// which are not carried here because nothing measured says what a caller
