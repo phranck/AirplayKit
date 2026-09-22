@@ -115,9 +115,9 @@ In an audio callback the samples usually arrive as a pointer already, and there 
 
 ```bash
 swift run Demo list
-swift run Demo play sonos-2.local 7000 5
-swift run Demo wave ~/Music/track.wav sonos-2.local
-swift run Demo file ~/Music/track.m4a sonos-2.local
+swift run Demo play speaker.local 7000 5
+swift run Demo wave ~/Music/track.wav speaker.local
+swift run Demo file ~/Music/track.m4a speaker.local
 ```
 
 `list` browses for five seconds and prints what it found. `play` opens a session and sends a quiet 440 Hz tone. `wave` plays a WAVE file that is already 16 bit stereo at 44100, using nothing but Foundation, so it runs wherever the library does. `file` takes any format the system can read and converts it, which is AVFoundation's work and therefore Apple's platforms only.

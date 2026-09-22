@@ -20,10 +20,10 @@ Nine AirPlay receivers, measured on 2026-09-22.
 
 | Name | Model announced | Host | What it is |
 |---|---|---|---|
-| the Mac | `Mac16,11` | `the Mac.local` | The Mac these tests run on, receiving as well as sending |
-| a second Mac | `Macmini9,1` | `mac-2.local` | A Mac mini |
+| The Mac | `Mac16,11` | `mac.local` | The Mac these tests run on, receiving as well as sending |
+| A second Mac | `Macmini9,1` | `mac-2.local` | A Mac mini |
 | Room A | `AppleTV11,1` | `appletv.local` | An Apple TV 4K, 2nd generation |
-| the HomePod mini | `AudioAccessory5,1` | `the HomePod mini.local` | A HomePod mini |
+| The HomePod mini | `AudioAccessory5,1` | `homepod.local` | A HomePod mini |
 | Room A | `Arc` | `sonos-1.local` | A Sonos Arc with two surrounds |
 | Room B | `One` | `sonos-2.local` | Two Sonos One as a stereo pair |
 | Room C | `One` | `sonos-3.local` | A Sonos One |
@@ -66,7 +66,7 @@ AudioAccessory1,1  -> homepod
 
 **F-004 (method)** **Learning: the harvested symbol name is not always the name an SF Symbol export uses (confirmed).** The declaration for a HomePod mini says `homepodmini`, whilst the SVG export carries `homepod.mini`. macOS resolves both, so this only bites where the name is used away from macOS. Anything that generates a symbol table for another platform has to check every harvested name against the symbol set it will draw from, and fail loudly on a miss rather than shipping a table with a hole in it.
 
-**F-005** **A Sonos speaker serves a picture of itself (confirmed).** Its UPnP device description at `http://<host>:1400/xml/device_description.xml` carries an `iconList`, and the entry resolves on the same host. The Room B speaker returned a description of 9594 bytes naming `/img/icon-S18.png`, which came back as a 48 by 48 RGBA PNG of 429 bytes. The Arc names `/img/icon-S19.png`. So a speaker that macOS has never heard of can still be drawn as itself, by asking it.
+**F-005** **A Sonos speaker serves a picture of itself (confirmed).** Its UPnP device description at `http://<host>:1400/xml/device_description.xml` carries an `iconList`, and the entry resolves on the same host. The Sonos One returned a description of 9594 bytes naming `/img/icon-S18.png`, which came back as a 48 by 48 RGBA PNG of 429 bytes. The Arc names `/img/icon-S19.png`. So a speaker that macOS has never heard of can still be drawn as itself, by asking it.
 
 **F-006** **Reading that description needs the elements matched by local name (confirmed).** It sits in the UPnP namespace, so asking for `iconList` alone finds nothing. Both of these work on macOS and were tried against the live device:
 
@@ -75,14 +75,14 @@ XQuery   //*:iconList/*:icon/*:url
 XPath    //*[local-name()='iconList']/*[local-name()='icon']/*[local-name()='url']
 ```
 
-**F-007** **A bonded Sonos set is detectable, but not from Bonjour (confirmed).** Room B announces `am=One` and its description says `modelName Sonos One`, both of which describe one speaker. The truth is in the zone topology, which any player answers for the whole network:
+**F-007** **A bonded Sonos set is detectable, but not from Bonjour (confirmed).** It announces `am=One` and its description says `modelName Sonos One`, both of which describe one speaker. The truth is in the zone topology, which any player answers for the whole network:
 
 ```text
 ChannelMapSet="RINCON_EXAMPLE2:LF,LF;RINCON_EXAMPLE3:RF,RF"
 HTSatChanMapSet="RINCON_EXAMPLE1:LF,RF;RINCON_EXAMPLE4:LR;RINCON_EXAMPLE5:RR"
 ```
 
-The first is the Room B stereo pair, one device per channel. The second is the Room A Arc with two surrounds. The second device of a pair also appears as a member carrying `Invisible="1"`.
+The first is the stereo pair, one device per channel. The second is the Arc with two surrounds. The second device of a pair also appears as a member carrying `Invisible="1"`.
 
 ## 2026-09-22 08:20, this Mac playing to two Apple receivers
 
@@ -329,7 +329,7 @@ So the state that `sf` never reports for a Sonos is readable from the speaker it
 
 `Bookshelf` is IKEA's SYMFONISK, and nothing in the AirPlay record says so. A list drawing from `am` alone calls two different products by the same word, and calls an IKEA speaker by a word IKEA does not use.
 
-**F-055 A bonded set is made of different models, and only the coordinator is on the network as far as AirPlay is concerned (confirmed).** The Room B stereo pair is a Sonos One and a Sonos One SL. The Room A set is an Arc with two Sonos One as surrounds, and those two are different generations, S18 and S13. Five of the eight speakers advertise `_raop._tcp`, and the other three are reachable only through the topology.
+**F-055 A bonded set is made of different models, and only the coordinator is on the network as far as AirPlay is concerned (confirmed).** The stereo pair is a Sonos One and a Sonos One SL. The soundbar set is an Arc with two Sonos One as surrounds, and those two are different generations, S18 and S13. Five of the eight speakers advertise `_raop._tcp`, and the other three are reachable only through the topology.
 
 So a bonded set can be named for what it actually is rather than as one speaker, and its picture could be made from the pictures of its members, each of which serves its own.
 

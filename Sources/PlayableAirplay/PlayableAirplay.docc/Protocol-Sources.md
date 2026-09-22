@@ -61,11 +61,11 @@ One wired Ethernet segment with a wireless access point on it. The Mac that ran 
 
 | Name | Model announced | What it is | Operating system | Role in the measurements |
 |---|---|---|---|---|
-| the Mac | `Mac16,11` | Mac mini M4 Pro, 2024 | macOS 27.2, build 26B5086k | The machine every tool ran on. Both an AirPlay sender and, for the receiver runs, an AirPlay receiver |
+| The Mac | `Mac16,11` | Mac mini M4 Pro, 2024 | macOS 27.2, build 26B5086k | The machine every tool ran on. Both an AirPlay sender and, for the receiver runs, an AirPlay receiver |
 | (the phone) | not read | iPhone XR | iOS 18.7 | The Apple sender whose control channel was read |
-| a second Mac | `Macmini9,1` | Mac mini, 2020 | not read | Seen in the Bonjour browse only |
+| A second Mac | `Macmini9,1` | Mac mini, 2020 | not read | Seen in the Bonjour browse only |
 | Room A | `AppleTV11,1` | Apple TV 4K, 2nd generation | tvOS 27.0, build 24J5325d | One of the two receivers in the group capture |
-| the HomePod mini | `AudioAccessory5,1` | HomePod mini | 26.6, build 23L773 | The other receiver in the group capture, and the device the status-flag readings come from |
+| The HomePod mini | `AudioAccessory5,1` | HomePod mini | 26.6, build 23L773 | The other receiver in the group capture, and the device the status-flag readings come from |
 | Room A | `Arc` | Sonos Arc with two surrounds | Sonos 96.1-79270 | Browsed and queried only |
 | Room B | `One` | Sonos One and Sonos One SL as a stereo pair | Sonos 96.1-79270 | Browsed and queried only |
 | Room C | `One` | Sonos One | Sonos 96.1-79270 | Browsed and queried only |
