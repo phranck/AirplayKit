@@ -95,6 +95,19 @@ struct PADiscovery {
     int32_t problemCode;
 };
 
+/*
+ Three codes written out rather than named.
+
+ Apple's `dns_sd.h` declares them and Avahi's compatibility header does not, so
+ naming them there fails to compile. The numbers are Apple's, taken from that
+ header, and they are what its responder returns. Avahi's own responder never
+ returns them, because it does not know them, which is exactly right: on Linux
+ these branches simply never match.
+ */
+#define PA_DNS_SERVICE_NOT_RUNNING (-65563)
+#define PA_DNS_POLICY_DENIED       (-65570)
+#define PA_DNS_NOT_PERMITTED       (-65571)
+
 /**
  What an error from the responder means to somebody holding an empty list.
 
@@ -112,13 +125,13 @@ static PADiscoveryProblem problemForError(DNSServiceErrorType error) {
         case kDNSServiceErr_NoError:
             return PADiscoveryProblemNone;
 
-        case kDNSServiceErr_PolicyDenied:
-        case kDNSServiceErr_NotPermitted:
+        case PA_DNS_POLICY_DENIED:
+        case PA_DNS_NOT_PERMITTED:
         case kDNSServiceErr_NoAuth:
         case kDNSServiceErr_Refused:
             return PADiscoveryProblemRefused;
 
-        case kDNSServiceErr_ServiceNotRunning:
+        case PA_DNS_SERVICE_NOT_RUNNING:
             return PADiscoveryProblemNoResponder;
 
         default:
