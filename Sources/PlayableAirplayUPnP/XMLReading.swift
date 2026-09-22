@@ -7,6 +7,13 @@
 
 import Foundation
 
+// Apple's Foundation carries the XML reader and the Foundation that ships with
+// Swift elsewhere puts it in a module of its own, so it is asked for by name
+// where that module exists.
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
+
 /*
  Why this is a handful of small readers rather than a model of the documents.
 
