@@ -66,3 +66,7 @@ Opening and closing a session are the two calls that wait, so neither belongs on
 
 - <doc:Discovering-Receivers>
 - <doc:Playing-Audio>
+
+### The protocol
+
+- <doc:AirPlay-2-Measured>
