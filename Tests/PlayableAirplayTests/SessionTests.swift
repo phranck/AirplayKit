@@ -37,4 +37,33 @@ final class SessionTests: XCTestCase {
         discovery.stop()
         discovery.stop()
     }
+
+    func testBrowsingAndItsReasonAgree() {
+        // The two answers are opposite sides of one fact, on either machine:
+        // where browsing is running there is nothing to explain, and where it
+        // is not there has to be a reason.
+        let discovery = AirPlayDiscovery { _ in }
+        defer { discovery.stop() }
+
+        if discovery.isBrowsing {
+            XCTAssertNil(discovery.problem)
+        } else {
+            XCTAssertNotNil(discovery.problem)
+        }
+    }
+
+    func testEveryReasonCarriesTheRespondersOwnNumber() {
+        // The number is what goes in a log, so a reason that lost it would be a
+        // reason nobody can follow up.
+        let all: [AirPlayDiscovery.Problem] = [
+            .refused(code: -65570), .noResponder(code: -65563), .failed(code: -65537),
+        ]
+
+        for problem in all {
+            switch problem {
+            case .refused(let code), .noResponder(let code), .failed(let code):
+                XCTAssertNotEqual(code, 0, "\(problem) carries no number")
+            }
+        }
+    }
 }

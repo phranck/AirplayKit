@@ -90,7 +90,54 @@ struct PADiscovery {
     pthread_mutex_t mutex;
     PARecord records[PA_MAX_RECEIVERS];
     size_t count;
+
+    PADiscoveryProblem problem;
+    int32_t problemCode;
 };
+
+/*
+ Three codes written out rather than named.
+
+ Apple's `dns_sd.h` declares them and Avahi's compatibility header does not, so
+ naming them there fails to compile. The numbers are Apple's, taken from that
+ header, and they are what its responder returns. Avahi's own responder never
+ returns them, because it does not know them, which is exactly right: on Linux
+ these branches simply never match.
+ */
+#define PA_DNS_SERVICE_NOT_RUNNING (-65563)
+#define PA_DNS_POLICY_DENIED       (-65570)
+#define PA_DNS_NOT_PERMITTED       (-65571)
+
+/**
+ What an error from the responder means to somebody holding an empty list.
+
+ `kDNSServiceErr_ServiceNotRunning` is the interesting one and it is ambiguous.
+ Measured: a sandboxed application without the network entitlement gets exactly
+ that, and so does a machine with no responder at all. The responder does not
+ separate the two, so neither does this, and the name says what is true of both.
+
+ The four codes that do say denied in as many words are mapped to a refusal.
+ None of them was produced in either run, so that mapping comes from the SDK
+ header rather than from an observation.
+ */
+static PADiscoveryProblem problemForError(DNSServiceErrorType error) {
+    switch (error) {
+        case kDNSServiceErr_NoError:
+            return PADiscoveryProblemNone;
+
+        case PA_DNS_POLICY_DENIED:
+        case PA_DNS_NOT_PERMITTED:
+        case kDNSServiceErr_NoAuth:
+        case kDNSServiceErr_Refused:
+            return PADiscoveryProblemRefused;
+
+        case PA_DNS_SERVICE_NOT_RUNNING:
+            return PADiscoveryProblemNoResponder;
+
+        default:
+            return PADiscoveryProblemFailed;
+    }
+}
 
 /** Copies a terminated string into a fixed buffer, always terminating it. */
 static void copyString(char *destination, size_t destinationSize, const char *source) {
@@ -300,7 +347,18 @@ static void DNSSD_API onBrowsed(DNSServiceRef service, DNSServiceFlags flags, ui
     PADiscovery *discovery = browse->discovery;
     const bool isRaop = browse->kind == PAServiceRaop;
 
-    if (error != kDNSServiceErr_NoError) return;
+    if (error != kDNSServiceErr_NoError) {
+        // A browse that started and then failed is where a refusal of local
+        // network access arrives, so the reason is kept and reported rather
+        // than dropped, and the caller is told so it can read it.
+        pthread_mutex_lock(&discovery->mutex);
+        discovery->problem = problemForError(error);
+        discovery->problemCode = error;
+        pthread_mutex_unlock(&discovery->mutex);
+
+        announce(discovery);
+        return;
+    }
 
     if (flags & kDNSServiceFlagsAdd) {
         // Resolved on its own connection, which is closed as soon as it has
@@ -400,9 +458,16 @@ static void *runDiscovery(void *argument) {
     return NULL;
 }
 
-PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context) {
+PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
+                                PADiscoveryProblem *problem, int32_t *code) {
+    if (problem) *problem = PADiscoveryProblemNone;
+    if (code) *code = 0;
+
     PADiscovery *discovery = calloc(1, sizeof(PADiscovery));
-    if (!discovery) return NULL;
+    if (!discovery) {
+        if (problem) *problem = PADiscoveryProblemFailed;
+        return NULL;
+    }
 
     discovery->handler = handler;
     discovery->context = context;
@@ -411,22 +476,31 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context) {
     const char *types[2] = { kRaopServiceType, kAirplayServiceType };
     const PAServiceKind kinds[2] = { PAServiceRaop, PAServiceAirplay };
     size_t started = 0;
+    DNSServiceErrorType lastError = kDNSServiceErr_NoError;
 
     for (size_t index = 0; index < 2; index++) {
         discovery->contexts[index].discovery = discovery;
         discovery->contexts[index].kind = kinds[index];
 
-        if (DNSServiceBrowse(&discovery->browsers[index], 0, 0, types[index], NULL,
-                             onBrowsed, &discovery->contexts[index]) == kDNSServiceErr_NoError) {
+        const DNSServiceErrorType outcome =
+            DNSServiceBrowse(&discovery->browsers[index], 0, 0, types[index], NULL,
+                             onBrowsed, &discovery->contexts[index]);
+
+        if (outcome == kDNSServiceErr_NoError) {
             started++;
         } else {
             discovery->browsers[index] = NULL;
+            lastError = outcome;
         }
     }
 
     // One service is enough to find receivers, and neither is enough to fail on
-    // its own. Nothing at all means there is no responder on this machine.
+    // its own. Nothing at all is a machine that cannot browse, and the reason
+    // the responder gave is what tells a refusal from an absent responder.
     if (started == 0) {
+        if (problem) *problem = problemForError(lastError);
+        if (code) *code = lastError;
+
         pthread_mutex_destroy(&discovery->mutex);
         free(discovery);
         return NULL;
@@ -438,10 +512,24 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context) {
         }
         pthread_mutex_destroy(&discovery->mutex);
         free(discovery);
+
+        if (problem) *problem = PADiscoveryProblemFailed;
         return NULL;
     }
 
     return discovery;
+}
+
+PADiscoveryProblem pa_discovery_problem(PADiscovery *discovery, int32_t *code) {
+    if (code) *code = 0;
+    if (!discovery) return PADiscoveryProblemNone;
+
+    pthread_mutex_lock(&discovery->mutex);
+    const PADiscoveryProblem problem = discovery->problem;
+    if (code) *code = discovery->problemCode;
+    pthread_mutex_unlock(&discovery->mutex);
+
+    return problem;
 }
 
 void pa_discovery_stop(PADiscovery *discovery) {

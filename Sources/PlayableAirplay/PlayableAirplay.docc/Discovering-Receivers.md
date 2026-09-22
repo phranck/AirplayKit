@@ -65,18 +65,42 @@ let discovery = AirPlayDiscovery(deliveringOn: queue) { receivers in
 
 The handler can be called several times in the first second or two as receivers answer one after another, and a receiver that goes quiet drops out of the set a little after it actually went. That is mDNS: there is no central register to ask, only answers that arrive and records that expire.
 
-### When browsing cannot start
+### Why the list is empty
 
-Browsing needs an mDNS responder on the machine. macOS always has one. A Linux machine needs `avahi-daemon`, and a container usually has neither, so ``AirPlayDiscovery/isBrowsing`` says whether either service got going at all.
+A network with nothing on it and a machine that will not let this application look produce the same empty list, and they want opposite answers. ``AirPlayDiscovery/problem`` says which it is, and ``AirPlayDiscovery/isBrowsing`` says whether either service got going at all.
 
 ```swift
 guard discovery.isBrowsing else {
-    // No responder. Nothing will ever arrive.
+    // Nothing will ever arrive. problem says why.
     return
 }
 ```
 
-This is worth checking rather than assuming, because a machine with no responder looks exactly like a network with no speakers.
+The reason is also worth reading on every change rather than once at the start, because a browse can be refused after it has started.
+
+```swift
+let discovery = AirPlayDiscovery { [weak self] receivers in
+    guard receivers.isEmpty, let problem = self?.discovery?.problem else {
+        self?.show(receivers)
+        return
+    }
+
+    switch problem {
+    case .refused, .noResponder: self?.askForLocalNetworkAccess()
+    case .failed(let code):      self?.log("browsing failed with \(code)")
+    }
+}
+```
+
+There are three reasons and two of them mean the same thing to a person.
+
+``AirPlayDiscovery/Problem/refused(code:)`` is the responder saying in as many words that this application may not look. Nothing the application does clears it; somebody has to allow it in the system's privacy settings.
+
+``AirPlayDiscovery/Problem/noResponder(code:)`` is no responder this application can reach, and it covers two situations that the responder does not separate. There may be none at all, which is the ordinary Linux case without `avahi-daemon` and the ordinary container case. Or there is one and this application is not allowed to reach it: an application built into a sandbox without network access was measured getting exactly this, with the same error number a machine running nothing gives. On macOS read it as the second, because macOS always runs a responder.
+
+``AirPlayDiscovery/Problem/failed(code:)`` is anything else, and the number is what the responder called it. That belongs in a log rather than on screen.
+
+So the honest reading is that a refusal and an absent responder arrive together, and the platform decides which sentence to put on screen. That is still far better than an empty list with no explanation, which is what an application shows when it cannot ask.
 
 ### AirPlay 1 and AirPlay 2
 
