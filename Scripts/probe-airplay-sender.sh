@@ -75,8 +75,13 @@ echo
 
 # The log is written first and reported afterwards, so a run that produced
 # nothing says so here rather than being discovered as a missing file later.
+# Unbuffered on both sides, or the times say when a buffer flushed rather than
+# when something happened. The gap in front of each line is what separates one
+# step from the next, because the operator pauses between them.
 cd "$receiver"
-./.venv/bin/python ap2-receiver.py -m "$name" --netiface="$interface" 2>&1 | tee "$log"
+./.venv/bin/python -u ap2-receiver.py -m "$name" --netiface="$interface" 2>&1 \
+    | "$root/Scripts/stamp.py" \
+    | tee "$log"
 
 echo
 if [ -s "$log" ]; then
