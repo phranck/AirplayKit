@@ -28,8 +28,15 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-interface="$(route -n get default | awk '/interface:/{print $2}')"
-address="$(ipconfig getifaddr "$interface")"
+# Every interface at once, through pktap, which also stamps each packet with the
+# one it came from. A first recording taken on the default interface alone saw
+# the receivers' PTP arrive and none of this Mac's own go out, whilst its RTSP
+# was there in both directions on that same interface. AirPlay to an Apple device
+# carries part of itself over the peer-to-peer interfaces, awdl0 and llw0, so a
+# recording of one interface is half a conversation.
+interface="pktap,all"
+routed="$(route -n get default | awk '/interface:/{print $2}')"
+address="$(ipconfig getifaddr "$routed")"
 
 mkdir -p "$(dirname "$capture")"
 
@@ -46,7 +53,7 @@ mkdir -p "$(dirname "$capture")"
 filter='udp port 319 or udp port 320 or tcp port 7000 or udp port 5353 or (udp and less 300)'
 
 {
-    echo "interface   $interface"
+    echo "interfaces  $interface (routed traffic goes over $routed)"
     echo "this Mac    $address"
     echo "started     $(date -Iseconds)"
     echo "filter      $filter"
@@ -92,5 +99,6 @@ tcpdump -r "$capture" -nn 2>/dev/null | awk '
         printf "  other    %6d\n", other
     }'
 echo
-echo "PTP at zero means the group never formed, or it formed over a different"
-echo "interface than $interface."
+echo "PTP at zero means the group never formed. This Mac's own PTP should be in"
+echo "there as well as the speakers', and a recording holding only theirs means"
+echo "the peer-to-peer interfaces were missed again."
