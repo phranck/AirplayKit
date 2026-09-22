@@ -200,6 +200,50 @@ So the name is misleading. It tells a receiver every address at which the sender
 
 **F-032 The sender asks the receiver for its volume before starting (confirmed).** A `GET_PARAMETER` for `volume` sits between the session `SETUP` and `RECORD`. The sender therefore takes the receiver's own level as its starting point rather than imposing one.
 
+## 2026-09-22 09:03, the same again, written down this time
+
+**What was done.** The same run, recorded to `airplay-sender-20260922-090345.log`, 201 lines. The iPhone played to this receiver alone, a HomePod mini joined, the volumes were moved, the HomePod left, and then this receiver left. This is the run the sequence was written for, and every step of it is in the file.
+
+**F-033 SETPEERS is sent again whenever the group changes, and it names every member including the sender (confirmed).** Three of them in one session, and the list is the whole membership each time rather than a change to it.
+
+```text
+playing alone      192.0.2.20 and four IPv6 addresses of the sender
+HomePod joins      192.0.2.30 and four of its IPv6 addresses, then the sender's five
+HomePod leaves     back to the sender's five
+```
+
+The new member is listed first and the sender last. Every member contributes every address it can be reached at, one IPv4 and four IPv6, among them a link-local, a unique local and two global ones. So the request answers the question "who is in this clock group and where is each of them", and the sender counts as a member of it.
+
+**F-034 A speaker joining an existing session changes nothing but the peer list (confirmed).** No second `SETUP`, no further `RECORD`, no new anchor, no interruption. One `SETPEERS` arrives with the enlarged list and the session carries on. The same holds in reverse when it leaves.
+
+**F-035 The anchor is sent once, and it carries a field the published record does not mention (confirmed).**
+
+```text
+networkTimeFlags       0
+networkTimeFrac        207788735369052160
+networkTimeSecs        1409162
+networkTimeTimelineID  -2267142311769604088
+rate                   1
+rtpTime                2004038641
+```
+
+`networkTimeTimelineID` is a 64 bit clock identity, printed signed here because the receiver reads it as a Python integer. `rate` is 1, which is the odd value that means play. One `SETRATEANCHORTIME` in the whole session, so the anchor is set at the start and not repeated as the group changes.
+
+**F-036 Volume is an absolute level in decibels, sent as a text parameter (confirmed).** `SET_PARAMETER` with `volume` and a value such as `-19.799999`, `-15.949732` or `-21.144213`. Seventy seven of them arrived in one session, because a slider being dragged sends a stream of them rather than one value when it settles.
+
+**F-037 A session is torn down in two requests, the stream and then the session (confirmed).**
+
+```text
+TEARDOWN   {'streams': [{'streamID': 1, 'type': 103}]}
+TEARDOWN   {}
+```
+
+**F-038 An iPhone uses the buffered stream, type 103, not the realtime one (confirmed).** The teardown names it, and nothing in the session carries type 96. This matters for a sender: the path Apple's own phone takes to a speaker is the buffered one over TCP.
+
+**F-039 The session identifier belongs to the session rather than to the device (confirmed).** It appears in the URI of every request after the first, and it differed between two runs against the same pair of devices: `8928768582649070638` and `2579821923116532825`.
+
+**F-040 (method) The receiver prints no timestamps, so commands cannot be attributed to the moment they were caused (confirmed).** Seventy seven volume commands arrived and there is no way to tell which of them came from moving this receiver's own slider, which from moving the other speaker's, and which from the sender's own volume keys. Whatever runs next prefixes every line with a time, and the operator is asked to say roughly when each step was taken.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
