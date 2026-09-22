@@ -34,15 +34,18 @@ if [ ! -x "$receiver/.venv/bin/python" ]; then
     exit 1
 fi
 
+# Said rather than refused. ControlCenter listens on port 7000 whether or not the
+# system's own AirPlay Receiver is switched on, and this receiver binds its own
+# address alongside it and works. What the system receiver does cost is clarity,
+# because then two receivers answer and only the name in the sender's list says
+# which is which.
 holder="$(lsof -nP -iTCP:7000 -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $1; exit}' || true)"
 if [ -n "$holder" ]; then
-    echo "Port 7000 is held by $holder, so a sender would reach that instead of this."
+    echo "Note: $holder is also listening on port 7000."
+    echo "If this Mac appears twice in the sender's list, the other one is the"
+    echo "system's own receiver, under System Settings, General, AirDrop and"
+    echo "Handoff. Pick the one named below."
     echo
-    echo "Switch the system's own receiver off first:"
-    echo "  System Settings, General, AirDrop and Handoff, AirPlay Receiver."
-    echo
-    echo "Switch it back on when you are done, or this Mac stops being a speaker."
-    exit 1
 fi
 
 interface="$(route -n get default | awk '/interface:/{print $2}')"
@@ -70,5 +73,14 @@ echo "starting alone, and a second speaker joining one that is already playing."
 echo "Steps 8 and 9 are the only sight of how a member leaves a group."
 echo
 
+# The log is written first and reported afterwards, so a run that produced
+# nothing says so here rather than being discovered as a missing file later.
 cd "$receiver"
 ./.venv/bin/python ap2-receiver.py -m "$name" --netiface="$interface" 2>&1 | tee "$log"
+
+echo
+if [ -s "$log" ]; then
+    echo "Wrote $(wc -l < "$log" | tr -d ' ') lines to $log"
+else
+    echo "Nothing was written to $log. The receiver never got going."
+fi

@@ -116,10 +116,12 @@ echo
 
 tcpdump -i "$interface" -s 0 -w "$capture" -G "$seconds" -W 1 "$filter" 2>/dev/null || true
 
-# tcpdump ran as root, so what it wrote belongs to root. Hand it back to whoever
-# asked for it, or the next step cannot read it.
+# Everything here ran as root, so the folder and its contents belong to root.
+# Hand the whole folder back, not only the two files: a folder owned by root is
+# one nothing else can write into, and the next tool to try simply fails with a
+# permission error in the middle of a run.
 if [ -n "${SUDO_USER:-}" ]; then
-    chown "$SUDO_USER" "$capture" "$notes"
+    chown -R "$SUDO_USER" "$(dirname "$capture")"
 fi
 
 echo
