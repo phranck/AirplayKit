@@ -43,6 +43,15 @@ let package = Package(
          and gets the same thing a step lower down.
          */
         .library(name: "CPlayableAirplay", targets: ["CPlayableAirplay"]),
+
+        /*
+         What a speaker will say about itself when AirPlay will not.
+
+         Kept apart on purpose. The library above is about AirPlay and says so,
+         and one manufacturer's own services do not belong inside it. A caller
+         that wants both takes both.
+         */
+        .library(name: "PlayableAirplayUPnP", targets: ["PlayableAirplayUPnP"]),
     ],
     targets: [
         // The Swift interface, and the only thing a caller sees.
@@ -50,6 +59,15 @@ let package = Package(
             name: "PlayableAirplay",
             dependencies: ["CPlayableAirplay"]
         ),
+
+        /*
+         Reading a speaker through its own services.
+
+         Depends on nothing, not even on the library above, because the two
+         answer the same questions by different means and neither needs the
+         other to do it.
+         */
+        .target(name: "PlayableAirplayUPnP"),
 
         /*
          Everything underneath, in one target.
@@ -72,7 +90,8 @@ let package = Package(
                 "LICENSE", "NOTICE", "Package.swift", "README.md",
                 // Named by publicHeadersPath rather than compiled.
                 "Sources/CPlayableAirplay/include/module.modulemap",
-                "Scripts", "Sources/Demo", "Sources/PlayableAirplay", "Tests", "Website",
+                "Scripts", "Sources/Demo", "Sources/PlayableAirplay",
+                "Sources/PlayableAirplayUPnP", "Tests", "Website",
                 "third_party/airplay2-sender-cpp/src/raop_qt_host.cpp",
                 // Every seed comes from Mbed TLS, so this file and its entropy
                 // paths are left out and ED25519_NO_SEED set in their place.
@@ -109,12 +128,12 @@ let package = Package(
         // Finds receivers, plays a tone, and plays a file, from a terminal.
         .executableTarget(
             name: "Demo",
-            dependencies: ["PlayableAirplay"]
+            dependencies: ["PlayableAirplay", "PlayableAirplayUPnP"]
         ),
 
         .testTarget(
             name: "PlayableAirplayTests",
-            dependencies: ["PlayableAirplay", "CPlayableAirplay"]
+            dependencies: ["PlayableAirplay", "CPlayableAirplay", "PlayableAirplayUPnP"]
         ),
     ],
     cxxLanguageStandard: .cxx20
