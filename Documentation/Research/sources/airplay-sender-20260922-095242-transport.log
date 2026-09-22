@@ -1,0 +1,281 @@
+09:52:42 +  0.00  [Receiver]: Name: PlayableProbe
+09:52:42 +  0.00  [Receiver]: Enabled features: 0001c300405f4200
+09:52:42 +  0.00  [Receiver]: 495880824111616
+09:52:42 +  0.15  [Receiver]: Interface: en0
+09:52:42 +  0.00  [Receiver]: Mac: 02:00:00:00:00:00
+09:52:42 +  0.00  [Receiver]: IPv4: 10.0.0.193
+09:52:42 +  0.00  [Receiver]: IPv6: fe80::4fa:a6a1:43ab:8f9d
+09:52:42 +  0.00  [Receiver]: 
+09:52:42 +  0.00  [asyncio]: Using selector: KqueueSelector
+09:52:43 +  0.80  [Receiver]: mDNS: service registered
+09:52:43 +  0.00  [Receiver]: Starting RTSP server, press Ctrl-C to exit...
+09:52:43 +  0.00  [Receiver]: serving on 10.0.0.193:7000
+09:53:40 + 56.70  [AP2Server: 10.0.0.193:7000]: Opened connection from 10.0.0.173:50074
+09:53:40 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: {'qualifier': ['txtAirPlay']}
+09:53:40 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: Sending our device info
+09:53:40 +  0.17  [AP2Server: 10.0.0.193:7000]: Thread-2 (process_request_thread): Opened HAPSocket from 10.0.0.173:50074
+09:53:40 +  0.03  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETUP: rtsp://10.0.0.193/674886484026542932
+09:53:40 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: 
+09:53:42 +  2.08  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: GET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:42 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: GET_PARAMETER: b'volume'
+09:53:42 +  0.15  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: RECORD: rtsp://10.0.0.193/674886484026542932
+09:53:42 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETPEERS: rtsp://10.0.0.193/674886484026542932
+09:53:42 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: ['10.0.0.173',
+09:53:42 +  0.00   'fe80::c74:823:970e:45fc',
+09:53:42 +  0.00   '2a04:9546:1c0a:c01:144c:d33f:951c:9c10',
+09:53:42 +  0.00   'fdbe:e9a4:54f4:0:1435:f725:999b:3f92',
+09:53:42 +  0.00   '2a04:9546:1c0a:c01:c74:823:970e:45fc']
+09:53:43 +  0.52  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETUP: rtsp://10.0.0.193/674886484026542932
+09:53:43 +  0.01  [utils] removing StreamHandler from Audio.debug file logger
+09:53:43 +  0.00  [Audio.debug] file logging level: DEBUG
+09:53:43 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: 
+09:53:43 +  0.15  [asyncio]: Using selector: KqueueSelector
+09:53:43 +  0.07  Exception in thread Thread-1 (serve):
+09:53:43 +  0.00  Traceback (most recent call last):
+09:53:43 +  0.00    File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+09:53:43 +  0.00      self.run()
+09:53:43 +  0.00    File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/threading.py", line 982, in run
+09:53:43 +  0.00      self._target(*self._args, **self._kwargs)
+09:53:43 +  0.00    File "/Users/phranck/Developer/Projects/PlayableAirplay/build/airplay2-receiver/ap2/connections/audio.py", line 928, in serve
+09:53:43 +  0.00      self.init_audio_sink()
+09:53:43 +  0.00    File "/Users/phranck/Developer/Projects/PlayableAirplay/build/airplay2-receiver/ap2/connections/audio.py", line 503, in init_audio_sink
+09:53:43 +  0.00      self.codecContext.channels = self.channel_count
+09:53:43 +  0.00      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+09:53:43 +  0.00  AttributeError: attribute 'channels' of 'av.audio.codeccontext.AudioCodecContext' objects is not writable
+09:53:43 +  0.48  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: {'audioMode': 'default'}
+09:53:43 +  0.14  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETRATEANCHORTIME: rtsp://10.0.0.193/674886484026542932
+09:53:43 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: {'networkTimeFlags': 0,
+09:53:43 +  0.00   'networkTimeFrac': -8768708216239423488,
+09:53:43 +  0.00   'networkTimeSecs': 1410493,
+09:53:43 +  0.00   'networkTimeTimelineID': -2267142311769604088,
+09:53:43 +  0.00   'rate': 1,
+09:53:43 +  0.00   'rtpTime': 1442375314}
+09:53:43 +  0.00  Exception in thread Thread-2 (play):
+09:53:43 +  0.00  Traceback (most recent call last):
+09:53:43 +  0.00    File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+09:53:43 +  0.00      self.run()
+09:53:43 +  0.00    File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/threading.py", line 982, in run
+09:53:43 +  0.00      self._target(*self._args, **self._kwargs)
+09:53:43 +  0.00    File "/Users/phranck/Developer/Projects/PlayableAirplay/build/airplay2-receiver/ap2/connections/audio.py", line 861, in play
+09:53:43 +  0.00      message = serverconn.recv()
+09:53:43 +  0.00                ^^^^^^^^^^^^^^^^^
+09:53:43 +  0.00    File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/multiprocessing/connection.py", line 250, in recv
+09:53:43 +  0.00      buf = self._recv_bytes()
+09:53:43 +  0.00            ^^^^^^^^^^^^^^^^^^
+09:53:43 +  0.00    File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+09:53:43 +  0.00      buf = self._recv(4)
+09:53:43 +  0.00            ^^^^^^^^^^^^^
+09:53:43 +  0.00    File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/multiprocessing/connection.py", line 399, in _recv
+09:53:43 +  0.00      raise EOFError
+09:53:43 +  0.00  EOFError
+09:53:43 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:43 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -28.500000'
+09:53:44 +  0.19  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:44 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER error: BrokenPipeError(32, 'Broken pipe')
+09:53:44 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: b'progress' => b' 1441844383/1442384269/1448590492'
+09:53:44 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:44 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:53:44 +  0.00  dmap.persistentid: 0x581bb34cf9536865
+09:53:44 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:53:44 +  0.00  daap.songartist: Brad Fiedel
+09:53:44 +  0.00  daap.songcomposer: Brad Fiedel
+09:53:44 +  0.00  daap.songgenre: Soundtracks
+09:53:44 +  0.00  dmap.itemname: Sarah on the Run (Remastered 2017)
+09:53:44 +  0.00  
+09:53:44 +  0.01  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:44 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:53:44 +  0.00  dmap.persistentid: 0x581bb34cf9536865
+09:53:44 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:53:44 +  0.00  daap.songartist: Brad Fiedel
+09:53:44 +  0.00  daap.songcomposer: Brad Fiedel
+09:53:44 +  0.00  daap.songgenre: Soundtracks
+09:53:44 +  0.00  dmap.itemname: Sarah on the Run (Remastered 2017)
+09:53:44 +  0.00  dacp.playerstate: Playing
+09:53:44 +  0.00  
+09:53:44 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:44 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER error: BrokenPipeError(32, 'Broken pipe')
+09:53:44 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: b'progress' => b' 1441844384/1442385185/1448590493'
+09:53:44 +  0.50  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:44 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:53:44 +  0.00  dmap.persistentid: 0x581bb34cf9536865
+09:53:44 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:53:44 +  0.00  daap.songartist: Brad Fiedel
+09:53:44 +  0.00  daap.songcomposer: Brad Fiedel
+09:53:44 +  0.00  daap.songgenre: Soundtracks
+09:53:44 +  0.00  dmap.itemname: Sarah on the Run (Remastered 2017)
+09:53:44 +  0.00  dacp.playerstate: Playing
+09:53:44 +  0.00  
+09:53:48 +  3.84  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETRATEANCHORTIME: rtsp://10.0.0.193/674886484026542932
+09:53:48 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETRATEANCHORTIME error: BrokenPipeError(32, 'Broken pipe')
+09:53:48 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: {'rate': 0}
+09:53:54 +  5.81  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: {'audioMode': 'default'}
+09:53:54 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETRATEANCHORTIME: rtsp://10.0.0.193/674886484026542932
+09:53:54 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETRATEANCHORTIME error: BrokenPipeError(32, 'Broken pipe')
+09:53:54 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: {'networkTimeFlags': 0,
+09:53:54 +  0.00   'networkTimeFrac': -1876347465024667648,
+09:53:54 +  0.00   'networkTimeSecs': 1410503,
+09:53:54 +  0.00   'networkTimeTimelineID': -2267142311769604088,
+09:53:54 +  0.00   'rate': 1,
+09:53:54 +  0.00   'rtpTime': 1442542965}
+09:53:54 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:54 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER error: BrokenPipeError(32, 'Broken pipe')
+09:53:54 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: b'progress' => b' 1441576479/1442543053/1448322588'
+09:53:54 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:54 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:53:54 +  0.00  dmap.persistentid: 0x581bb34cf9536865
+09:53:54 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:53:54 +  0.00  daap.songartist: Brad Fiedel
+09:53:54 +  0.00  daap.songcomposer: Brad Fiedel
+09:53:54 +  0.00  daap.songgenre: Soundtracks
+09:53:54 +  0.00  dmap.itemname: Sarah on the Run (Remastered 2017)
+09:53:54 +  0.00  
+09:53:54 +  0.01  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:54 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:53:54 +  0.00  dmap.persistentid: 0x581bb34cf9536865
+09:53:54 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:53:54 +  0.00  daap.songartist: Brad Fiedel
+09:53:54 +  0.00  daap.songcomposer: Brad Fiedel
+09:53:54 +  0.00  daap.songgenre: Soundtracks
+09:53:54 +  0.00  dmap.itemname: Sarah on the Run (Remastered 2017)
+09:53:54 +  0.00  dacp.playerstate: Playing
+09:53:54 +  0.00  
+09:53:54 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:54 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER error: BrokenPipeError(32, 'Broken pipe')
+09:53:54 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: b'progress' => b' 1441833361/1442543985/1448579470'
+09:53:55 +  0.86  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:55 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:53:55 +  0.00  dmap.persistentid: 0x581bb34cf9536865
+09:53:55 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:53:55 +  0.00  daap.songartist: Brad Fiedel
+09:53:55 +  0.00  daap.songcomposer: Brad Fiedel
+09:53:55 +  0.00  daap.songgenre: Soundtracks
+09:53:55 +  0.00  dmap.itemname: Sarah on the Run (Remastered 2017)
+09:53:55 +  0.00  dacp.playerstate: Playing
+09:53:55 +  0.00  
+09:53:59 +  3.91  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:59 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:53:59 +  0.00  dmap.persistentid: 0x581bb34cf9536865
+09:53:59 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:53:59 +  0.00  daap.songartist: Brad Fiedel
+09:53:59 +  0.00  daap.songcomposer: Brad Fiedel
+09:53:59 +  0.00  daap.songgenre: Soundtracks
+09:53:59 +  0.00  dmap.itemname: Sarah on the Run (Remastered 2017)
+09:53:59 +  0.00  dacp.playerstate: Playing
+09:53:59 +  0.00  
+09:53:59 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:53:59 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER error: BrokenPipeError(32, 'Broken pipe')
+09:53:59 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: b'progress' => b' 1441866293/1442754253/1448612402'
+09:54:01 +  1.95  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:01 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:54:01 +  0.00  dmap.persistentid: 0x581bb34cf9536865
+09:54:01 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:54:01 +  0.00  daap.songartist: Brad Fiedel
+09:54:01 +  0.00  daap.songcomposer: Brad Fiedel
+09:54:01 +  0.00  daap.songgenre: Soundtracks
+09:54:01 +  0.00  dmap.itemname: Sarah on the Run (Remastered 2017)
+09:54:01 +  0.00  dacp.playerstate: Paused
+09:54:01 +  0.00  
+09:54:01 +  0.01  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:01 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:54:01 +  0.00  dmap.persistentid: 0x581bb34cf9536866
+09:54:01 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:54:01 +  0.00  daap.songartist: Brad Fiedel
+09:54:01 +  0.00  daap.songcomposer: Brad Fiedel
+09:54:01 +  0.00  daap.songgenre: Soundtracks
+09:54:01 +  0.00  dmap.itemname: Escape from the Hospital (Remastered 2017)
+09:54:01 +  0.00  
+09:54:01 +  0.06  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: FLUSHBUFFERED: rtsp://10.0.0.193/674886484026542932
+09:54:01 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: FLUSHBUFFERED error: BrokenPipeError(32, 'Broken pipe')
+09:54:01 +  0.03  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: {'audioMode': 'default'}
+09:54:03 +  2.03  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETRATEANCHORTIME: rtsp://10.0.0.193/674886484026542932
+09:54:03 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETRATEANCHORTIME error: BrokenPipeError(32, 'Broken pipe')
+09:54:03 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: {'networkTimeFlags': 0,
+09:54:03 +  0.00   'networkTimeFrac': -4513477858877767680,
+09:54:03 +  0.00   'networkTimeSecs': 1410512,
+09:54:03 +  0.00   'networkTimeTimelineID': -2267142311769604088,
+09:54:03 +  0.00   'rate': 1,
+09:54:03 +  0.00   'rtpTime': 3133593496}
+09:54:03 +  0.01  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:03 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER error: BrokenPipeError(32, 'Broken pipe')
+09:54:03 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: b'progress' => b' 3133509350/3133593536/3145666264'
+09:54:03 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:03 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:54:03 +  0.00  dmap.persistentid: 0x581bb34cf9536866
+09:54:03 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:54:03 +  0.00  daap.songartist: Brad Fiedel
+09:54:03 +  0.00  daap.songcomposer: Brad Fiedel
+09:54:03 +  0.00  daap.songgenre: Soundtracks
+09:54:03 +  0.00  dmap.itemname: Escape from the Hospital (Remastered 2017)
+09:54:03 +  0.00  
+09:54:03 +  0.61  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:03 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:54:03 +  0.00  dmap.persistentid: 0x581bb34cf9536866
+09:54:03 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:54:03 +  0.00  daap.songartist: Brad Fiedel
+09:54:03 +  0.00  daap.songcomposer: Brad Fiedel
+09:54:03 +  0.00  daap.songgenre: Soundtracks
+09:54:03 +  0.00  dmap.itemname: Escape from the Hospital (Remastered 2017)
+09:54:03 +  0.00  dacp.playerstate: Playing
+09:54:03 +  0.00  
+09:54:03 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:03 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER error: BrokenPipeError(32, 'Broken pipe')
+09:54:03 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: b'progress' => b' 3133615509/3133621243/3145772423'
+09:54:04 +  0.39  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:04 +  0.13  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:54:04 +  0.00  dmap.persistentid: 0x581bb34cf9536866
+09:54:04 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:54:04 +  0.00  daap.songartist: Brad Fiedel
+09:54:04 +  0.00  daap.songcomposer: Brad Fiedel
+09:54:04 +  0.00  daap.songgenre: Soundtracks
+09:54:04 +  0.00  dmap.itemname: Escape from the Hospital (Remastered 2017)
+09:54:04 +  0.00  dacp.playerstate: Playing
+09:54:04 +  0.00  
+09:54:10 +  5.93  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETRATEANCHORTIME: rtsp://10.0.0.193/674886484026542932
+09:54:10 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETRATEANCHORTIME error: BrokenPipeError(32, 'Broken pipe')
+09:54:10 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: {'rate': 0}
+09:54:10 +  0.10  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: {'audioMode': 'default'}
+09:54:12 +  1.97  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETRATEANCHORTIME: rtsp://10.0.0.193/674886484026542932
+09:54:12 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SETRATEANCHORTIME error: BrokenPipeError(32, 'Broken pipe')
+09:54:12 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: {'networkTimeFlags': 0,
+09:54:12 +  0.00   'networkTimeFrac': -1742152015020032000,
+09:54:12 +  0.00   'networkTimeSecs': 1410521,
+09:54:12 +  0.00   'networkTimeTimelineID': -2267142311769604088,
+09:54:12 +  0.00   'rate': 1,
+09:54:12 +  0.00   'rtpTime': 2969409775}
+09:54:12 +  0.01  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:12 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER error: BrokenPipeError(32, 'Broken pipe')
+09:54:12 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: b'progress' => b' 2965571346/2969409818/2977728260'
+09:54:12 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:12 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:54:12 +  0.00  dmap.persistentid: 0x581bb34cf9536866
+09:54:12 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:54:12 +  0.00  daap.songartist: Brad Fiedel
+09:54:12 +  0.00  daap.songcomposer: Brad Fiedel
+09:54:12 +  0.00  daap.songgenre: Soundtracks
+09:54:12 +  0.00  dmap.itemname: Escape from the Hospital (Remastered 2017)
+09:54:12 +  0.00  
+09:54:12 +  0.12  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:12 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:54:12 +  0.00  dmap.persistentid: 0x581bb34cf9536866
+09:54:12 +  0.00  daap.songalbum: Terminator 2: Judgment Day (Original Soundtrack Recording) [Remastered 2017]
+09:54:12 +  0.00  daap.songartist: Brad Fiedel
+09:54:12 +  0.00  daap.songcomposer: Brad Fiedel
+09:54:12 +  0.00  daap.songgenre: Soundtracks
+09:54:12 +  0.00  dmap.itemname: Escape from the Hospital (Remastered 2017)
+09:54:12 +  0.00  dacp.playerstate: Playing
+09:54:12 +  0.00  
+09:54:12 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:12 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER error: BrokenPipeError(32, 'Broken pipe')
+09:54:12 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: b'progress' => b' 2965658693/2969415555/2977815607'
+09:54:18 +  5.77  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:18 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: DMAP:
+09:54:18 +  0.00  dacp.playerstate: Playing
+09:54:18 +  0.00  
+09:54:18 +  0.01  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/674886484026542932
+09:54:18 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER error: BrokenPipeError(32, 'Broken pipe')
+09:54:18 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: SET_PARAMETER: b'progress' => b' 2965914898/2969670184/2978071812'
+09:54:18 +  0.19  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: FLUSHBUFFERED: rtsp://10.0.0.193/674886484026542932
+09:54:18 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: FLUSHBUFFERED error: BrokenPipeError(32, 'Broken pipe')
+09:54:18 +  0.15  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: TEARDOWN: rtsp://10.0.0.193/674886484026542932
+09:54:18 +  0.00  [AP2Handler: 10.0.0.193:7000<=>10.0.0.173:50074; Thread-2 (process_request_thread)]: {'streams': [{'streamID': 1, 'type': 103}]}
+09:54:18 +  0.13  [asyncio]: Using selector: KqueueSelector
