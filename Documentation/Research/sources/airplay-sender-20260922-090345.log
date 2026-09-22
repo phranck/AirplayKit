@@ -1,0 +1,201 @@
+[Receiver]: Name: PlayableProbe
+[Receiver]: Enabled features: 0001c300405f4200
+[Receiver]: 495880824111616
+[Receiver]: Interface: en0
+[Receiver]: Mac: 02:00:00:00:00:00
+[Receiver]: IPv4: 10.0.0.193
+[Receiver]: IPv6: fe80::4fa:a6a1:43ab:8f9d
+[Receiver]: 
+[asyncio]: Using selector: KqueueSelector
+[Receiver]: mDNS: service registered
+[Receiver]: Starting RTSP server, press Ctrl-C to exit...
+[Receiver]: serving on 10.0.0.193:7000
+[AP2Server: 10.0.0.193:7000]: Opened connection from 10.0.0.173:49891
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: {'qualifier': ['txtAirPlay']}
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: Sending our device info
+[AP2Server: 10.0.0.193:7000]: Thread-2 (process_request_thread): Opened HAPSocket from 10.0.0.173:49891
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SETUP: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: 
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: GET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: GET_PARAMETER: b'volume'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: RECORD: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SETPEERS: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: ['10.0.0.173',
+ 'fe80::c74:823:970e:45fc',
+ '2a04:9546:1c0a:c01:144c:d33f:951c:9c10',
+ 'fdbe:e9a4:54f4:0:1435:f725:999b:3f92',
+ '2a04:9546:1c0a:c01:c74:823:970e:45fc']
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SETUP: rtsp://10.0.0.193/2579821923116532825
+[utils] removing StreamHandler from Audio.debug file logger
+[Audio.debug] file logging level: DEBUG
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: 
+[asyncio]: Using selector: KqueueSelector
+Exception in thread Thread-1 (serve):
+Traceback (most recent call last):
+  File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/phranck/Developer/Projects/PlayableAirplay/build/airplay2-receiver/ap2/connections/audio.py", line 928, in serve
+    self.init_audio_sink()
+  File "/Users/phranck/Developer/Projects/PlayableAirplay/build/airplay2-receiver/ap2/connections/audio.py", line 503, in init_audio_sink
+    self.codecContext.channels = self.channel_count
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: attribute 'channels' of 'av.audio.codeccontext.AudioCodecContext' objects is not writable
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: {'audioMode': 'default'}
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SETRATEANCHORTIME: rtsp://10.0.0.193/2579821923116532825
+Exception in thread Thread-2 (play):
+Traceback (most recent call last):
+  File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: {'networkTimeFlags': 0,
+ 'networkTimeFrac': 207788735369052160,
+ 'networkTimeSecs': 1409162,
+ 'networkTimeTimelineID': -2267142311769604088,
+ 'rate': 1,
+ 'rtpTime': 2004038641}
+    self.run()
+  File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/phranck/Developer/Projects/PlayableAirplay/build/airplay2-receiver/ap2/connections/audio.py", line 861, in play
+    message = serverconn.recv()
+              ^^^^^^^^^^^^^^^^^
+  File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+          ^^^^^^^^^^^^^^^^^^
+  File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+          ^^^^^^^^^^^^^
+  File "/Users/phranck/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/multiprocessing/connection.py", line 399, in _recv
+    raise EOFError
+EOFError
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -19.799999'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: DMAP:
+dmap.persistentid: 0x4736bf4fafd1a9cd
+daap.songartist: Getting up with someone who cares. Dein unterhaltsamer Start in den Tag mit Gästen, Spielen, Comedy, aktuellen Themen und News in Englisch und Deutsch.
+dmap.itemname: Morning Show
+daap.songdatakind: True
+dacp.playerstate: Playing
+
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SETPEERS: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: ['10.0.0.154',
+ 'fe80::1447:801e:9b8f:914a',
+ '2a04:9546:1c0a:c01:14fe:ae45:3e7e:503c',
+ 'fdbe:e9a4:54f4:0:1408:2ff9:c178:89a6',
+ '2a04:9546:1c0a:c01:1447:801e:9b8f:914a',
+ '10.0.0.173',
+ 'fe80::c74:823:970e:45fc',
+ '2a04:9546:1c0a:c01:144c:d33f:951c:9c10',
+ 'fdbe:e9a4:54f4:0:1435:f725:999b:3f92',
+ '2a04:9546:1c0a:c01:c74:823:970e:45fc']
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -18.997860'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -15.949732'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -14.826736'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -13.543314'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -12.821390'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -11.778608'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -10.575399'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: DMAP:
+dmap.persistentid: 0x01967128c02fefce
+daap.songartist: Karin Park
+dmap.itemname: Look What You've Done
+dacp.playerstate: Playing
+
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: DMAP:
+dmap.persistentid: 0x01967128c02fefce
+daap.songartist: Karin Park
+dmap.itemname: Look What You've Done
+dacp.playerstate: Playing
+
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: DMAP:
+dmap.persistentid: 0x01967128c02fefce
+daap.songartist: Karin Park
+dmap.itemname: Look What You've Done
+dacp.playerstate: Playing
+
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: DMAP:
+dmap.persistentid: 0x01967128c02fefce
+daap.songartist: Karin Park
+dmap.itemname: Look What You've Done
+dacp.playerstate: Playing
+
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -9.933688'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -7.366844'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -7.045988'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -7.848127'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -11.377539'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -13.944385'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -15.067379'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -16.190372'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -17.554008'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -18.195721'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -18.757217'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -19.880213'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -20.281282'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -20.762566'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -21.273808'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -22.744915'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -23.936491'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -24.479578'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -25.095078'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -25.565752'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -25.022665'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -22.307232'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -21.181982'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -19.860073'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -19.406849'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -19.784536'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -20.766525'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SET_PARAMETER: b'volume' => b' -21.144213'
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: SETPEERS: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: ['10.0.0.173',
+ 'fe80::c74:823:970e:45fc',
+ '2a04:9546:1c0a:c01:144c:d33f:951c:9c10',
+ 'fdbe:e9a4:54f4:0:1435:f725:999b:3f92',
+ '2a04:9546:1c0a:c01:c74:823:970e:45fc']
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: TEARDOWN: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: {'streams': [{'streamID': 1, 'type': 103}]}
+[asyncio]: Using selector: KqueueSelector
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: TEARDOWN: rtsp://10.0.0.193/2579821923116532825
+[AP2Handler: 10.0.0.193:7000<=>10.0.0.173:49891; Thread-2 (process_request_thread)]: {}
+[asyncio]: Using selector: KqueueSelector
