@@ -30,6 +30,8 @@ Nine AirPlay receivers, measured on 2026-09-22.
 | Room D | `Bookshelf` | `sonos-4.local` | A Sonos bookshelf speaker |
 | Room E | `Bookshelf` | `sonos-5.local` | A Sonos bookshelf speaker |
 
+The versions, read off each device rather than assumed. The Mac reports macOS 27.2, build 26B5086k, from `sw_vers`, and it is a Mac mini M4 Pro. The Apple TV reports build `24J5325d` and `ov=27.0`. The HomePod mini reports build `23L773` and `ov=26.6`. Every Sonos reports `96.1-79270`. The iPhone is an iPhone XR on iOS 18.7, which its owner states, because a sender publishes no `/info` and nothing about it can be read off the network.
+
 The Mac is on Ethernet as `en0`, address `192.0.2.10`, link-local `fe80::1`, hardware address `02:00:00:00:00:01`. Its peer-to-peer interfaces `awdl0` and `llw0` share the hardware address `02:00:00:00:00:02`.
 
 ## 2026-09-22, what a receiver says about itself over Bonjour
@@ -374,7 +376,7 @@ So the anchor names the clock its times are expressed against, and that clock be
 
 **F-026** **It needs the port macOS holds (confirmed).** `ControlCenter` listens on `*:7000` whilst the system's own AirPlay Receiver is switched on, so that has to be off for the duration or a sender reaches the system receiver instead.
 
-**F-027** **Setting it up on macOS 26 with Python 3.11 needs four things beyond its own requirements file (confirmed).** Its pins for `zeroconf` and `av` are old. The core dependencies install unchanged, `av` installs current at version 18.1.0, `pyaudio` needs `portaudio` from Homebrew first, and the audio module imports all three at startup whether or not any audio is wanted.
+**F-027** **Setting it up on macOS 27.2 with Python 3.11 needs four things beyond its own requirements file (confirmed).** Its pins for `zeroconf` and `av` are old. The core dependencies install unchanged, `av` installs current at version 18.1.0, `pyaudio` needs `portaudio` from Homebrew first, and the audio module imports all three at startup whether or not any audio is wanted.
 
 ## Still open
 

@@ -41,7 +41,7 @@ The published record gives this order, and states it as load-bearing (reported c
 
 A capture of an Apple sender arrives at a compatible order independently. It sends `GET /info` with the `txtAirPlay` qualifier, then the session SETUP, then a second bodyless `GET /info`, then RECORD, then SETPEERS, then the volume requests and a `POST /feedback` loop, with the stream SETUP later at the moment audio is about to start and FLUSH after it (reported confirmed as a description of that capture, [Cozzi, Protocols](https://web.archive.org/web/20220214214828/https://emanuelecozzi.net/docs/airplay2/protocols/)).
 
-This is what an iPhone on iOS 26 actually sent, with the first three requests read out of a packet recording and the rest out of a receiver that held the pairing keys (measured 2026-09-22, captured and decrypted, F-020 and F-028).
+This is what an iPhone XR on iOS 18.7 actually sent, with the first three requests read out of a packet recording and the rest out of a receiver that held the pairing keys (measured 2026-09-22, captured and decrypted, F-020 and F-028).
 
 ```text
 GET /info?txtAirPlay&txtRAOP     asked several times, in the clear

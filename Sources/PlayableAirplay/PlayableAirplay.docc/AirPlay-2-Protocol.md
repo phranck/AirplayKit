@@ -20,7 +20,7 @@ The four words that say how something was measured are these. `browsed` means a 
 
 ### What the measurement was
 
-One iPhone on iOS 26, one Mac on macOS 26, a HomePod mini, an Apple TV 4K and five Sonos speakers, on one home network, on 22 September 2026. Nothing below rests on a second network or a second day.
+One iPhone XR on iOS 18.7, one Mac mini M4 Pro on macOS 27.2, a HomePod mini, an Apple TV 4K and five Sonos speakers, on one home network, on 22 September 2026. Nothing below rests on a second network or a second day.
 
 That makes the measurement narrower than a specification and more reliable than one. It covers what those devices did, and it says nothing about a device that was not there. Where a measurement disagrees with a source, both are stated, and the measurement is what the wire did that day.
 
