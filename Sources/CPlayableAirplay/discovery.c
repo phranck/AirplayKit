@@ -94,6 +94,19 @@ static void DNSSD_API onResolved(DNSServiceRef service, DNSServiceFlags flags, u
     uint8_t valueLength = 0;
     receiver.supportsAirPlay2 = TXTRecordGetValuePtr(txtLength, txt, "pk", &valueLength) != NULL;
 
+    // What it says it is. Measured across one network: every receiver announced
+    // this, Apple's as a model identifier and Sonos as a product name. The value
+    // is not terminated, so it is copied rather than pointed at, and the struct
+    // was cleared above, so a receiver announcing none leaves it empty.
+    uint8_t modelLength = 0;
+    const void *model = TXTRecordGetValuePtr(txtLength, txt, "am", &modelLength);
+    if (model && modelLength > 0) {
+        const size_t room = sizeof(receiver.model) - 1;
+        const size_t taken = modelLength < room ? modelLength : room;
+        memcpy(receiver.model, model, taken);
+        receiver.model[taken] = '\0';
+    }
+
     strncpy(instance, fullName, sizeof(instance) - 1);
     instance[sizeof(instance) - 1] = '\0';
     char *dot = strstr(instance, "._raop.");
