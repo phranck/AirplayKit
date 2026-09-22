@@ -28,15 +28,21 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# Every interface at once, through pktap, which also stamps each packet with the
-# one it came from. A first recording taken on the default interface alone saw
-# the receivers' PTP arrive and none of this Mac's own go out, whilst its RTSP
-# was there in both directions on that same interface. AirPlay to an Apple device
-# carries part of itself over the peer-to-peer interfaces, awdl0 and llw0, so a
-# recording of one interface is half a conversation.
-interface="pktap,all"
+# Named one by one through pktap rather than asked for as a group. Two earlier
+# recordings held the receivers' timing traffic and none of this Mac's own,
+# whilst its RTSP was there in both directions, and both files turned out to
+# carry en0 alone. AirPlay to an Apple device uses the peer-to-peer interfaces,
+# so they are named here and the summary says which ones actually landed.
 routed="$(route -n get default | awk '/interface:/{print $2}')"
 address="$(ipconfig getifaddr "$routed")"
+
+wanted=("$routed")
+for candidate in awdl0 llw0 en1 ap1; do
+    if ifconfig "$candidate" > /dev/null 2>&1; then
+        wanted+=("$candidate")
+    fi
+done
+interface="pktap,$(IFS=,; echo "${wanted[*]}")"
 
 mkdir -p "$(dirname "$capture")"
 
@@ -85,6 +91,35 @@ fi
 echo
 echo "Wrote $capture"
 echo "      $notes"
+echo
+echo "Interfaces that ended up in the file:"
+python3 - "$capture" <<'PY'
+import struct, sys
+
+data = open(sys.argv[1], "rb").read()
+offset, endian, names = 0, "<", []
+
+while offset + 8 <= len(data):
+    kind, length = struct.unpack(endian + "II", data[offset:offset + 8])
+    if kind == 0x0A0D0D0A:
+        endian = "<" if data[offset + 8:offset + 12] == b"\x4d\x3c\x2b\x1a" else ">"
+        kind, length = struct.unpack(endian + "II", data[offset:offset + 8])
+    if length < 12 or offset + length > len(data):
+        break
+    if kind == 1:
+        body, position, name = data[offset + 16:offset + length - 4], 0, None
+        while position + 4 <= len(body):
+            code, size = struct.unpack(endian + "HH", body[position:position + 4])
+            if code == 0:
+                break
+            if code == 2:
+                name = body[position + 4:position + 4 + size].decode("utf-8", "replace")
+            position += 4 + ((size + 3) // 4) * 4
+        names.append(name or "?")
+    offset += length
+
+print("  " + (", ".join(names) if names else "none"))
+PY
 echo
 echo "What came out:"
 tcpdump -r "$capture" -nn 2>/dev/null | awk '
