@@ -3,3 +3,6 @@
 build/
 .serena/
 .DS_Store
+
+# Xcode writes this beside a package it has opened.
+.swiftpm/
