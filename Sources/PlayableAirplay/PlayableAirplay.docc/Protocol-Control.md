@@ -104,11 +104,11 @@ Two TXT keys decide whether the sender has to attenuate for itself. `sv` is soft
 
 The published record left this open. No source describes per-device volume inside a group, and `SET_PARAMETER` being a per-session request means that one request per receiver follows mechanically from one session per receiver, without any source saying so as policy.
 
-The measurement closes it. The volume of one speaker reaches that speaker alone. When the other member of a group had its level changed, nothing arrived at this receiver for the nineteen seconds it took. There is no group command: the device's own volume control moves every member, and it does so by sending each of them its own `SET_PARAMETER` on its own session (measured 2026-09-22, decrypted).
+The measurement closes it. The volume of one speaker reaches that speaker alone. When the other member of a group had its level changed, nothing arrived at this receiver for the nineteen seconds it took. There is no group command: the device's own volume control moves every member, and it does so by sending each of them its own `SET_PARAMETER` on its own session (measured 2026-09-22, decrypted, F-064).
 
 ### How a user is moving the control
 
-Seventy seven volume requests arrived in one session, because a slider being dragged sends a stream of values rather than one value when it settles (measured 2026-09-22, decrypted, F-036). The two ways of changing the volume are distinguishable by their timing: a dragged slider sends nine values inside a second, whilst the volume buttons on the device send one a second (measured 2026-09-22, decrypted).
+Seventy seven volume requests arrived in one session, because a slider being dragged sends a stream of values rather than one value when it settles (measured 2026-09-22, decrypted, F-036). The two ways of changing the volume are distinguishable by their timing: a dragged slider sends nine values inside a second, whilst the volume buttons on the device send one a second (measured 2026-09-22, decrypted, F-064).
 
 ## Metadata
 

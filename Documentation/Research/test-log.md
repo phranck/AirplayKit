@@ -368,6 +368,10 @@ So the anchor names the clock its times are expressed against, and that clock be
 
 **F-063 (method) The receiver dropped every session at the first anchor, through a fault of its own (confirmed).** `do_SETRATEANCHORTIME` catches the broken audio pipe and then formats a name that is not bound, so a `NameError` escapes and takes the connection with it. One word fixes it, and the patch is kept beside this log as `sources/airplay2-receiver-local.patch`. The failure looked like a protocol problem and was not one, which is the reason to read the whole traceback rather than the last line.
 
+**F-064** **The volume of one speaker reaches that speaker alone (confirmed).** Read out of the run of 09:12, whose log carries the time and the gap on every line. Nine volume commands arrived between 09:13:47 and 09:13:48 whilst this receiver's own slider was dragged. Then nothing at all arrived until 09:14:07, the nineteen seconds during which the other member of the group had its level changed. Four more arrived from 09:14:07, one a second, which is the device's own volume buttons moving the whole group.
+
+So there is no group command. A device's own volume control moves every member by sending each of them its own `SET_PARAMETER` on its own session, and a per device change is addressed to that device and reaches nobody else. This was narrated at the time and not written down, and the reference cited it before it existed here, which is the reason it is numbered now rather than left as prose.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.

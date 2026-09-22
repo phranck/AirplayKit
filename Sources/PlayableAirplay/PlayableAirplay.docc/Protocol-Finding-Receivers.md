@@ -80,7 +80,7 @@ Only the coordinator of a bonded set advertises `_raop._tcp` at all. Five of tho
 
 ### What `pk` is worth
 
-`pk` is the pairing key, and its presence is what says a receiver speaks AirPlay 2 at all (measured 2026-09-22, browsed). A receiver without one runs the older RSA challenge instead.
+`pk` is the pairing key. Every one of the nine receivers on the measured network advertises one (measured 2026-09-22, browsed, F-001). Its presence is what says a receiver speaks AirPlay 2, and a receiver without one runs the older RSA challenge instead (reported confirmed, [openairplay, Unofficial AirPlay Specification](https://openairplay.github.io/airplay-spec/)). No receiver without one was seen, so that half is not measured here.
 
 ## The `_airplay._tcp` TXT keys
 
