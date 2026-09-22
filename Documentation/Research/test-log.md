@@ -244,6 +244,8 @@ TEARDOWN   {}
 
 **F-040 (method) The receiver prints no timestamps, so commands cannot be attributed to the moment they were caused (confirmed).** Seventy seven volume commands arrived and there is no way to tell which of them came from moving this receiver's own slider, which from moving the other speaker's, and which from the sender's own volume keys. Whatever runs next prefixes every line with a time, and the operator is asked to say roughly when each step was taken.
 
+**F-041 (method) A fixed sequence with pauses in it needs no commentary, only a clock (confirmed).** F-040 asked the operator to say afterwards when each step was taken. That is unnecessary. The steps are done in a stated order with a pause between them, so a line arriving several seconds after the one before it starts the next step and everything until the next gap belongs to it. Every line now carries the time and the gap since the previous one, and the gaps do the attributing.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
