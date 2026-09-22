@@ -246,6 +246,30 @@ TEARDOWN   {}
 
 **F-041 (method) A fixed sequence with pauses in it needs no commentary, only a clock (confirmed).** F-040 asked the operator to say afterwards when each step was taken. That is unnecessary. The steps are done in a stated order with a pause between them, so a line arriving several seconds after the one before it starts the next step and everything until the next gap belongs to it. Every line now carries the time and the gap since the previous one, and the gaps do the attributing.
 
+## 2026-09-22 09:23, steering the session from the Mac, and what a receiver tells anyone who asks
+
+**What was done.** The same run, with the first four steps on the iPhone and the rest attempted on the Mac. It stopped after the fourth, and the reason turned out to be worth more than the run.
+
+**F-042 macOS offers no control over another device's AirPlay session (confirmed).** Its speaker list shows which speakers exist and nothing about which are playing, and the only volume it offers is the system's own. The log ends at the moment the HomePod joined, because nothing done on the Mac afterwards reached the session at all.
+
+**F-043 A receiver answers `GET /info` to anyone, over plain HTTP, without pairing (confirmed).** Port 7000, no headers needed, and the answer is a binary property list.
+
+```bash
+curl -s http://<host>:7000/info | plutil -convert xml1 -o - -
+```
+
+An Apple receiver returns around forty keys, among them `name`, `model`, `deviceID`, `macAddress`, `osBuildVersion`, `features`, `featuresEx`, `protocolVersion`, `sourceVersion`, the formats it accepts for each kind of stream, its current volume as `initialVolume`, and `statusFlags`.
+
+**F-044 `senderAddress` is whoever is asking, not who is playing (confirmed).** Three queries one second apart returned `10.0.0.193:59501`, `:59502` and `:59503`, which is the port of each query's own connection. The name invites the opposite reading and it is wrong.
+
+**F-045 `statusFlags` is the same value the receiver advertises as `sf` over Bonjour (confirmed).** Emma reports `statusFlags` 525316 and advertises `sf=0x80404`, which are the same number. So the state is already in the discovery record and costs no request at all.
+
+**F-046 `statusFlags` moves whilst a receiver is in a session (confirmed), and which bit means busy is open.** Emma read `0x80404` at rest, and `0xA0C04` and `0x1A0904` around a session. The bits that come and go are `0x20000`, `0x800` and `0x100000`, and `0x400` is set at rest but not during. A reading taken at rest and a reading taken whilst one speaker alone is playing settle it.
+
+**F-047 A Sonos answers `/info` with almost nothing (confirmed).** No volume, no sender, `statusFlags` 4, and it advertises `sf=0x4`. So the state of a Sonos is not readable this way, and what a Sonos is doing has to come from its own zone topology instead.
+
+**F-048 A Mac whose AirPlay receiving is switched off does not answer `/info` at all (confirmed).** The connection is refused rather than answered emptily, which is a usable distinction in itself.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
