@@ -291,6 +291,23 @@ What the bits are called is **open**, because the published tables disagree and 
 
 **F-051 Only an Apple receiver answers this (confirmed).** The Sonos speakers advertise `sf=0x4` at rest and return almost nothing from `/info`, with no volume and no state. What a Sonos is doing has to come from its own zone topology instead, which is the same request that reveals a stereo pair.
 
+## 2026-09-22 09:40, what a Sonos will tell us
+
+**What was done.** A single Sonos One asked over its UPnP services on port 1400.
+
+**F-052 A Sonos reports everything its AirPlay record withholds (confirmed).** Three requests, no authentication, plain HTTP.
+
+| What | Service and action | Answer seen |
+|---|---|---|
+| Playing or not | `AVTransport` `GetTransportInfo` | `STOPPED`, and `OK` for the status |
+| Volume | `RenderingControl` `GetVolume` with channel `Master` | `5`, on a scale of 0 to 100 |
+| Muted | `RenderingControl` `GetMute` with channel `Master` | `0` |
+| What is on it | `AVTransport` `GetPositionInfo` | the track's address and its duration |
+
+So the state that `sf` never reports for a Sonos is readable from the speaker itself, on a different scale and through a different protocol. Its volume is a whole number from 0 to 100 whilst AirPlay carries decibels, which is a conversion rather than a reading.
+
+**F-053 (method) The receiver's port is fixed in its source (confirmed).** `ap2-receiver.py` hard codes 7000 in two places and takes no option for it, so two instances on one machine need a patch of two lines. That is what stands between here and watching one sender address two receivers that we control.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
