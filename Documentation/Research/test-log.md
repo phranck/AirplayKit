@@ -270,6 +270,27 @@ An Apple receiver returns around forty keys, among them `name`, `model`, `device
 
 **F-048 A Mac whose AirPlay receiving is switched off does not answer `/info` at all (confirmed).** The connection is refused rather than answered emptily, which is a usable distinction in itself.
 
+## 2026-09-22 09:30, what a receiver says about its own state
+
+**What was done.** the HomePod mini, a HomePod mini, read four times through `GET /info` and through its Bonjour record at the same moments: at rest, whilst an iPhone played to it alone, after the playback was stopped, and after the iPhone disconnected from it.
+
+**F-049 A receiver says both whether a sender is connected and whether audio is playing, in two separate bits (confirmed).**
+
+| State | `statusFlags` | Bit 11, 0x800 | Bit 17, 0x20000 | Bit 20, 0x100000 |
+|---|---|---|---|---|
+| At rest | `0x80404` | clear | clear | clear |
+| A sender connected and playing | `0x1A0C04` | set | set | set |
+| Stopped, sender still connected | `0xA0C04` | set | set | clear |
+| Sender disconnected | `0x80404` | clear | clear | clear |
+
+Bits 11 and 17 move together and mean that a sender holds a session. Bit 20 means audio is flowing at this moment. The value returns exactly to its resting one, so nothing is left behind and the reading is repeatable.
+
+What the bits are called is **open**, because the published tables disagree and none of them was measured. What each one indicates is not open, because it was.
+
+**F-050 The Bonjour record carries the same value and follows the state live (confirmed).** `sf` in the TXT record read `0x80404`, `0x1a0c04`, `0xa0c04` and `0x80404` at the four moments, matching `statusFlags` each time. A browse therefore learns that a speaker has become busy without asking it anything, because the change arrives as an ordinary Bonjour update.
+
+**F-051 Only an Apple receiver answers this (confirmed).** The Sonos speakers advertise `sf=0x4` at rest and return almost nothing from `/info`, with no volume and no state. What a Sonos is doing has to come from its own zone topology instead, which is the same request that reveals a stereo pair.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
