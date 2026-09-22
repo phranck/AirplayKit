@@ -28,14 +28,59 @@
  NSNetServiceBrowser.
  */
 
-/** The service AirPlay audio receivers advertise. */
-static const char *const kServiceType = "_raop._tcp";
+/**
+ The two services a receiver advertises, and why both are browsed.
+
+ RAOP is AirPlay's audio half and has carried that name since it was AirTunes.
+ The AirPlay service is the general one. Every shipping receiver measured on one
+ network published both, and a receiver that publishes only the second exists
+ and is offered by macOS as a sound output, so browsing one type is not enough.
+
+ The second service also carries what the first does not. A receiver's group is
+ published there and in no RAOP record.
+ */
+static const char *const kRaopServiceType = "_raop._tcp";
+static const char *const kAirplayServiceType = "_airplay._tcp";
+
+/** Which of the two a callback is reporting about. */
+typedef enum PAServiceKind {
+    PAServiceRaop,
+    PAServiceAirplay,
+} PAServiceKind;
 
 /** How many receivers are tracked. A home has a handful; the cap is for safety, not for fit. */
 #define PA_MAX_RECEIVERS 64
 
+/**
+ One receiver, plus what is needed to keep the two services' sightings of it
+ together.
+
+ A service going away names only its own instance, and the two services name the
+ same receiver differently, so each instance is kept as it arrived. The receiver
+ is dropped when both have gone, because until then it is still out there.
+ */
+typedef struct PARecord {
+    PAReceiver receiver;
+    char raopInstance[PA_MAX_NAME];
+    char airplayInstance[PA_MAX_NAME];
+} PARecord;
+
+/**
+ What a browse or resolve callback needs to know: which discovery, and which of
+ the two services it is hearing about.
+
+ One of these lives inside the discovery per service, so its lifetime is the
+ discovery's exactly. The callbacks have stopped by the time the discovery is
+ freed, because stopping joins the thread first.
+ */
+typedef struct PABrowseContext {
+    struct PADiscovery *discovery;
+    PAServiceKind kind;
+} PABrowseContext;
+
 struct PADiscovery {
-    DNSServiceRef browser;
+    DNSServiceRef browsers[2];
+    PABrowseContext contexts[2];
     PADiscoveryHandler handler;
     void *context;
 
@@ -43,9 +88,22 @@ struct PADiscovery {
     volatile bool stopping;
 
     pthread_mutex_t mutex;
-    PAReceiver receivers[PA_MAX_RECEIVERS];
+    PARecord records[PA_MAX_RECEIVERS];
     size_t count;
 };
+
+/** Copies a terminated string into a fixed buffer, always terminating it. */
+static void copyString(char *destination, size_t destinationSize, const char *source) {
+    if (!destination || destinationSize == 0) return;
+
+    if (!source) {
+        destination[0] = '\0';
+        return;
+    }
+
+    strncpy(destination, source, destinationSize - 1);
+    destination[destinationSize - 1] = '\0';
+}
 
 /** Reports the current set to the caller, ordered by name so the list does not jump about. */
 static void announce(PADiscovery *discovery) {
@@ -53,16 +111,19 @@ static void announce(PADiscovery *discovery) {
 
     for (size_t outer = 0; outer + 1 < discovery->count; outer++) {
         for (size_t inner = 0; inner + 1 < discovery->count - outer; inner++) {
-            if (strcasecmp(discovery->receivers[inner].name, discovery->receivers[inner + 1].name) > 0) {
-                PAReceiver swap = discovery->receivers[inner];
-                discovery->receivers[inner] = discovery->receivers[inner + 1];
-                discovery->receivers[inner + 1] = swap;
+            if (strcasecmp(discovery->records[inner].receiver.name,
+                           discovery->records[inner + 1].receiver.name) > 0) {
+                PARecord swap = discovery->records[inner];
+                discovery->records[inner] = discovery->records[inner + 1];
+                discovery->records[inner + 1] = swap;
             }
         }
     }
 
     PAReceiver snapshot[PA_MAX_RECEIVERS];
-    memcpy(snapshot, discovery->receivers, sizeof(PAReceiver) * discovery->count);
+    for (size_t index = 0; index < discovery->count; index++) {
+        snapshot[index] = discovery->records[index].receiver;
+    }
     const size_t count = discovery->count;
 
     pthread_mutex_unlock(&discovery->mutex);
@@ -70,72 +131,158 @@ static void announce(PADiscovery *discovery) {
     if (discovery->handler) discovery->handler(discovery->context, snapshot, count);
 }
 
+/**
+ Copies one TXT value into a fixed buffer, leaving it empty where the key is
+ absent. The value is counted rather than terminated where it arrives, so it is
+ copied rather than pointed at.
+ */
+static void copyTextValue(uint16_t txtLength, const unsigned char *txt, const char *key,
+                          char *destination, size_t destinationSize) {
+    if (!destination || destinationSize == 0) return;
 
-/** Records what resolving one service found, replacing any earlier sighting of it. */
+    destination[0] = '\0';
+
+    uint8_t valueLength = 0;
+    const void *value = TXTRecordGetValuePtr(txtLength, txt, key, &valueLength);
+    if (!value || valueLength == 0) return;
+
+    const size_t room = destinationSize - 1;
+    const size_t taken = valueLength < room ? valueLength : room;
+    memcpy(destination, value, taken);
+    destination[taken] = '\0';
+}
+
+/** Finds the record for an identifier, or makes one. NULL when there is no room. */
+static PARecord *recordFor(PADiscovery *discovery, const char *identifier) {
+    for (size_t index = 0; index < discovery->count; index++) {
+        if (strcmp(discovery->records[index].receiver.id, identifier) == 0) {
+            return &discovery->records[index];
+        }
+    }
+
+    if (discovery->count >= PA_MAX_RECEIVERS) return NULL;
+
+    PARecord *record = &discovery->records[discovery->count++];
+    memset(record, 0, sizeof(*record));
+    copyString(record->receiver.id, sizeof(record->receiver.id), identifier);
+
+    return record;
+}
+
+/** Records what resolving one service found, merging it into what is already known. */
 static void DNSSD_API onResolved(DNSServiceRef service, DNSServiceFlags flags, uint32_t interfaceIndex,
                                  DNSServiceErrorType error, const char *fullName, const char *hostTarget,
                                  uint16_t port, uint16_t txtLength, const unsigned char *txt, void *context) {
-    (void)service; (void)flags; (void)interfaceIndex; (void)fullName;
+    (void)service; (void)flags; (void)interfaceIndex;
 
-    PADiscovery *discovery = (PADiscovery *)context;
-    if (error != kDNSServiceErr_NoError || !hostTarget) return;
+    PABrowseContext *browse = (PABrowseContext *)context;
+    PADiscovery *discovery = browse->discovery;
+    const bool isRaop = browse->kind == PAServiceRaop;
 
-    PAReceiver receiver;
-    memset(&receiver, 0, sizeof(receiver));
+    if (error != kDNSServiceErr_NoError || !hostTarget || !fullName) return;
 
+    // The instance name up to the service type. A RAOP instance is the hardware
+    // address, then `@`, then the display name; an AirPlay instance is the
+    // display name alone.
+    char escaped[PA_MAX_NAME];
+    copyString(escaped, sizeof(escaped), fullName);
+
+    char *separator = strstr(escaped, isRaop ? "._raop." : "._airplay.");
+    if (separator) *separator = '\0';
+
+    // The name arrives in its wire form, where a space is `\032` and a dot is
+    // `\.`, so it is made readable before anything reads it or shows it.
     char instance[PA_MAX_NAME];
+    pa_unescape_instance_name(escaped, instance, sizeof(instance));
 
-    // A receiver that announces a pairing key speaks AirPlay 2. Measured across
-    // every receiver on one network: Sonos, HomePod and macOS all carry it, and
-    // none offers the older RSA encryption that AirPlay 1 needs.
+    char identifier[PA_MAX_ID];
+    char name[PA_MAX_NAME];
+
+    if (isRaop) {
+        pa_split_instance_name(instance, identifier, sizeof(identifier), name, sizeof(name));
+
+        // Raised to the case the other service's identity comes out in, but only
+        // where the whole of it is an address. An older receiver that announces
+        // no address at all puts its display name here, and that is left alone.
+        char normalised[PA_MAX_ID];
+        pa_identity_from_device_id(identifier, normalised, sizeof(normalised));
+        if (strlen(normalised) == strlen(identifier)) {
+            copyString(identifier, sizeof(identifier), normalised);
+        }
+    } else {
+        // The AirPlay instance carries no address, so the identity comes out of
+        // the record instead, in the spelling the RAOP instance uses.
+        char deviceID[PA_MAX_ID];
+        copyTextValue(txtLength, txt, "deviceid", deviceID, sizeof(deviceID));
+        pa_identity_from_device_id(deviceID, identifier, sizeof(identifier));
+
+        copyString(name, sizeof(name), instance);
+
+        // Without an address there is nothing to recognise the receiver by on
+        // the other service, and nothing stable to remember a choice by either.
+        if (identifier[0] == '\0') return;
+    }
+
+    pthread_mutex_lock(&discovery->mutex);
+
+    PARecord *record = recordFor(discovery, identifier);
+    if (!record) {
+        pthread_mutex_unlock(&discovery->mutex);
+        return;
+    }
+
+    // The two services can disagree about the display name, because Bonjour
+    // settles a clash within one service by putting a number after the name and
+    // settles each service separately. An Apple TV measured on one network
+    // announced `Living Room` on the audio service and `Living Room (2)` on the
+    // other. The audio service carries the name its owner gave, so it wins
+    // wherever both have been seen.
+    if (name[0] != '\0' && (isRaop || record->raopInstance[0] == '\0')) {
+        copyString(record->receiver.name, sizeof(record->receiver.name), name);
+    }
+
+    copyString(isRaop ? record->raopInstance : record->airplayInstance, PA_MAX_NAME, instance);
+
+    // The RAOP port is the one a session is opened on, because that is the one
+    // every measured session used. The AirPlay port fills in only for a receiver
+    // that publishes nothing else.
+    if (isRaop || record->receiver.port == 0) {
+        copyString(record->receiver.host, sizeof(record->receiver.host), hostTarget);
+        record->receiver.port = ntohs(port);
+    }
+
+    // A receiver that announces a pairing key speaks AirPlay 2. Both services
+    // carry it under the same name. Measured across every receiver on one
+    // network: Sonos, HomePod and macOS all have it, and none offers the older
+    // RSA encryption that AirPlay 1 needs.
     //
     // The length is written back rather than optional: this call dereferences
     // that pointer without checking it, so passing NULL crashes inside the
     // system library rather than returning anything.
-    uint8_t valueLength = 0;
-    receiver.supportsAirPlay2 = TXTRecordGetValuePtr(txtLength, txt, "pk", &valueLength) != NULL;
-
-    // What it says it is. Measured across one network: every receiver announced
-    // this, Apple's as a model identifier and Sonos as a product name. The value
-    // is not terminated, so it is copied rather than pointed at, and the struct
-    // was cleared above, so a receiver announcing none leaves it empty.
-    uint8_t modelLength = 0;
-    const void *model = TXTRecordGetValuePtr(txtLength, txt, "am", &modelLength);
-    if (model && modelLength > 0) {
-        const size_t room = sizeof(receiver.model) - 1;
-        const size_t taken = modelLength < room ? modelLength : room;
-        memcpy(receiver.model, model, taken);
-        receiver.model[taken] = '\0';
+    uint8_t keyLength = 0;
+    if (TXTRecordGetValuePtr(txtLength, txt, "pk", &keyLength) != NULL) {
+        record->receiver.supportsAirPlay2 = true;
     }
 
-    // What it is doing, out of the `sf` field. The reading of it sits in
+    // The same facts under two sets of names. Measured at the same minute on
+    // three receivers, the pairs agreed every time.
+    char model[PA_MAX_MODEL];
+    copyTextValue(txtLength, txt, isRaop ? "am" : "model", model, sizeof(model));
+    if (model[0] != '\0') copyString(record->receiver.model, sizeof(record->receiver.model), model);
+
+    // What it is doing, out of the status field. The reading of it sits in
     // receiver_state.c, which is where it can be tested without a network.
     uint8_t stateLength = 0;
-    const void *state = TXTRecordGetValuePtr(txtLength, txt, "sf", &stateLength);
-    pa_read_receiver_state(state, stateLength, &receiver.hasSender, &receiver.isPlaying);
-
-    strncpy(instance, fullName, sizeof(instance) - 1);
-    instance[sizeof(instance) - 1] = '\0';
-    char *dot = strstr(instance, "._raop.");
-    if (dot) *dot = '\0';
-
-    pa_split_instance_name(instance, receiver.id, sizeof(receiver.id), receiver.name, sizeof(receiver.name));
-    strncpy(receiver.host, hostTarget, sizeof(receiver.host) - 1);
-    receiver.port = ntohs(port);
-
-    pthread_mutex_lock(&discovery->mutex);
-
-    size_t slot = discovery->count;
-    for (size_t index = 0; index < discovery->count; index++) {
-        if (strcmp(discovery->receivers[index].id, receiver.id) == 0) {
-            slot = index;
-            break;
-        }
+    const void *state = TXTRecordGetValuePtr(txtLength, txt, isRaop ? "sf" : "flags", &stateLength);
+    if (state) {
+        pa_read_receiver_state(state, stateLength,
+                               &record->receiver.hasSender, &record->receiver.isPlaying);
     }
 
-    if (slot < PA_MAX_RECEIVERS) {
-        discovery->receivers[slot] = receiver;
-        if (slot == discovery->count) discovery->count++;
+    // Published on the AirPlay service alone, so a RAOP sighting leaves whatever
+    // an AirPlay one already established rather than clearing it.
+    if (!isRaop) {
+        copyTextValue(txtLength, txt, "gid", record->receiver.groupID, sizeof(record->receiver.groupID));
     }
 
     pthread_mutex_unlock(&discovery->mutex);
@@ -149,7 +296,10 @@ static void DNSSD_API onBrowsed(DNSServiceRef service, DNSServiceFlags flags, ui
                                 const char *domain, void *context) {
     (void)service;
 
-    PADiscovery *discovery = (PADiscovery *)context;
+    PABrowseContext *browse = (PABrowseContext *)context;
+    PADiscovery *discovery = browse->discovery;
+    const bool isRaop = browse->kind == PAServiceRaop;
+
     if (error != kDNSServiceErr_NoError) return;
 
     if (flags & kDNSServiceFlagsAdd) {
@@ -158,44 +308,92 @@ static void DNSSD_API onBrowsed(DNSServiceRef service, DNSServiceFlags flags, ui
         // long as discovery runs.
         DNSServiceRef resolver = NULL;
         if (DNSServiceResolve(&resolver, 0, interfaceIndex, instance, type, domain,
-                              onResolved, discovery) == kDNSServiceErr_NoError) {
-            DNSServiceProcessResult(resolver);
-            DNSServiceRefDeallocate(resolver);
+                              onResolved, browse) != kDNSServiceErr_NoError) {
+            return;
         }
+
+        // Waited on rather than processed straight away, because processing
+        // blocks until an answer arrives and a service can be announced without
+        // being resolvable. A record left behind by a receiver that went away
+        // without withdrawing it does exactly that, and blocking here holds the
+        // whole discovery, including the stop that is waiting for this thread.
+        const int socket = DNSServiceRefSockFD(resolver);
+        if (socket >= 0) {
+            fd_set readable;
+            FD_ZERO(&readable);
+            FD_SET(socket, &readable);
+
+            struct timeval timeout = { .tv_sec = 2, .tv_usec = 0 };
+            if (select(socket + 1, &readable, NULL, NULL, &timeout) > 0) {
+                DNSServiceProcessResult(resolver);
+            }
+        }
+
+        DNSServiceRefDeallocate(resolver);
         return;
     }
 
-    char identifier[PA_MAX_ID];
-    char name[PA_MAX_NAME];
-    pa_split_instance_name(instance, identifier, sizeof(identifier), name, sizeof(name));
-
+    // Only this service has gone. The receiver stays until the other one has
+    // gone too, because a receiver that still advertises anywhere is still
+    // there, and the instance is the only thing this callback knows it by.
     pthread_mutex_lock(&discovery->mutex);
-    for (size_t index = 0; index < discovery->count; index++) {
-        if (strcmp(discovery->receivers[index].id, identifier) != 0) continue;
 
-        discovery->receivers[index] = discovery->receivers[discovery->count - 1];
-        discovery->count--;
+    for (size_t index = 0; index < discovery->count; index++) {
+        PARecord *record = &discovery->records[index];
+        char *own = isRaop ? record->raopInstance : record->airplayInstance;
+        const char *other = isRaop ? record->airplayInstance : record->raopInstance;
+
+        if (strcmp(own, instance) != 0) continue;
+
+        own[0] = '\0';
+        if (other[0] == '\0') {
+            discovery->records[index] = discovery->records[discovery->count - 1];
+            discovery->count--;
+        }
         break;
     }
+
     pthread_mutex_unlock(&discovery->mutex);
 
     announce(discovery);
 }
 
-/** Waits on the browse socket and hands anything that arrives to the callbacks. */
+/** Waits on both browse sockets and hands anything that arrives to the callbacks. */
 static void *runDiscovery(void *argument) {
     PADiscovery *discovery = (PADiscovery *)argument;
-    const int socket = DNSServiceRefSockFD(discovery->browser);
 
     while (!discovery->stopping) {
         fd_set readable;
         FD_ZERO(&readable);
-        FD_SET(socket, &readable);
+
+        int highest = -1;
+        int sockets[2] = { -1, -1 };
+
+        for (size_t index = 0; index < 2; index++) {
+            if (!discovery->browsers[index]) continue;
+
+            sockets[index] = DNSServiceRefSockFD(discovery->browsers[index]);
+            if (sockets[index] < 0) continue;
+
+            FD_SET(sockets[index], &readable);
+            if (sockets[index] > highest) highest = sockets[index];
+        }
+
+        if (highest < 0) break;
 
         // A second at a time, so stopping is noticed promptly without spinning.
         struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
-        if (select(socket + 1, &readable, NULL, NULL, &timeout) > 0 && FD_ISSET(socket, &readable)) {
-            if (DNSServiceProcessResult(discovery->browser) != kDNSServiceErr_NoError) break;
+        if (select(highest + 1, &readable, NULL, NULL, &timeout) <= 0) continue;
+
+        for (size_t index = 0; index < 2; index++) {
+            if (sockets[index] < 0 || !FD_ISSET(sockets[index], &readable)) continue;
+
+            // One service failing takes only that service down. The other keeps
+            // finding receivers, which is better than a list that empties.
+            if (DNSServiceProcessResult(discovery->browsers[index]) != kDNSServiceErr_NoError) {
+                DNSServiceRefDeallocate(discovery->browsers[index]);
+                discovery->browsers[index] = NULL;
+            }
         }
     }
 
@@ -210,15 +408,34 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context) {
     discovery->context = context;
     pthread_mutex_init(&discovery->mutex, NULL);
 
-    if (DNSServiceBrowse(&discovery->browser, 0, 0, kServiceType, NULL,
-                         onBrowsed, discovery) != kDNSServiceErr_NoError) {
+    const char *types[2] = { kRaopServiceType, kAirplayServiceType };
+    const PAServiceKind kinds[2] = { PAServiceRaop, PAServiceAirplay };
+    size_t started = 0;
+
+    for (size_t index = 0; index < 2; index++) {
+        discovery->contexts[index].discovery = discovery;
+        discovery->contexts[index].kind = kinds[index];
+
+        if (DNSServiceBrowse(&discovery->browsers[index], 0, 0, types[index], NULL,
+                             onBrowsed, &discovery->contexts[index]) == kDNSServiceErr_NoError) {
+            started++;
+        } else {
+            discovery->browsers[index] = NULL;
+        }
+    }
+
+    // One service is enough to find receivers, and neither is enough to fail on
+    // its own. Nothing at all means there is no responder on this machine.
+    if (started == 0) {
         pthread_mutex_destroy(&discovery->mutex);
         free(discovery);
         return NULL;
     }
 
     if (pthread_create(&discovery->thread, NULL, runDiscovery, discovery) != 0) {
-        DNSServiceRefDeallocate(discovery->browser);
+        for (size_t index = 0; index < 2; index++) {
+            if (discovery->browsers[index]) DNSServiceRefDeallocate(discovery->browsers[index]);
+        }
         pthread_mutex_destroy(&discovery->mutex);
         free(discovery);
         return NULL;
@@ -233,7 +450,10 @@ void pa_discovery_stop(PADiscovery *discovery) {
     discovery->stopping = true;
     pthread_join(discovery->thread, NULL);
 
-    DNSServiceRefDeallocate(discovery->browser);
+    for (size_t index = 0; index < 2; index++) {
+        if (discovery->browsers[index]) DNSServiceRefDeallocate(discovery->browsers[index]);
+    }
+
     pthread_mutex_destroy(&discovery->mutex);
     free(discovery);
 }

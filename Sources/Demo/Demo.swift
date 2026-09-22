@@ -25,12 +25,19 @@ func listReceivers(forSeconds seconds: Int) -> Int32 {
 
     let discovery = AirPlayDiscovery(deliveringOn: printing) { receivers in
         print("\(receivers.count) receiver(s):")
+
+        // Receivers that name the same group as each other. Nothing measured
+        // says what that means, so this prints what was seen and claims nothing.
+        let shared = Dictionary(grouping: receivers.filter { !$0.groupID.isEmpty }, by: \.groupID)
+            .filter { $0.value.count > 1 }
+
         for receiver in receivers {
             let generation = receiver.supportsAirPlay2 ? "AirPlay 2" : "AirPlay 1"
             let name = receiver.name.padding(toLength: 24, withPad: " ", startingAt: 0)
             let model = receiver.model.isEmpty ? "unknown model" : receiver.model
             let state = receiver.isPlaying ? "playing" : (receiver.hasSender ? "in use" : "free")
-            print("  \(name) \(receiver.host):\(receiver.port)  \(generation)  \(model)  \(state)")
+            let group = shared[receiver.groupID].map { " same group as \($0.count - 1) other(s)" } ?? ""
+            print("  \(name) \(receiver.host):\(receiver.port)  \(generation)  \(model)  \(state)\(group)")
         }
     }
 

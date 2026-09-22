@@ -35,6 +35,15 @@ extern "C" {
 #define PA_MAX_ID     64
 #define PA_MAX_MODEL  64
 
+/**
+ How large a group identity may be.
+
+ Wider than an identifier, because a receiver in a group of several publishes
+ every member's identifier joined with `+` rather than one value. A stereo pair
+ measured on one network published two, at 73 characters together.
+ */
+#define PA_MAX_GROUP 256
+
 /** The audio the sender takes. Fixed, because this is what AirPlay carries. */
 #define PA_SAMPLE_RATE 44100
 #define PA_CHANNELS        2
@@ -73,7 +82,8 @@ typedef struct PAReceiver {
     /** Where to reach it, as a host name rather than an address, since addresses move. */
     char host[PA_MAX_HOST];
     /**
-     What it says it is, taken from the `am` field it announces.
+     What it says it is, taken from the `am` field it announces, or `model` on
+     the AirPlay service, which carry the same value.
 
      Apple's receivers give a model identifier, such as `AudioAccessory5,1` for a
      HomePod mini or `AppleTV11,1` for an Apple TV, which is the same code the
@@ -82,6 +92,23 @@ typedef struct PAReceiver {
      announced nothing, so a caller treats it as a hint rather than a fact.
      */
     char model[PA_MAX_MODEL];
+    /**
+     Which group of receivers it says it belongs to, from the `gid` field.
+
+     Published on the AirPlay service and on no RAOP record, so this is empty
+     for a receiver found only through the older service and for one that
+     announced nothing. Empty means unknown rather than alone.
+
+     Measured on one network of eight receivers, none of them grouped at the
+     time. Every Sonos published its own `pi` value here, which is a receiver in
+     a group of itself. Apple's devices published a different value from their
+     `pi`, and a HomePod mini published two identifiers joined by `+`.
+
+     What is not established here is what two receivers sharing a value means,
+     because no two of those eight shared one. Comparing the value is the
+     obvious thing to do with it and it is not a tested thing to do with it.
+     */
+    char groupID[PA_MAX_GROUP];
     /** The port its RTSP service listens on. */
     uint16_t port;
     /** Whether it announced the AirPlay 2 pairing key. A receiver without one needs the older path. */

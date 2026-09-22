@@ -59,6 +59,33 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     /// worth ignoring where it is not, rather than something to branch on.
     public let model: String
 
+    /// Which group of receivers this one says it belongs to, or an empty string
+    /// where it said nothing.
+    ///
+    /// Only the AirPlay service publishes this, and the audio service publishes
+    /// nothing like it, so it is empty for a receiver found through the older
+    /// service alone. Empty means unknown rather than alone.
+    ///
+    /// ```swift
+    /// let sharing = receivers.filter {
+    ///     !speaker.groupID.isEmpty && $0.groupID == speaker.groupID && $0.id != speaker.id
+    /// }
+    /// ```
+    ///
+    /// **What sharing a value means is not established.** On the network this
+    /// was written against, eight receivers published eight different values and
+    /// none was grouped at the time. Every Sonos published its own persistent
+    /// identifier here, which is a receiver in a group of itself; Apple's devices
+    /// published something else, and a HomePod mini published two identifiers
+    /// joined by `+`. Comparing the value is the obvious thing to do with it and
+    /// it is an untested thing to do with it, so treat a match as a hint worth
+    /// checking rather than as a fact about what will play together.
+    ///
+    /// The same record carries two further grouping fields, `igl` and `gcgl`,
+    /// which are not carried here because nothing measured says what a caller
+    /// could do with them either.
+    public let groupID: String
+
     /// Whether it announced the pairing key that AirPlay 2 is built on.
     ///
     /// The pairing this library performs needs that key. A receiver without one
@@ -381,6 +408,7 @@ private extension AirPlayReceiver {
                   host: Self.string(from: receiver.host, capacity: Int(PA_MAX_HOST)),
                   port: receiver.port,
                   model: Self.string(from: receiver.model, capacity: Int(PA_MAX_MODEL)),
+                  groupID: Self.string(from: receiver.groupID, capacity: Int(PA_MAX_GROUP)),
                   supportsAirPlay2: receiver.supportsAirPlay2,
                   hasSender: receiver.hasSender,
                   isPlaying: receiver.isPlaying)
