@@ -6,7 +6,7 @@ What is still unsettled, and what would settle each one.
 
 An open question written down is worth more than a plausible guess. Each item below says what is not known and what experiment answers it.
 
-Six questions that the published record left open are now closed by the measurement, and they are listed at the end so that nobody spends time on them a second time.
+Questions that the published record left open and the measurement has closed are listed at the end, so that nobody spends time on them a second time.
 
 ## Still open
 
@@ -36,7 +36,7 @@ What settles it: a capture of a session whose session SETUP carries `timingProto
 
 ### 5. What X-Apple-HKP: 8 means
 
-Apple's own sender sends 8 on every pair-verify request (measured 2026-09-22, captured, F-021). The published record names only 3 and 4 as values a sender sends, and one receiver's own list of the constant stops at 7.
+Apple's own sender sends 8 on every pair-verify request (measured 2026-09-22, captured, F-021) and 4 on a pair-setup (measured 2026-09-22, read off a receiver, F-073). The published record names only 3 and 4 as values a sender sends, and one receiver's own list of the constant stops at 7. Since 8 has only ever been seen on pair-verify, the value plausibly names the mode of that request, and that reading is not tested.
 
 What settles it: a receiver that logs the value and accepts 3, 4 and 8 in turn, showing whether any of them changes what it does.
 
@@ -92,17 +92,29 @@ A member leaving is visible from the receiving end as one `SETPEERS` with the sh
 
 What settles it: two receivers under our own control in one group, with one of them removed.
 
-### 15. What a macOS sender does
+### 15. What a receiver must do about asyncPTPClockConfig
 
-One attempt from macOS reached the receiver, completed pair-verify, sent the session SETUP and stopped there, reporting that it could not connect (measured 2026-09-22, decrypted, F-062). Two causes fit and the run cannot separate them. macOS may refuse a session to an address on the same machine, or a macOS sender may want something in that request which this receiver does not answer, since the receiver's own record says it was tested against an iPhone.
+A macOS 27.2 sender that asked for `asyncPTPClockConfig` and received an ordinary SETUP reply waited eight seconds, asked `GET /info` once more, and gave up without sending the stream SETUP (measured 2026-09-22, decrypted, F-077). The receiver in that run writes nothing at all on its event channel, so the `updateTimingPeerInfo` message Apple's own strings and one open implementation both describe could never have arrived. The reply shape is not the gate, because shairport-sync sends the same three keys and works, and the absence of PTP on the receiver is not the gate either, because nqptp is not a PTP clock. <doc:Protocol-Timing> carries both.
 
-What settles it: running the receiver on a second machine.
+What settles it: making that receiver push `updateTimingPeerInfo` on the event channel and watching whether the stream SETUP follows.
 
 ### 16. How a sender reconciles different receiver latencies
 
 Nothing in the reachable record addresses it. The anchor is the mechanism that makes reconciliation unnecessary, because each receiver subtracts its own output latency locally, and no source says that is the whole answer.
 
 What settles it: a capture of a Mac playing to two receivers whose reported `outputLatencyMicros` differ, checked for any per-receiver difference in the anchor.
+
+### 17. Whether a macOS sender is stricter than an iOS one
+
+Every comparison so far put macOS 27.2 against iOS 18.7, so platform and version moved together. Two of the keys in the session SETUP are new in OS 27, so the older sender was not taking a more lenient path through the same protocol but speaking an earlier one.
+
+What settles it: an iOS 27 device against the same receiver.
+
+### 18. Whether two receivers in one group are given the same anchor
+
+How a group is held together is read from one side only: one receiver's `SETPEERS` and one receiver's `SETRATEANCHORTIME`. That the anchor is identical for every member is the reading the rest of the design rests on, and it is not measured.
+
+What settles it: a receiver on each of two machines in one session, with the two anchors compared directly.
 
 ## Closed by the measurement
 
@@ -116,3 +128,8 @@ These were open in the published record and are not open now.
 | Whether the PTP traffic is unicast or multicast | Unicast, over IPv6 link-local. No multicast PTP packet appeared at all (measured 2026-09-22, captured, F-009) | <doc:Protocol-Timing> |
 | Whether the receivers run a Best Master Clock election or accept whoever announces | They announce with full Best Master Clock fields and contest it. `priority2` decides (measured 2026-09-22, captured, F-011) | <doc:Protocol-Timing> |
 | Whether `SETPEERS` grows when a second speaker joins | It does, and it carries the whole membership each time rather than a change to it (measured 2026-09-22, decrypted, F-033) | <doc:Protocol-Session> |
+| What a PTP clock identity is made of | The device's six-byte hardware address with `0008` after it, which is why none of them ends in the `fffe` of standard EUI-64 (measured 2026-09-22, decrypted, F-076) | <doc:Protocol-Timing> |
+| Whether a receiver has to speak PTP before a sender will send audio | No. nqptp answers nothing, originates nothing, and is not a PTP clock, and a session whose timing fails still reaches playback | <doc:Protocol-Timing> |
+| Whether one Bonjour service type is enough to find every receiver | No. A receiver can publish `_airplay._tcp` alone, and the group identity is published there and in no RAOP record (measured 2026-09-22, browsed, F-066 and F-068) | <doc:Protocol-Finding-Receivers> |
+| Whether both TXT records can be read without Bonjour | Yes. `GET /info?txtAirPlay&txtRAOP` returns each record verbatim in its counted DNS-SD form (measured 2026-09-22, queried, F-071) | <doc:Protocol-Finding-Receivers> |
+| Whether a macOS sender refuses a receiver on its own machine | No. It stops at the same point with the receiver on a second machine (measured 2026-09-22, decrypted, F-077) | <doc:Protocol-Timing> |

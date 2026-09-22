@@ -10,7 +10,9 @@ Realtime audio, payload type 96, goes over UDP and arrives at the rate it is pla
 
 Buffered audio, payload type 103, goes over TCP. Audio arrives faster than it is played and sits in the receiver's buffer until its moment comes, which is what makes the playback delay short and the stream resistant to a lossy network (reported confirmed, [shairport-sync, `AIRPLAY2.md`](https://github.com/mikebrady/shairport-sync/blob/master/AIRPLAY2.md)).
 
-Buffered is the path Apple uses for music. An iPhone playing to a receiver used type 103 and nothing else, and type 96 appeared in no measured session at all (measured 2026-09-22, decrypted, F-038). That matters for a sender, because the path Apple's own phone takes to a speaker is the buffered one.
+Buffered is the path Apple uses for music. Three sessions from an iPhone on iOS 18.7 to a receiver that named the stream it was closing each time all read `{'streams': [{'streamID': 1, 'type': 103}]}`, and type 96 appeared in no measured session at all (measured 2026-09-22, decrypted, F-038 and F-081). That matters for a sender, because the path Apple's own phone takes to a speaker is the buffered one.
+
+All three played from a library, so what a sender does with a live source that cannot be buffered ahead is not measured here. The realtime path exists for exactly that case, and nothing observed rules it out.
 
 No open sender implements buffered audio. pyatv and the C++ sender say so in their own documentation, and owntone hardcodes the realtime payload type in a constant whose own comment names 103 as the alternative it does not take (reported confirmed, [pyatv](https://github.com/postlund/pyatv), [airplay2-sender-cpp](https://github.com/akustikrausch/airplay2-sender-cpp) and [owntone, `src/outputs/airplay.c`](https://github.com/owntone/owntone-server/blob/master/src/outputs/airplay.c)). A sender that wants multi-room builds this path from the receiver side of the sources rather than from an existing sender.
 

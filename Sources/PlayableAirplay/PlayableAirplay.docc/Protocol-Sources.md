@@ -48,10 +48,18 @@ The facts themselves are written out in the articles, in tables and fenced block
 - [pyatv](https://github.com/postlund/pyatv) and its [protocol documentation](https://pyatv.dev/documentation/protocols/). The most complete open sender for AirPlay 2 realtime audio, with an unusually frank record of what it does not implement. Its TXT key table, its HKDF strings, its TLV8 tags, its volume mapping and its SETUP bodies were read directly.
 - [airplay2-sender-cpp](https://github.com/akustikrausch/airplay2-sender-cpp), which sits in this repository at `third_party/airplay2-sender-cpp` under Apache-2.0. A working AirPlay 2 realtime sender, verified by its author against an Apple TV 4K, a HomePod and a macOS receiver. It is the only source in this list that reports the request order, the event-channel keep-alive, the minimal 200 OK response and the audio key clamp as measured behaviour from the sending side. Its RAOP transport is in part a port of pyatv, and its crypto core was reconstructed from the sources above. It is read here as one source among others, and none of its code is reproduced.
 - [music-assistant issue 6243](https://github.com/music-assistant/support/issues/6243) and [cliairplay issue 78](https://github.com/music-assistant/cliairplay/issues/78). Reports that an NTP-only sender cannot reach a shairport-sync receiver, which is what makes the timing choice consequential rather than cosmetic.
+- [doubletake](https://github.com/omarroth/doubletake). An AirPlay sender for Linux with a test receiver beside it. It is the only open implementation that handles `updateTimingPeerInfo` on the event channel and describes the message in prose, and the only one that treats `timingPeerInfo.ClockID` as mandatory, which it explains by deriving its timeline from the receiver rather than running a clock of its own.
+
+### Apple's binaries, read as symbols and strings
+
+- [blacktop, ipsw-diffs, iOS 26.5 against iOS 27.0](https://github.com/blacktop/ipsw-diffs/tree/61157ab6a859ee24ae8c2e9a2ba08b9a5f47c991/26_5_23F77_vs_27_0_24A5355q). A published diff of Apple's own symbols, strings and feature plists between two releases. It is what dates `AsyncPTPClockConfig` and `CombinedGetInfoWithControlSetup` to OS 27, and it names the receiver-side functions behind the first of them.
+
+  Read it for what exists rather than for what it does. A symbol name and a log string say that code is there and what it prints; neither says what it decides. Anything about control flow taken from such an extract is inference. And because the file is a diff, a string absent from it is one that did not change rather than one that does not exist.
+- [UxPlay issue 535](https://github.com/FDH2/UxPlay/issues/535). The first public report of `combinedGetInfoWithControlSetup`, and the evidence that ignoring the key is survivable, because its maintainer tested an iPadOS 27 client against a receiver that implements the key nowhere and it worked.
 
 ## The measurements
 
-Everything marked measured was observed on one home network on 22 September 2026, between 08:20 and 09:53 local time.
+Everything marked measured was observed on one home network on 22 September 2026, between 08:20 and 13:40 local time.
 
 ### The network
 
@@ -63,7 +71,7 @@ One wired Ethernet segment with a wireless access point on it. The Mac that ran 
 |---|---|---|---|---|
 | The Mac | `Mac16,11` | Mac mini M4 Pro, 2024 | macOS 27.2, build 26B5086k | The machine every tool ran on. Both an AirPlay sender and, for the receiver runs, an AirPlay receiver |
 | (the phone) | not read | iPhone XR | iOS 18.7 | The Apple sender whose control channel was read |
-| A second Mac | `Macmini9,1` | Mac mini, 2020 | not read | Seen in the Bonjour browse only |
+| A second Mac | `Macmini9,1` | Mac mini M1, 2020 | macOS 27.0, build 26A428 | The machine the receiver ran on for the macOS sender runs |
 | Room A | `AppleTV11,1` | Apple TV 4K, 2nd generation | tvOS 27.0, build 24J5325d | One of the two receivers in the group capture |
 | The HomePod mini | `AudioAccessory5,1` | HomePod mini | 26.6, build 23L773 | The other receiver in the group capture, and the device the status-flag readings come from |
 | Room A | `Arc` | Sonos Arc with two surrounds | Sonos 96.1-79270 | Browsed and queried only |
@@ -74,11 +82,13 @@ One wired Ethernet segment with a wireless access point on it. The Mac that ran 
 
 Every version in that table was read off the device except the phone's, which its owner states. The Mac's comes from `sw_vers`. The Apple TV's and the HomePod mini's come from `osBuildVersion` in their own `GET /info` answers and from the `ov` key in their Bonjour records. The Sonos firmware comes from `SoftwareVersion` in the zone topology and from the `fv` key in their Bonjour records. The phone never answers `GET /info`, because a sender does not publish one, so nothing about it can be read off the network.
 
-The sender is therefore an older phone on an older release than everything else here, which is worth knowing before reading a measured claim as Apple's current behaviour.
+There are two Apple senders here and they are far apart in age. The phone runs an older release than everything else in the table, and the Mac runs the newest. Which of the two a measured claim came from decides how far it reaches, and the next section says which is which.
 
 ### Which receivers each claim covers
 
-A protocol claim marked measured rests on the Apple devices and on nothing else. The Apple TV and the HomePod mini are the two receivers in the group capture. The Mac is the receiver that read the control channel. The iPhone is the sender in every session whose contents were read.
+A protocol claim marked measured rests on the Apple devices and on nothing else. The Apple TV and the HomePod mini are the two receivers in the group capture. The two Macs are the receivers that read the control channel. The iPhone is the sender in every session whose audio path was read, and the Mac is the sender in the sessions that establish what a current macOS sender asks for before audio.
+
+That split matters when reading a measured claim. Anything about the stream, the anchor, the group or the audio comes from a session an iPhone on iOS 18.7 drove. Anything about `/info`, pairing, FairPlay and the session SETUP comes from a macOS 27.2 sender that never reached the stream. No sender on the current iOS was tested at all, so the two sets are not a platform comparison.
 
 **None of the Sonos speakers takes part in any protocol claim.** They cannot: all five advertise `sf=0x4` whatever they are doing, and none of them answers `GET /info` with anything beyond its name. They appear in the articles only as the counter-example that shows what a non-Apple receiver withholds, and as the reason a sender reads a Sonos through its own UPnP services instead. Nothing here says how a Sonos behaves as an AirPlay receiver in a session, because no session to one was recorded.
 
@@ -90,6 +100,7 @@ A protocol claim marked measured rests on the Apple devices and on nothing else.
 | `curl` with `plutil` | `GET /info` on port 7000, and the Sonos UPnP actions on port 1400 | Answers a question the device chooses to answer |
 | `tcpdump` on `en0`, through `Scripts/capture-airplay-group.sh` | Recording PTP, RTSP, Bonjour and small UDP beside a live session | Everything after pair-verify is encrypted, and the capturing machine's own PTP never appears |
 | [openairplay, `airplay2-receiver`](https://github.com/openairplay/airplay2-receiver), run as `PlayableProbe` through `Scripts/probe-airplay-sender.sh` | Pairing properly with an Apple sender and printing the decrypted control channel | Reads one receiver's own channel. What a sender says to a different member of the same group is not in it |
+| The same receiver on the second Mac, reached over SSH | Separating what a macOS sender does from the fact that sender and receiver had shared a machine | It writes nothing at all on its event channel, which is the reason the macOS sessions stop where they do |
 
 Two limits of the recording are worth carrying, because they shaped what could be asked at all. Everything after pair-verify rides the encrypted channel, so a packet recording reaches `GET /info` and `POST /pair-verify` and nothing else. And the capturing machine's own PTP transmissions are absent from every recording in both roles, whilst its RTSP appears in both directions in the same file, because PTP is timestamped in the network hardware and that transmit path does not pass the packet filter.
 
@@ -99,8 +110,8 @@ Two limits of the recording are worth carrying, because they shaped what could b
 
 Every observation in it carries a number, `F-001` upwards, and the numbers are never reused. A finding is one claim that can be true or false on its own. That number is what a measured mark in these articles cites, so a reader can go to the log and see the observation a claim rests on rather than taking the claim on trust. Findings about the measuring itself are marked as method, because a technique that produced a wrong answer once will produce it again.
 
-The log also holds the two session transcripts under `Documentation/Research/sources/`, and the one-word patch to the receiver that its own defect made necessary.
+`Documentation/Research/sources/` holds what the log was taken with. The patch to the receiver carries four corrections, each of which exists because a run failed without it, and the README beside it says which finding each one came from. The research note there records what the published record says about the session SETUP under PTP timing, with a source and a confidence for every claim.
 
 ## What none of this establishes
 
-One network, one iPhone, one Mac, one Apple TV, one HomePod mini, and one day. Every measured claim above is a statement about those devices on 22 September 2026 and about nothing else. A device that is not in the table was not tested, a release of an operating system that is not named was not tested, and a second network might behave differently in ways nothing here would catch. Where a measurement and a published source disagree, what is established is that the wire did this here, not that the source is wrong everywhere.
+One network, one iPhone, two Macs, one Apple TV, one HomePod mini, and one day. Every measured claim above is a statement about those devices on 22 September 2026 and about nothing else. A device that is not in the table was not tested, a release of an operating system that is not named was not tested, and a second network might behave differently in ways nothing here would catch. Where a measurement and a published source disagree, what is established is that the wire did this here, not that the source is wrong everywhere.

@@ -42,15 +42,18 @@ Every Announce message carried these values (measured 2026-09-22, captured, F-01
 | `stepsRemoved` | 0 |
 | `timeSource` | 0xa0 |
 
-Clock identities are not derived from a visible hardware address. Every identity seen ends in `0008` rather than in the `fffe` that standard EUI-64 padding produces (measured 2026-09-22, captured, F-013).
+### What a clock identity is made of
+
+A clock identity is the device's six-byte hardware address with the two bytes `00 08` after it. That is not the standard EUI-64 expansion, which inserts `fffe` in the middle, which is why every identity on the wire ends in `0008` and none of them ends in `fffe` (measured 2026-09-22, captured and decrypted, F-013 and F-076).
 
 ```text
-f434f09b9d400008   the Apple TV
-9c3e53a0ad550008   the HomePod mini
-d011e56376620008   the Mac
+02:00:00:00:00:01      a hardware address
+0x0200000000010008     the clock identity built from it
 ```
 
-The Mac's identity begins with `d011e5`, which is the manufacturer prefix of its Ethernet address `02:00:00:00:00:01`, and continues with bytes that match none of its interfaces.
+The derivation was read off one device, from the other end. A macOS sender's session SETUP carries both its `macAddress` and, inside `timingPeerInfo`, a `ClockID` as a signed 64-bit integer, and reading that integer as unsigned gives exactly the address followed by `0008` (measured 2026-09-22, decrypted, F-076). Every other identity seen has the same shape, which is consistent with the rule and is not a second measurement of it.
+
+A device has several hardware addresses, and the one in the identity is not necessarily the one on the interface carrying the session. Matching an identity back to a device is therefore a matter of the manufacturer prefix and of trying each interface, not of reading the address off the socket.
 
 ## Who runs the clock, and where the two accounts part
 
@@ -68,7 +71,7 @@ That reading is supported by what nqptp handles. It handles exactly three messag
 
 With a single receiver, the sender is the only clock source and behaves as the master. An iPhone playing to one Mac sent all 794 PTP packets in the recording, and the Mac's side of the exchange carried Sync, Follow_Up, Delay_Resp and Announce arriving from the iPhone (measured 2026-09-22, captured, F-017). A Delay_Resp cannot arrive without a Delay_Req having gone out, so the receiver is asking and the sender is answering.
 
-The anchor in the control channel names the sender's own clock. `networkTimeTimelineID` read `-2267142311769604088` in every anchor of every session recorded that hour, which as an unsigned value is `0xE0897E144BB70008`, and that is the shape of the identities above (measured 2026-09-22, decrypted, F-057). It is the same in sessions to differently named receivers, so it identifies a clock rather than a session. That is the join between the two halves of the protocol: the traffic on ports 319 and 320 and the anchor inside the encryption refer to the same identity.
+The anchor in the control channel names the sender's own clock. `networkTimeTimelineID` read `-2267142311769604088` in every anchor of every session recorded that hour, which as an unsigned value is `0xE0897E144BB70008`, a hardware address with `0008` after it exactly like the identities on the wire (measured 2026-09-22, decrypted, F-057). It is the same in sessions to differently named receivers, so it identifies a clock rather than a session. That is the join between the two halves of the protocol: the traffic on ports 319 and 320 and the anchor inside the encryption refer to the same identity.
 
 ### What two receivers did
 
@@ -92,6 +95,27 @@ Both facts stand. A sender is the only clock source when it is alone with one re
 What was already open stays open. Which PTP profile applies is unsettled, and shairport-sync's author hedges it with a "possibly" towards 802.1AS (reported confirmed as a statement of what is unknown, [shairport-sync discussion 1712](https://github.com/mikebrady/shairport-sync/discussions/1712)). The domain number is settled at 0 by the measurement above.
 
 Apple publishes nothing about any of this. Its AirPlay deployment guide does not mention PTP, clock synchronisation or timing at all, and its published table of ports lists AirPlay against 80, 443, 554, 3689, 5000, 5353, 6000, 7000 and the ephemeral range, with no 319 and no 320 (reported confirmed as a negative finding, [Apple, Use AirPlay with Apple devices](https://support.apple.com/guide/deployment/use-airplay-dep9151c4ace/web) and [Apple, TCP and UDP ports used by Apple software products](https://support.apple.com/en-us/103229)).
+
+## What a receiver owes the clock, and what it does not
+
+A receiver does not have to be a PTP clock. nqptp, which is what shairport-sync uses for timing, says of itself that it uses only part of IEEE 1588-2008 and is not a PTP clock (reported confirmed, [nqptp, README](https://github.com/mikebrady/nqptp/blob/main/README.md)). Read as code it handles `Announce`, `Follow_Up` and `Sync` and answers none of them, has no `Delay_Req` at all, and transmits nothing in a healthy session (reported confirmed, [nqptp, `nqptp.c`](https://github.com/mikebrady/nqptp/blob/main/nqptp.c)). When its timing fails outright the session still reaches playback and only the audio is missing.
+
+So a receiver that never appears on the PTP domain is not on its own a reason for a sender to stop before the stream SETUP.
+
+### asyncPTPClockConfig, and the message the sender waits for
+
+`asyncPTPClockConfig: true` in the session SETUP asks the receiver to set its clock up in the background rather than inside the SETUP reply, and then to push its own `timingPeerInfo` to the sender over the event channel once the clock is up.
+
+```text
+POST /command    on the event channel, application/x-apple-binary-plist
+{ type: "updateTimingPeerInfo", value: <the peer dictionary> }
+```
+
+Two independent sources say the same thing. Apple's own receiver carries `_SendTimingPeerInfoAsyncIfNeeded` and logs `Sending timingPeerInfo to event connection`, whilst its sender side carries `Expecting Timing Peer Info async` and `eventStream didn't provide timingPeerInfo` (reported likely from symbol and string extracts, [blacktop, ipsw-diffs, `AirPlayReceiver`](https://github.com/blacktop/ipsw-diffs/blob/61157ab6a859ee24ae8c2e9a2ba08b9a5f47c991/26_5_23F77_vs_27_0_24A5355q/DYLIBS/System/Library/PrivateFrameworks/AirPlayReceiver.framework/AirPlayReceiver.md)). Doubletake describes the identical message in prose and implements a handler for it (reported confirmed as a description of that implementation, [doubletake, `internal/airplay/event_channel.go`](https://github.com/omarroth/doubletake/blob/ae067228d76df011375164814b729932ed55ca2f/internal/airplay/event_channel.go)).
+
+A macOS 27.2 sender that received a SETUP reply and no such message waited eight seconds, asked `GET /info` once more, and gave up without ever sending the stream SETUP (measured 2026-09-22, decrypted, F-077 and F-084). The receiver in that run never writes anything on its event channel at all. Whether the missing message is what the sender was waiting for is open, because the receiver was never made to send it.
+
+The reply shape itself is not the gate. shairport-sync answers the session SETUP with `eventPort`, a `timingPort` of zero and a `timingPeerInfo` holding only `Addresses` and `ID`, and it is documented as working with Macs from macOS 10.15 onwards (reported confirmed, [shairport-sync, `AIRPLAY2.md`](https://github.com/mikebrady/shairport-sync/blob/master/AIRPLAY2.md)). Two open senders disagree about whether `ClockID` has to be in that reply, and the disagreement is about them rather than about Apple: owntone reads only `eventPort` and `timingPeerInfo.Addresses`, whilst doubletake refuses a reply without `ClockID` because it derives its timeline from the receiver instead of running a clock of its own.
 
 ## The anchor
 

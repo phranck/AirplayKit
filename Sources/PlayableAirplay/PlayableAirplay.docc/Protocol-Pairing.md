@@ -84,7 +84,9 @@ Every pairing request carries an `X-Apple-HKP` header saying which pairing mode 
 
 A working sender sends `4` for transient pairing and `3` for pairing with a PIN (reported likely, [airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp)). owntone picks between `3` and `4` on the same split, normal against transient (reported confirmed, [owntone, `src/outputs/airplay.c`](https://github.com/owntone/owntone-server/blob/master/src/outputs/airplay.c)). pyatv labels `3` as HAP and `4` as transient, and answers a `/pair-verify` carrying no such header with a 501 (reported confirmed as a description of pyatv, [pyatv, `pyatv/protocols/airplay/server_auth.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/airplay/server_auth.py)).
 
-Apple's own sender uses a value that appears in none of those lists. Four pair-verify requests from an iPhone XR on iOS 18.7 all carried `X-Apple-HKP: 8` (measured 2026-09-22, captured, F-021). The published record names only 3 and 4 as things a sender sends, and the receiver's own table stops at 7. What 8 means is open: a receiver that logs the value and accepts each of 3, 4 and 8 in turn shows whether it changes anything.
+Apple's own senders use both a documented value and one that appears in none of those lists, and which one turns up depends on the request rather than on the platform. A macOS 27.2 sender pairing with a receiver it had never met sent `POST /pair-setup` with `X-Apple-HKP: 4`, which is transient pairing exactly as the table has it (measured 2026-09-22, read off a receiver, F-073). Four pair-verify requests from an iPhone XR on iOS 18.7 all carried `X-Apple-HKP: 8` (measured 2026-09-22, captured, F-021). The published record names only 3 and 4 as things a sender sends, and the receiver's own table stops at 7.
+
+So 8 has only ever been seen on pair-verify and 4 only on pair-setup, which is consistent with the value naming the mode of that request rather than a property of the sender. What 8 stands for is still open, and a receiver that logs the value and accepts each of 3, 4 and 8 in turn shows whether it changes anything.
 
 Which value the PIN path wants is also open. Three senders send `3` there and are answered, whilst the receiver's own list reserves `3` for system pairing and puts HomeKit at `6` (open: pairing with a PIN against an Apple TV whilst sending 6 settles it).
 
@@ -201,7 +203,7 @@ M6's signature is made with the receiver's long-term secret and verified against
 
 A fourth nonce, `PS-Msg04`, exists and belongs to the MFi hardware-authentication variant, which an ordinary sender does not use (reported confirmed, same source).
 
-That stored pairing is what an Apple sender relies on. Not one `POST /pair-setup` appeared in any measured session, because the devices involved had paired before (measured 2026-09-22, captured, F-022).
+That stored pairing is what an Apple sender relies on where one exists. Not one `POST /pair-setup` appeared in the first measured sessions, because the devices involved had paired before (measured 2026-09-22, captured, F-022). Against a receiver it had never met, a macOS 27.2 sender sent `POST /pair-setup` at once, in two stages, and had the encrypted channel open immediately afterwards (measured 2026-09-22, read off a receiver, F-073). So the choice is made from what the sender already holds rather than from anything the receiver advertises.
 
 ## Transient pairing
 
@@ -216,6 +218,12 @@ Four implementations say so and none disagrees. A receiver hard-codes the salt `
 A different derivation called `SplitSetupSalt` turns up in Apple's HomeKit accessory library and belongs to a different protocol. That library pairs an accessory to a HomeKit controller over HAP rather than over AirPlay's RTSP endpoints, and its own non-transient path uses `Control-Salt` with the same two info strings. So the AirPlay strings are the HomeKit strings, and the split-setup names exist only for HomeKit's own transient shortcut (reported confirmed as a statement about those files, [Apple, `HAPPairingPairSetup.c`](https://github.com/apple/HomeKitADK/blob/master/HAP/HAPPairingPairSetup.c) and [`HAPPairingPairVerify.c`](https://github.com/apple/HomeKitADK/blob/master/HAP/HAPPairingPairVerify.c)). No AirPlay implementation examined references `SplitSetupSalt` at all.
 
 The one place the 64-byte length does matter is the audio key, which is clamped to 32 bytes and not derived. <doc:Protocol-Session> covers that clamp where it lives, under `shk`.
+
+## FairPlay, between pairing and the session
+
+A macOS sender sends two `POST /fp-setup` requests after the channel is encrypted and before the session SETUP. Both carry `X-Apple-ET: 32` and a body of type `application/octet-stream`, the first of 16 bytes and the second of 164 (measured 2026-09-22, read off a receiver, F-074). Nothing outside a receiver could have seen them, because they are inside the encryption.
+
+That is the whole of what is measured here. What the two bodies contain, and whether a session proceeds without them, is not established. A sender written against an older capture will not have sent them at all, so the shape is worth knowing before a receiver refuses one.
 
 ## Pair-verify
 
