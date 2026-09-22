@@ -4,7 +4,7 @@ Find the speakers on the network and keep the list current.
 
 ## Overview
 
-``AirPlayDiscovery`` browses for the `_raop._tcp` service, which is what AirPlay audio receivers advertise. It finds every one of them, whether or not the system has connected it, which is the part Apple's route picker does not do.
+``AirPlayDiscovery`` browses for both services an AirPlay receiver advertises and reports one set of receivers. It finds every one of them, whether or not the system has connected it, which is the part Apple's route picker does not do.
 
 Browsing starts when the instance is created and stops when it is released, so holding on to it is what keeps it running.
 
@@ -32,9 +32,15 @@ final class SpeakerList {
 
 Bonjour is Apple's name for two standards used together. mDNS answers "what is at this name" without a DNS server, by asking the local network and letting whoever owns the name reply. DNS-SD answers "who here does this kind of thing", by publishing records under a service type that anybody can browse for.
 
-`_raop._tcp` is the service type for AirPlay audio. RAOP stands for Remote Audio Output Protocol, which is what AirPlay's audio half has been called since it was AirTunes. A receiver publishes an instance under that type, and browsing for the type is how every receiver on the network turns up at once, including the ones nothing is talking to.
+There are two service types and both are browsed. `_raop._tcp` is the audio one, where RAOP stands for Remote Audio Output Protocol, which is what AirPlay's audio half has been called since it was AirTunes. `_airplay._tcp` is the general one.
+
+Browsing both matters, because a receiver can publish the second and not the first, and macOS offers such a receiver as a sound output. Every shipping device on the network this was written against published both, so the case is shown by an implementation rather than found in the wild, and a browse of one type would still miss it. The second service also carries ``AirPlayReceiver/groupID``, which the first publishes nothing like.
+
+A receiver seen on both is reported once. The two services name it differently, so the join is made on the hardware address: the audio service puts it in front of the display name, and the other publishes it as a field in its record.
 
 On macOS this goes through the system's own responder, which is always running. On Linux it goes through Avahi's Bonjour compatibility library, which speaks the same API to the same standards, and that is why one implementation covers both.
+
+One service failing does not stop the other. Browsing starts when either one starts, so a machine whose responder offers only one type still finds receivers.
 
 ### Why this is not the list of output devices
 
@@ -61,7 +67,7 @@ The handler can be called several times in the first second or two as receivers 
 
 ### When browsing cannot start
 
-Browsing needs an mDNS responder on the machine. macOS always has one. A Linux machine needs `avahi-daemon`, and a container usually has neither, so ``AirPlayDiscovery/isBrowsing`` says whether it got going at all.
+Browsing needs an mDNS responder on the machine. macOS always has one. A Linux machine needs `avahi-daemon`, and a container usually has neither, so ``AirPlayDiscovery/isBrowsing`` says whether either service got going at all.
 
 ```swift
 guard discovery.isBrowsing else {
@@ -82,7 +88,15 @@ In practice the distinction rarely bites. On the network this was written agains
 
 ``AirPlayReceiver/name`` is what its owner called it, such as "Dining Room", and it is what belongs on screen. ``AirPlayReceiver/host`` is a host name rather than an address, because an address on a home network is a lease and can change between one sighting and the next, whilst the name keeps resolving.
 
-``AirPlayReceiver/id`` is taken from the part of the service instance name that identifies the hardware. It stays the same across sightings, which is what lets a selection survive a receiver going away and coming back.
+``AirPlayReceiver/id`` is the receiver's hardware address, written the way the audio service writes it. It stays the same across sightings, which is what lets a selection survive a receiver going away and coming back, and it is also what joins a receiver's two service records into one entry.
+
+The two services can disagree about the name. Bonjour settles a clash inside one service by putting a number after the name, and it settles each service separately, so an Apple TV in a room where a speaker already holds the name appears as "Living Room" on one and "Living Room (2)" on the other. The audio service carries what its owner typed, so that is the one reported.
+
+### Which receivers belong together
+
+``AirPlayReceiver/groupID`` is what a receiver says about the group it is in, and it comes from the general service, so it is empty for a receiver found only through the audio one.
+
+What it is worth is honestly limited, and its own documentation says so. On the network this was written against, eight receivers published eight different values whilst none of them was grouped, so what two receivers sharing a value means was never seen. Compare it if you like, and treat a match as something to check rather than as a fact.
 
 ### Which speakers are already in use
 
@@ -105,7 +119,7 @@ The bits behind it were measured rather than taken from a table, because the pub
 
 ### What a receiver says it is
 
-``AirPlayReceiver/model`` carries whatever the receiver announced about itself, and the useful thing about it is that Apple's receivers announce the identifier their hardware is known by everywhere else. Measured on one network: `AppleTV11,1` for an Apple TV, `AudioAccessory5,1` for a HomePod mini, and `Mac16,11` and `Macmini9,1` for two Macs.
+``AirPlayReceiver/model`` carries whatever the receiver announced about itself, under `am` on the audio service and `model` on the other, which were measured carrying the same value at the same minute. The useful thing about it is that Apple's receivers announce the identifier their hardware is known by everywhere else. Measured on one network: `AppleTV11,1` for an Apple TV, `AudioAccessory5,1` for a HomePod mini, and `Mac16,11` and `Macmini9,1` for two Macs.
 
 That is the code macOS files a picture of the machine under, so a list can draw a receiver as the thing it actually is rather than as a generic speaker.
 
