@@ -162,6 +162,44 @@ POST /pair-verify RTSP/1.0      X-Apple-HKP: 8
 
 **F-023** **The sender asks `/info` repeatedly, with parameters (confirmed).** Eight requests carrying `?txtAirPlay&txtRAOP` and two without, in one session. The responses are binary property lists.
 
+## 2026-09-22 08:55, an iPhone playing to a receiver that reads the encrypted channel
+
+**What was done.** `openairplay/airplay2-receiver` run on this Mac as `PlayableProbe`, with an iPhone at `10.0.0.173` playing to it. The receiver holds the pairing keys, so it prints the control channel in the clear.
+
+**What was actually captured.** The run wrote nothing to a file, for the reason in F-030, so what is recorded here comes from the terminal and covers the single receiver playing on its own. The part where a second speaker joins is not in it. The operator also reports that the volume of the iPhone itself was moved earlier than the sequence asked, at the point where only this receiver was playing, and that no sound was ever heard from the Mac.
+
+**F-028 The order of a session, observed rather than read (confirmed).** This is the first direct sight of the request order, and it is not the order the published record describes.
+
+```text
+GET /info                 qualifier txtAirPlay
+                          the channel goes encrypted here, after pair-verify
+SETUP                     rtsp://10.0.0.193/8928768582649070638
+GET_PARAMETER             volume
+RECORD                    rtsp://10.0.0.193/8928768582649070638
+SETPEERS                  rtsp://10.0.0.193/8928768582649070638
+SETUP                     rtsp://10.0.0.193/8928768582649070638
+```
+
+Two things stand out. `RECORD` comes before the second `SETUP` rather than after it, and `SETPEERS` sits between them. The session is addressed by a numeric identifier in the URI, here `8928768582649070638`, and every request after the first carries the same one.
+
+**F-029 SETPEERS carries the sender's own addresses, not the other members (confirmed).** With one receiver playing, the list holds five addresses and all five belong to the iPhone: one IPv4 and four IPv6, among them a link-local, a global and a unique local address.
+
+```text
+10.0.0.173
+fe80::c74:823:970e:45fc
+2a04:9546:1c0a:c01:144c:d33f:951c:9c10
+fdbe:e9a4:54f4:0:1435:f725:999b:3f92
+2a04:9546:1c0a:c01:c74:823:970e:45fc
+```
+
+So the name is misleading. It tells a receiver every address at which the sender can be reached, which is what a receiver needs in order to find the clock, rather than naming the other speakers in a group. Whether the list grows when a second speaker joins is **open**, and the next run answers it.
+
+**F-030 (method) A recording made as root locks the folder it writes into (confirmed).** `tcpdump` under `sudo` created `build/captures` owned by root, and every later tool that wrote there failed with a permission error in the middle of a run. Two runs of the receiver were lost that way before the message was read. Anything that runs as root hands the whole folder back afterwards, not only the files it wrote.
+
+**F-031 (method) The receiver plays no audio, and that is not a fault (confirmed).** Its audio thread raises and the Mac stays silent, whilst the control channel is read in full. The volume of the receiver does follow the sender, which is what says the commands arrive. Silence is the expected state for this tool.
+
+**F-032 The sender asks the receiver for its volume before starting (confirmed).** A `GET_PARAMETER` for `volume` sits between the session `SETUP` and `RECORD`. The sender therefore takes the receiver's own level as its starting point rather than imposing one.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
