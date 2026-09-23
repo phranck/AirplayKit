@@ -133,15 +133,36 @@ func pairWithReceiver(at host: String, port: UInt16) -> Int32 {
 
         guard let keys = connection.keys else { return 1 }
 
-        // The first bytes of each, which is enough to see that four different
-        // keys came out without printing key material in full.
         print("paired, and the connection is encrypted from here")
-        print("  controlWrite  \(keys.controlWrite.prefix(4).map { String(format: "%02x", $0) }.joined())…")
-        print("  controlRead   \(keys.controlRead.prefix(4).map { String(format: "%02x", $0) }.joined())…")
-        print("  eventsWrite   \(keys.eventsWrite.prefix(4).map { String(format: "%02x", $0) }.joined())…")
-        print("  eventsRead    \(keys.eventsRead.prefix(4).map { String(format: "%02x", $0) }.joined())…")
-        print("  audio         \(keys.audio.count) bytes")
 
+        var session = Session(connection: connection)
+
+        // Asked before the session SETUP, which a receiver rejects without it.
+        let info = try session.askWhatItIs()
+        if let name = info["name"] as? String {
+            print("  it says it is \(name), a \(info["model"] as? String ?? "receiver")")
+        }
+
+        let eventPort = try session.open(senderName: "PlayableAirplay")
+        print("  session open, event channel wanted on \(eventPort)")
+
+        // Before RECORD, because a receiver answers RECORD with 500 until this
+        // connection exists and then never renders anything.
+        let events = try EventChannel(host: host, port: eventPort, keys: keys)
+        session.record()
+
+        for kind in [StreamKind.buffered, StreamKind.realtime] {
+            do {
+                let stream = try session.openStream(kind, audioKey: keys.audio)
+                let buffered = stream.audioBufferSize.map { ", buffer \($0)" } ?? ""
+                print("  \(kind == .buffered ? "buffered" : "realtime") stream: data \(stream.dataPort), control \(stream.controlPort)\(buffered)")
+            }
+            catch {
+                print("  \(kind == .buffered ? "buffered" : "realtime") stream refused: \(error)")
+            }
+        }
+
+        events.close()
         connection.close()
 
         return 0
