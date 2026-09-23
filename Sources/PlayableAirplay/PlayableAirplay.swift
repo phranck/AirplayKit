@@ -12,6 +12,7 @@
 import CPlayableAirplay
 import Dispatch
 import Foundation
+import PlayableAirplaySender
 
 // MARK: - Receiver
 
@@ -358,7 +359,7 @@ public final class AirPlaySession {
     public static let channelCount = Int(PA_CHANNELS)
 
     /// Whether the receiver is still taking audio.
-    public var isRunning: Bool { pa_session_is_running(handle) }
+    public var isRunning: Bool { sender?.isRunning ?? false }
 
     /// The receiver's own volume, from 0 for silent to 1 for full.
     ///
@@ -377,11 +378,14 @@ public final class AirPlaySession {
         get { sentVolume }
         set {
             sentVolume = min(max(newValue, 0), 1)
-            pa_session_set_volume(handle, sentVolume)
+
+            // Swallowed, because there is no way to report it here and a volume
+            // that did not arrive is not worth ending a session over.
+            try? sender?.setVolume(sentVolume)
         }
     }
 
-    private var handle: OpaquePointer?
+    private var sender: AirPlaySender?
     private var sentVolume: Float = 1
 
     /// Opens a session with a receiver and pairs with it.
@@ -406,12 +410,14 @@ public final class AirPlaySession {
     ///   - senderName: What the receiver shows as the source.
     /// - Throws: An ``AirPlayError`` when the receiver cannot be reached or refuses.
     public init(host: String, port: UInt16 = 7000, senderName: String) throws {
-        var result = PAResultOK
-        guard let opened = pa_session_open(host, port, senderName, &result) else {
-            throw AirPlayError(result)
-        }
+        guard !host.isEmpty, port != 0 else { throw AirPlayError.invalidRequest }
 
-        handle = opened
+        do {
+            sender = try AirPlaySender(host: host, port: port, senderName: senderName)
+        }
+        catch {
+            throw AirPlayError(error)
+        }
     }
 
     deinit {
@@ -448,11 +454,13 @@ public extension AirPlaySession {
     @discardableResult
     func write(_ samples: UnsafeBufferPointer<Int16>) -> WriteOutcome {
         let frameCount = samples.count / Self.channelCount
-        guard let base = samples.baseAddress, frameCount > 0 else { return .taken }
+        guard let sender, frameCount > 0 else { return .taken }
 
-        if pa_session_write(handle, base, frameCount) { return .taken }
-
-        return isRunning ? .bufferFull : .ended
+        switch sender.write(Array(samples.prefix(frameCount * Self.channelCount))) {
+        case .taken: return .taken
+        case .bufferFull: return .bufferFull
+        case .ended: return .ended
+        }
     }
 
     /// Ends the session.
@@ -463,18 +471,29 @@ public extension AirPlaySession {
     /// just written the end of a file and closes at once cuts off whatever had
     /// not gone out yet.
     func close() {
-        guard let handle else { return }
-
-        pa_session_close(handle)
-        self.handle = nil
+        sender?.close()
+        sender = nil
     }
 }
 
 // MARK: - Describing a failure
 
 extension AirPlayError: CustomStringConvertible {
-    /// The sentence the layer underneath gives for this, in English, for a log rather than a person.
-    public var description: String { String(cString: pa_result_description(result)) }
+    /// What this is, in English, for a log rather than for a person.
+    ///
+    /// Said here rather than fetched from the C interface, which says the same
+    /// thing for its own callers. Two sentences for one failure would be two
+    /// sentences to keep in step, and the C one is only there because C has no
+    /// other way to ask.
+    public var description: String {
+        switch self {
+        case .unreachable: return "the receiver could not be reached"
+        case .pairingRefused: return "the receiver refused the pairing"
+        case .sessionEnded: return "the receiver ended the session"
+        case .invalidRequest: return "the caller passed something unusable"
+        case .senderFailed: return "the sender failed for a reason the caller cannot act on"
+        }
+    }
 }
 
 // MARK: - Crossing the C boundary
@@ -513,23 +532,22 @@ private extension AirPlayDiscovery.Problem {
 }
 
 private extension AirPlayError {
-    init(_ result: PAResult) {
-        switch result {
-        case PAResultUnreachable:     self = .unreachable
-        case PAResultPairingRefused:  self = .pairingRefused
-        case PAResultSessionEnded:    self = .sessionEnded
-        case PAResultInvalidArgument: self = .invalidRequest
-        default:                      self = .senderFailed
+    /// Which of these a failure from the sender is.
+    init(_ error: Error) {
+        switch error {
+        case TCPFailure.hostCouldNotBeResolved, TCPFailure.connectionRefused,
+             TCPFailure.socketCouldNotBeOpened, TCPFailure.timedOut:
+            self = .unreachable
+
+        case TCPFailure.connectionClosed, SenderFailure.receiverAnnouncedNoClock:
+            self = .sessionEnded
+
+        case is SRPError, is PairSetupFailure:
+            self = .pairingRefused
+
+        default:
+            self = .senderFailed
         }
     }
 
-    var result: PAResult {
-        switch self {
-        case .unreachable:    return PAResultUnreachable
-        case .pairingRefused: return PAResultPairingRefused
-        case .sessionEnded:   return PAResultSessionEnded
-        case .invalidRequest: return PAResultInvalidArgument
-        case .senderFailed:   return PAResultInternal
-        }
-    }
 }
