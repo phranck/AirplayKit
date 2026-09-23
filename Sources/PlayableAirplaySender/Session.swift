@@ -36,11 +36,6 @@ public enum StreamKind: Int {
  answers 500 and will not render anything afterwards.
  */
 public struct Session {
-    /// ALAC at 44100 Hz, 16 bit, stereo, which is bit 18 of the format bitfield.
-    public static let alacStereo44100 = 0x40000
-
-    /// How many frames one packet or block carries, which RAOP fixes.
-    public static let framesPerPacket = 352
 
     /// What the receiver answered the stream SETUP with.
     public struct Stream {
@@ -175,9 +170,9 @@ public struct Session {
         var stream: [String: Any] = [
             "type": kind.rawValue,
             "ct": 2,
-            "audioFormat": Self.alacStereo44100,
-            "spf": Self.framesPerPacket,
-            "sr": 44100,
+            "audioFormat": ALACFrame.format,
+            "spf": ALACFrame.framesPerPacket,
+            "sr": ALACFrame.sampleRate,
             "shk": audioKey,
             "isMedia": true,
             "audioMode": "default",

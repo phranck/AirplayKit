@@ -281,12 +281,16 @@ public final class AirPlayDiscovery {
             // Read here rather than on the delivery queue, because by the time
             // that block runs the discovery may already have been stopped and
             // the handle released.
-            var code: Int32 = 0
-            let problem = pa_discovery_problem(discovery.handle, &code)
+            var reported: Int32 = 0
+            let problem = pa_discovery_problem(discovery.handle, &reported)
+
+            // Built here rather than on the delivery queue, so nothing mutable
+            // crosses into the block. Swift 6 refuses the capture outright.
+            let state = Problem(problem, code: reported)
 
             discovery.queue.async {
                 discovery.receivers = found
-                discovery.problem = Problem(problem, code: code)
+                discovery.problem = state
                 discovery.onChange(found)
             }
         }, context, &problem, &code)
@@ -572,21 +576,14 @@ private extension AirPlayDiscovery.Problem {
 }
 
 private extension AirPlayError {
-    /// Which of these a failure from the sender is.
+    /// Which of these a failure from the sender is, classified in one place for both faces.
     init(_ error: Error) {
-        switch error {
-        case TCPFailure.hostCouldNotBeResolved, TCPFailure.connectionRefused,
-             TCPFailure.socketCouldNotBeOpened, TCPFailure.timedOut:
-            self = .unreachable
-
-        case TCPFailure.connectionClosed, SenderFailure.receiverAnnouncedNoClock:
-            self = .sessionEnded
-
-        case is SRPError, is PairSetupFailure:
-            self = .pairingRefused
-
-        default:
-            self = .senderFailed
+        switch SenderFailureKind(error) {
+        case .unreachable: self = .unreachable
+        case .pairingRefused: self = .pairingRefused
+        case .sessionEnded: self = .sessionEnded
+        case .invalidRequest: self = .invalidRequest
+        case .senderFailed: self = .senderFailed
         }
     }
 

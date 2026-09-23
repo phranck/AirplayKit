@@ -39,7 +39,7 @@ public enum WriteOutcome: Equatable {
  */
 public final class AirPlaySender {
     /// How much audio the ring holds, which is four seconds.
-    static let ringFrames = 44100 * 4
+    static let ringFrames = ALACFrame.sampleRate * 4
 
     /// How long closing waits for the sending thread before going ahead regardless.
     static let pumpExitTimeout: TimeInterval = 2
@@ -215,7 +215,7 @@ public final class AirPlaySender {
     private func startPump() {
         let thread = Thread { [weak self] in
             let samplesPerPacket = ALACFrame.framesPerPacket * ALACFrame.channelCount
-            let packetDuration = Double(ALACFrame.framesPerPacket) / 44100.0
+            let packetDuration = ALACFrame.packetDuration
 
             // The uptime rather than the wall clock. The wall clock steps when
             // the time service corrects it and can move backwards, and the
