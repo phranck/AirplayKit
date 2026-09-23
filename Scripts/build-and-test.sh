@@ -10,7 +10,7 @@
 #  Pass a scratch directory to keep two platforms' output apart. It defaults to
 #  SwiftPM's own .build.
 #
-#  Copyright © 2026 cocoa:naut. All rights reserved.
+#  Copyright © 2026 LAYERED. All rights reserved.
 #
 
 set -euo pipefail

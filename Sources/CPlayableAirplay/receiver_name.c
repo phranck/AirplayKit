@@ -1,7 +1,7 @@
 //
 //  receiver_name.c
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 #include "include/receiver_name.h"

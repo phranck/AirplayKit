@@ -2,7 +2,7 @@
 //  receiver_name.h
 //  Reading a receiver's identifier and its name out of a service instance.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 #ifndef PLAYABLE_AIRPLAY_RECEIVER_NAME_H

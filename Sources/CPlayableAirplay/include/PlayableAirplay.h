@@ -2,7 +2,7 @@
 //  PlayableAirplay.h
 //  A C interface for finding AirPlay 2 receivers and sending audio to them.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 #ifndef PLAYABLE_AIRPLAY_H

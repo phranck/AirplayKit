@@ -2,7 +2,7 @@
 //  SessionTests.swift
 //  What the session and the discovery do when they are handed nothing usable.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import CPlayableAirplay

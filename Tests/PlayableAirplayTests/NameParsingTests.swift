@@ -2,7 +2,7 @@
 //  NameParsingTests.swift
 //  What can be checked without a receiver on the network.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import CPlayableAirplay

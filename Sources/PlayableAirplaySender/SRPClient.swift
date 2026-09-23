@@ -2,7 +2,7 @@
 //  SRPClient.swift
 //  The sender's half of the password-authenticated agreement pairing runs on.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import BigInt

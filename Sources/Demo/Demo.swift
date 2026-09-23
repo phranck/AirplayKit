@@ -3,7 +3,7 @@
 //  Finds receivers, sends a tone to one of them, and shows what this library
 //  looks like at the use site.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import Dispatch

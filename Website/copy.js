@@ -5,7 +5,7 @@
 //  What it copies is the text of the panel's own code, so the markup that
 //  colours it never reaches the clipboard.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 (function setUpCopyButtons() {

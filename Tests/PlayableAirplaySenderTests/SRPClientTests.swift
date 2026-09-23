@@ -2,7 +2,7 @@
 //  SRPClientTests.swift
 //  The sender's half of the agreement, checked against another implementation of the other half.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import BigInt

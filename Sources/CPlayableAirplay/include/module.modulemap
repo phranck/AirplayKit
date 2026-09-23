@@ -6,7 +6,7 @@
 //  The C prefix is the usual mark for the layer underneath: the module a Swift
 //  caller imports is PlayableAirplay, and this is what that module is built on.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 module CPlayableAirplay {

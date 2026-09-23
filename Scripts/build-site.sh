@@ -10,7 +10,7 @@
 #  The reference is served from /docs wherever the site stands, so it is always
 #  built to say so. Serve build/site and both halves work.
 #
-#  Copyright © 2026 cocoa:naut. All rights reserved.
+#  Copyright © 2026 LAYERED. All rights reserved.
 #
 
 set -euo pipefail

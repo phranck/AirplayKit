@@ -2,7 +2,7 @@
 //  SessionKeys.swift
 //  Everything the shared secret turns into once pairing is done.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import Crypto

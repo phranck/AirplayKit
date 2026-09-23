@@ -2,7 +2,7 @@
 //  ReceiverStateTests.swift
 //  The four states a receiver was measured reporting, held against the reading of them.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import CPlayableAirplay

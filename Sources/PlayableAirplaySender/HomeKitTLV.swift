@@ -2,7 +2,7 @@
 //  HomeKitTLV.swift
 //  The encoding every pairing message is carried in.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import Foundation

@@ -14,7 +14,7 @@
 #  "unknown build description" before compiling a line. The volume keeps the
 #  build between runs, which is what makes a second run quick.
 #
-#  Copyright © 2026 cocoa:naut. All rights reserved.
+#  Copyright © 2026 LAYERED. All rights reserved.
 #
 
 set -euo pipefail

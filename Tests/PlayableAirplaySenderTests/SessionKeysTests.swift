@@ -2,7 +2,7 @@
 //  SessionKeysTests.swift
 //  The derivations, checked against the HKDF a receiver runs.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import XCTest
