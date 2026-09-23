@@ -322,6 +322,7 @@ func playTone(on host: String, port: UInt16, forSeconds seconds: Int) -> Int32 {
     var chunk = [Int16](repeating: 0, count: framesPerChunk * AirPlaySession.channelCount)
     var frame = 0.0
     var written = 0
+    var due = Date()
 
     while written < seconds * AirPlaySession.sampleRate {
         for index in 0..<framesPerChunk {
@@ -334,7 +335,14 @@ func playTone(on host: String, port: UInt16, forSeconds seconds: Int) -> Int32 {
         switch session.write(chunk) {
         case .taken:
             written += framesPerChunk
-            Thread.sleep(forTimeInterval: chunkDuration)
+
+            // Against a fixed schedule rather than by sleeping a chunk's worth
+            // each time. Sleep always overshoots a little, and a producer that
+            // accumulates that drift falls behind real time, empties the
+            // sender's ring, and is heard as a scratch towards the end.
+            due = due.addingTimeInterval(chunkDuration)
+            let wait = due.timeIntervalSinceNow
+            if wait > 0 { Thread.sleep(forTimeInterval: wait) }
 
         case .bufferFull:
             // This tone is generated as fast as the loop runs, so a full buffer
@@ -348,6 +356,11 @@ func playTone(on host: String, port: UInt16, forSeconds seconds: Int) -> Int32 {
             return 1
         }
     }
+
+    // The anchor places the first frame a little ahead of the clock, so at any
+    // moment that much audio is written and not yet played. Closing at once
+    // takes it with you, which is heard as the tone stopping short.
+    Thread.sleep(forTimeInterval: 3)
 
     session.close()
     print("done")

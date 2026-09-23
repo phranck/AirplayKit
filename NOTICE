@@ -1,19 +1,22 @@
 PlayableAirplay
 Copyright 2026 phranck
 
-This product bundles airplay2-sender-cpp as a git submodule and builds it from
-source. That project carries its own notices, which travel with it:
+This product depends on two Swift packages, fetched by the package manager and
+built from source. Both keep their own licences:
 
-  airplay2-sender-cpp   Apache-2.0, (c) 2026 Andreas Wendorf (Akustikrausch)
-                        https://github.com/akustikrausch/airplay2-sender-cpp
+  swift-crypto          Apache-2.0, (c) Apple Inc. and the Swift project authors
+                        https://github.com/apple/swift-crypto
+  BigInt                MIT, (c) 2016-2017 Karoly Lorentey
+                        https://github.com/attaswift/BigInt
 
-Its own dependencies keep their licenses, and the full texts are in
-third_party/airplay2-sender-cpp/licenses/THIRD-PARTY-NOTICES.txt:
+The protocol this speaks is written down in Sources/PlayableAirplay.docc from
+published descriptions and from measurements taken here. Those are facts about a
+wire rather than anybody's code, and every statement names where it came from.
+No source was taken from any project, and none from a GPL or AGPL one.
 
-  pyatv (RAOP/AP2 logic port)   MIT, (c) 2020 Pierre Stahl
-  pair_ap (SRP padding spec)    MIT, (c) Espen Jurgensen
-  ed25519                       zlib, (c) 2015 Orson Peters
-  Mbed TLS (fetched at build)   Apache-2.0 OR GPL-2.0-or-later, used as Apache-2.0
+The sender was written against that record rather than ported. Until 2026-09-23
+this package built airplay2-sender-cpp, Mbed TLS and ed25519 from source instead,
+and their notices travelled with them; none of that code remains.
 
 The site under Website/ carries three typefaces and a set of icons, each kept
 under its own licence:
