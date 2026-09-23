@@ -13,6 +13,19 @@ import Glibc
 import Darwin
 #endif
 
+/// What can go wrong listening for a receiver's clock.
+public enum PTPFailure: Error, Equatable {
+    /**
+     One of the two ports could not be bound.
+
+     They are 319 and 320, and on Linux a process may not bind below 1024
+     without `CAP_NET_BIND_SERVICE`. That is a permission on this machine rather
+     than anything about the receiver, and saying so is the difference between
+     looking at the network and looking at the process.
+     */
+    case portsCouldNotBeOpened(port: UInt16)
+}
+
 /**
  What a receiver's own clock says.
 
@@ -58,20 +71,38 @@ public final class PTPClock {
 
     private var sockets: [Int32] = []
 
+    /**
+     Opens the two ports a receiver announces to.
+
+     @throws `PTPFailure.portsCouldNotBeOpened` where they cannot be bound. On
+     Linux a process without `CAP_NET_BIND_SERVICE` may not bind a port below
+     1024, and both of these are, so an ordinary desktop application can meet
+     this. It is a matter of what this machine allows rather than of the
+     receiver, and it used to be reported as the receiver being unreachable.
+     */
     public init() throws {
         for port in [Self.eventPort, Self.generalPort] {
-            sockets.append(try Self.listening(on: port))
+            do { sockets.append(try Self.listening(on: port)) }
+            catch {
+                for handle in sockets { Self.closeSocket(handle) }
+                sockets = []
+
+                throw PTPFailure.portsCouldNotBeOpened(port: port)
+            }
         }
     }
 
     deinit {
-        for handle in sockets {
-            #if canImport(Glibc)
-            Glibc.close(handle)
-            #else
-            Darwin.close(handle)
-            #endif
-        }
+        for handle in sockets { Self.closeSocket(handle) }
+    }
+
+    /// Closing a descriptor, which the two platforms spell the same way in different modules.
+    private static func closeSocket(_ handle: Int32) {
+        #if canImport(Glibc)
+        Glibc.close(handle)
+        #else
+        Darwin.close(handle)
+        #endif
     }
 
     /**

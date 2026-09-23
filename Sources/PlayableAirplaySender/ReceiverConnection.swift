@@ -187,9 +187,25 @@ public final class ReceiverConnection {
                 continue
             }
 
+            // Neither buffer may grow without end. What arrives is a reply to
+            // something this sender asked for, and the largest of those is a
+            // session SETUP answer measured in single kilobytes, so a peer that
+            // keeps feeding bytes which never form an answer is not answering.
+            guard buffer.count <= Self.maximumAnswerLength,
+                  plaintext.count <= Self.maximumAnswerLength
+            else { throw RTSPFailure.answerIsNotReadable }
+
             buffer += try connection.read()
         }
     }
+
+    /**
+     The most either buffer may hold whilst waiting for one answer.
+
+     Generous against what a receiver actually sends, and finite against one
+     that has stopped making sense or was never a receiver.
+     */
+    static let maximumAnswerLength = 1 << 20
 
     /// What has been decrypted and not yet read as an answer.
     private var plaintext = Data()
