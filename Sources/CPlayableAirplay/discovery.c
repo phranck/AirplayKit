@@ -87,6 +87,18 @@ struct PADiscovery {
     pthread_t thread;
     volatile bool stopping;
 
+    /**
+     Wakes ::runDiscovery the moment stopping is requested, instead of leaving
+     it to notice on its next select() timeout.
+
+     ::pa_discovery_stop joins that thread before returning, so whatever the
+     timeout is becomes how long the caller blocks. The pipe turns that wait
+     from the length of the timeout into the length of a context switch,
+     which is worth having on its own terms: a caller has no reason to expect
+     stopping to take up to a second.
+     */
+    int wakePipe[2];
+
     pthread_mutex_t mutex;
     PARecord records[PA_MAX_RECEIVERS];
     size_t count;
@@ -424,8 +436,12 @@ static void *runDiscovery(void *argument) {
         fd_set readable;
         FD_ZERO(&readable);
 
-        int highest = -1;
+        const int wake = discovery->wakePipe[0];
+        FD_SET(wake, &readable);
+        int highest = wake;
+
         int sockets[2] = { -1, -1 };
+        bool anyBrowsing = false;
 
         for (size_t index = 0; index < 2; index++) {
             if (!discovery->browsers[index]) continue;
@@ -433,15 +449,21 @@ static void *runDiscovery(void *argument) {
             sockets[index] = DNSServiceRefSockFD(discovery->browsers[index]);
             if (sockets[index] < 0) continue;
 
+            anyBrowsing = true;
             FD_SET(sockets[index], &readable);
             if (sockets[index] > highest) highest = sockets[index];
         }
 
-        if (highest < 0) break;
+        if (!anyBrowsing) break;
 
-        // A second at a time, so stopping is noticed promptly without spinning.
-        struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
-        if (select(highest + 1, &readable, NULL, NULL, &timeout) <= 0) continue;
+        // Unbounded: what ends the wait is either a socket becoming readable
+        // or pa_discovery_stop writing to the wake pipe, never a timeout. A
+        // caller joining the thread this runs on is waiting for exactly one
+        // of those two, so a timeout here would only delay it without telling
+        // it anything, and the wake pipe already answers "did stopping happen".
+        if (select(highest + 1, &readable, NULL, NULL, NULL) <= 0) continue;
+
+        if (FD_ISSET(wake, &readable)) break;
 
         for (size_t index = 0; index < 2; index++) {
             if (sockets[index] < 0 || !FD_ISSET(sockets[index], &readable)) continue;
@@ -473,6 +495,14 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
     discovery->context = context;
     pthread_mutex_init(&discovery->mutex, NULL);
 
+    if (pipe(discovery->wakePipe) != 0) {
+        pthread_mutex_destroy(&discovery->mutex);
+        free(discovery);
+
+        if (problem) *problem = PADiscoveryProblemFailed;
+        return NULL;
+    }
+
     const char *types[2] = { kRaopServiceType, kAirplayServiceType };
     const PAServiceKind kinds[2] = { PAServiceRaop, PAServiceAirplay };
     size_t started = 0;
@@ -501,6 +531,8 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
         if (problem) *problem = pa_discovery_problem_for_error(lastError);
         if (code) *code = lastError;
 
+        close(discovery->wakePipe[0]);
+        close(discovery->wakePipe[1]);
         pthread_mutex_destroy(&discovery->mutex);
         free(discovery);
         return NULL;
@@ -510,6 +542,8 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
         for (size_t index = 0; index < 2; index++) {
             if (discovery->browsers[index]) DNSServiceRefDeallocate(discovery->browsers[index]);
         }
+        close(discovery->wakePipe[0]);
+        close(discovery->wakePipe[1]);
         pthread_mutex_destroy(&discovery->mutex);
         free(discovery);
 
@@ -536,7 +570,16 @@ void pa_discovery_stop(PADiscovery *discovery) {
     if (!discovery) return;
 
     discovery->stopping = true;
+
+    // Wakes the select() in runDiscovery at once. What is written does not
+    // matter, only that the read end becomes readable.
+    const uint8_t wake = 0;
+    (void)write(discovery->wakePipe[1], &wake, sizeof(wake));
+
     pthread_join(discovery->thread, NULL);
+
+    close(discovery->wakePipe[0]);
+    close(discovery->wakePipe[1]);
 
     for (size_t index = 0; index < 2; index++) {
         if (discovery->browsers[index]) DNSServiceRefDeallocate(discovery->browsers[index]);
