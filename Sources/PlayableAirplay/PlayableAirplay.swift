@@ -530,6 +530,19 @@ public extension AirPlaySession {
         heldSender()?.heldFrames ?? 0
     }
 
+    /// What the session has had to make up because the source did not keep up.
+    ///
+    /// A hole in the audio is heard as crackle rather than as a gap, so it gets
+    /// blamed on the speaker or the network. Nothing else reports it: a caller
+    /// whose writes are never refused concludes its audio arrived whole, and it
+    /// did, just not in time.
+    ///
+    /// Counted from the start of the session and never reset, so two readings a
+    /// few seconds apart say what happened in between.
+    var underruns: AirPlaySender.Underruns {
+        heldSender()?.underruns ?? .none
+    }
+
     /// Ends the session.
     ///
     /// Calling it twice is allowed, and releasing the session does it anyway.

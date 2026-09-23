@@ -303,6 +303,37 @@ size_t pa_session_discard_held_audio(PASession *session);
 size_t pa_session_held_frames(PASession *session);
 
 /**
+ How many packets the session has sent as silence because no audio arrived in
+ time.
+
+ A hole in the audio is heard as crackle rather than as a gap, so it gets blamed
+ on the speaker or the network. Nothing else reports it: a caller whose writes
+ are never refused concludes its audio arrived whole, and it did, just not in
+ time.
+
+ Counted from the start of the session and never reset, so two readings a few
+ seconds apart say what happened in between.
+
+ @param session  The open session, or NULL, which has invented nothing.
+ @return The packet count.
+ */
+size_t pa_session_invented_packets(PASession *session);
+
+/// The same, as a length of audio in seconds.
+double pa_session_invented_seconds(PASession *session);
+
+/**
+ How long the session has spent waiting for audio, in seconds.
+
+ Including the waits that ended in audio, because a sender that keeps almost
+ running out is about to, and that shows here before anything is audible.
+
+ @param session  The open session, or NULL, which has waited for nothing.
+ @return The total wait.
+ */
+double pa_session_waited_seconds(PASession *session);
+
+/**
  Sets the receiver's own volume.
 
  This is the device's volume rather than a gain applied to the samples, so it
