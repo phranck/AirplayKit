@@ -581,6 +581,26 @@ That is now counted and readable, and it is what turned the third attempt at thi
 
 **F-115 (method) A buffer that is full and a buffer that is empty produce the same complaint (confirmed).** The crackle at a change of source was first read as the session holding seconds of the old one, which is the full case, and the discard was written for it. The discard was right to write and it was not the cure. The cause was the opposite condition, and the two are told apart by one number that nothing was reporting.
 
+## 2026-09-24, what a record says about the device, and what it does not
+
+**What was done.** The `_airplay._tcp` records of nine receivers were read with `dns-sd`, and the UPnP descriptions and icon artwork of four Sonos speakers were fetched directly. The question was what a list has to show for a receiver: a name a person recognises, and a picture.
+
+**F-116 Everybody but Apple publishes a manufacturer, and it is the other half of the name (confirmed).** A Sonos announces `manufacturer=Sonos` beside `model=One`, so "Sonos One" is in the record already and costs no request. Apple announces no `manufacturer` at all, and its `model` is the identifier rather than a name: `AudioAccessory5,1`, `AppleTV11,1`, `Macmini9,1`, `Mac16,12`.
+
+Naming a receiver therefore has two cases and no more. A record with a manufacturer is named by joining the two fields; one without is Apple's and its identifier is turned into a name the way macOS turns it into a picture.
+
+What the joined name does not give is the brand on the box. A SYMFONISK Bookshelf announces `manufacturer=Sonos` and `model=Bookshelf`, because Sonos builds it, and only the UPnP description says SYMFONISK. The AirPlay record understates it and there is nothing in the record that would say so.
+
+**F-117 A Sonos serves a picture of itself, and the artwork is not consistent enough to use (confirmed).** Every model answers with a single 48 by 48 PNG from its `iconList`, and there is no larger one: `icon-S18_x2.png`, `icon-S18@2x.png` and `icon-S18-large.png` all answer 404, and `/img/` itself answers 403.
+
+What comes back differs in kind. `icon-S33.png` for a SYMFONISK Bookshelf and `icon-S19.png` for a Sonos Arc are dark product photographs. `icon-S18.png` for a Sonos One is a pale line drawing, and beside the other two in a list it reads as a fault in the application rather than as a speaker.
+
+Nothing in the description says which of the two a model will serve. A rule guessing it from the image would have to tell a line drawing from a photograph of a white speaker, and Sonos sells those.
+
+**F-118 Apple's symbol catalogue is shaped like Apple's hardware and nobody else's (confirmed).** Read out of `name_availability.plist` in `CoreGlyphs.bundle`, which holds 9524 symbols. Every Apple product that receives AirPlay has one shaped like itself: `homepod`, `homepod.mini`, `homepod.2`, `appletv`, `macmini.gen3`, `laptopcomputer`. For everybody else there is `hifispeaker`, `hifispeaker.2` for a pair and `hifireceiver`, all generic, and there is no soundbar at all.
+
+So a list drawn from one hand shows Apple's hardware as itself and everybody else's as a speaker. Drawing a real Sonos would mean drawing it, and at the size a list uses a Sonos One and a HomePod mini are the same picture anyway, so the useful unit is the silhouette rather than the model.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
