@@ -341,6 +341,19 @@ static void DNSSD_API onResolved(DNSServiceRef service, DNSServiceFlags flags, u
     copyTextValue(txtLength, txt, isRaop ? "am" : "model", model, sizeof(model));
     if (model[0] != '\0') copyString(record->receiver.model, sizeof(record->receiver.model), model);
 
+    // The other half of the product name. Only the AirPlay service carries it,
+    // and Apple publishes none at all, which is what tells its receivers apart
+    // from everybody else's without a table of identifiers. Copied only when
+    // there is something, so a RAOP sighting does not clear what an AirPlay one
+    // established.
+    if (!isRaop) {
+        char manufacturer[PA_MAX_MODEL];
+        copyTextValue(txtLength, txt, "manufacturer", manufacturer, sizeof(manufacturer));
+        if (manufacturer[0] != '\0') {
+            copyString(record->receiver.manufacturer, sizeof(record->receiver.manufacturer), manufacturer);
+        }
+    }
+
     // What it is doing, out of the status field. The reading of it sits in
     // receiver_state.c, which is where it can be tested without a network.
     uint8_t stateLength = 0;

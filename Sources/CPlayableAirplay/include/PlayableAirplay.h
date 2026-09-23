@@ -93,6 +93,21 @@ typedef struct PAReceiver {
      */
     char model[PA_MAX_MODEL];
     /**
+     Who built it, from the `manufacturer` field, such as `Sonos`.
+
+     The other half of a product name: with `model` it reads as "Sonos One"
+     without asking the device anything.
+
+     Empty for Apple's receivers, which publish no such field, and that is what
+     tells the two cases apart. A record carrying a manufacturer is named by
+     joining the two; one carrying none is Apple's, and its `model` is an
+     identifier to be turned into a name.
+
+     The brand on the box is not always this. A SYMFONISK Bookshelf says Sonos
+     here, because Sonos builds it, and only its UPnP description says SYMFONISK.
+     */
+    char manufacturer[PA_MAX_MODEL];
+    /**
      Which group of receivers it says it belongs to, from the `gid` field.
 
      Published on the AirPlay service and on no RAOP record, so this is empty

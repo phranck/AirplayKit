@@ -129,12 +129,33 @@ public final class TCPConnection {
 
         while sent < bytes.count {
             let written = bytes.withUnsafeBytes { buffer -> Int in
-                send(handle, buffer.baseAddress!.advanced(by: sent), bytes.count - sent, 0)
+                send(handle, buffer.baseAddress!.advanced(by: sent), bytes.count - sent, Self.sendFlags)
             }
 
             guard written > 0 else { throw TCPFailure.connectionClosed }
             sent += written
         }
+    }
+
+    /**
+     What keeps a write to a hung-up socket from ending the process.
+
+     A bare write to a socket whose peer has closed raises SIGPIPE, and the
+     default action for that signal is to terminate. The two platforms turn it
+     off in different places: Darwin has the `SO_NOSIGPIPE` socket option, which
+     is set once when the socket is opened, and Linux has none, so every send
+     has to carry `MSG_NOSIGNAL` instead.
+
+     Without this a receiver that goes away mid-stream takes the whole
+     application down on Linux and merely fails on macOS, which is exactly the
+     kind of difference that is never seen until it is somebody else's machine.
+     */
+    private static var sendFlags: Int32 {
+        #if canImport(Glibc)
+        return Int32(MSG_NOSIGNAL)
+        #else
+        return 0
+        #endif
     }
 
     /**
