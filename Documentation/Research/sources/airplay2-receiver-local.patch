@@ -155,3 +155,18 @@ index e7e6c4d..a5c8213 100644
              self.send_response(200)
              self.send_header("Content-Length", len(res))
              self.send_header("Content-Type", HTTP_CT_BPLIST)
+diff --git a/ap2/connections/audio.py b/ap2/connections/audio.py
+index 5500a7f..4cd01fa 100644
+--- a/ap2/connections/audio.py
++++ b/ap2/connections/audio.py
+@@ -500,7 +500,9 @@ class Audio:
+         if self.codec is not None:
+             self.codecContext = av.codec.CodecContext.create(self.codec)
+             self.codecContext.sample_rate = self.sample_rate
+-            self.codecContext.channels = self.channel_count
++            # PyAV 18 made `channels` read-only and derives it from the layout, so the
++            # count is set by naming the layout that carries it.
++            self.codecContext.layout = 'stereo' if self.channel_count == 2 else 'mono'
+             self.codecContext.format = av.AudioFormat('s' + str(self.sample_size) + 'p')
+         if ed is not None:
+             self.codecContext.extradata = ed
