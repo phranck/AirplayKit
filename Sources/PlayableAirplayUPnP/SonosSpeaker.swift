@@ -2,7 +2,7 @@
 //  SonosSpeaker.swift
 //  What a Sonos will say about itself, asked directly rather than through AirPlay.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import Foundation

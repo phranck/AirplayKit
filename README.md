@@ -29,13 +29,13 @@ To read them locally, run `./Scripts/build-site.sh` and serve `build/site`, whic
 
 ## How it is put together
 
-There are two layers, and Swift takes the upper one.
+All of it is Swift, apart from the discovery, which is C because Bonjour is a C library on both platforms.
 
 `Sources/PlayableAirplay` is the library: `AirPlayDiscovery`, `AirPlaySession`, `AirPlayReceiver` and `AirPlayError`. That is the whole interface, and nothing from underneath reaches it: no opaque pointer, no C buffer, no `pa_` function.
 
-Underneath sits a C module, `CPlayableAirplay`, and further down the C++ sender. C is what Swift imports directly on macOS and on Linux alike, with no bridging header and no C++ interoperability, which is why that layer exists at all. Nothing anywhere touches AVFoundation, CoreAudio or AppKit.
+`Sources/PlayableAirplaySender` is the sender itself: the pairing, the encrypted channels, the session and the audio. It takes its cryptography from swift-crypto and its arbitrary-precision arithmetic from BigInt, and implements nothing either of them offers. Nothing anywhere touches AVFoundation, CoreAudio or AppKit.
 
-That C module is offered as a product of its own for one case: an Objective-C application, which has no Swift to import the library from. Calling a C header is what Objective-C does with a C library, so it takes `CPlayableAirplay`, imports `PlayableAirplay.h`, and gets the same thing a step lower down.
+`CPlayableAirplay` is offered as a product of its own for one case: an Objective-C application, which has no Swift to import the library from. Calling a C header is what Objective-C does with a C library, so it takes `CPlayableAirplay`, imports `PlayableAirplay.h`, and gets the same thing a step lower down. The functions behind that header are Swift, exported with C linkage.
 
 ## Using it in a project
 
@@ -66,7 +66,7 @@ Then `swift build` as usual. Browsing needs `avahi-daemon` running at the time, 
 
 ### What comes with it
 
-The C++ sender, ed25519 and Mbed TLS are built as part of the package from their own checkouts, so a clone and a build is all it takes and nothing is downloaded behind your back.
+Two Swift packages, swift-crypto and BigInt, which the package manager fetches. Nothing is vendored and nothing is built from a checkout beside the sources, so a change to one file rebuilds one file.
 
 ## Writing against it
 
@@ -134,7 +134,9 @@ They cover what can be checked without a receiver on the network: the parsing of
 
 ## What it rests on
 
-The RAOP and pairing work is [airplay2-sender-cpp](https://github.com/akustikrausch/airplay2-sender-cpp), built from source as a submodule. `NOTICE` carries its attribution and the licenses of everything it in turn depends on.
+The protocol, which is written down in the reference under `Sources/PlayableAirplay/PlayableAirplay.docc` from published descriptions and from measurements taken here. Every statement there says where it came from and whether it was measured or reported.
+
+The cryptography comes from [swift-crypto](https://github.com/apple/swift-crypto) and the arbitrary-precision arithmetic from [BigInt](https://github.com/attaswift/BigInt). Neither is reimplemented. `NOTICE` carries both licences.
 
 ## License
 

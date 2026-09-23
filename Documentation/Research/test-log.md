@@ -517,6 +517,54 @@ This overturns nothing and settles what F-087 left open from one side. A shared 
 
 **F-097 (method) The description nests three devices and repeats its element names in each (confirmed).** The speaker, its media server and its media renderer each carry `modelName`, `modelNumber` and `UDN`. The outermost is the speaker. A reader taking the last of each would describe a service instead, and the difference is invisible in the values, because they read like plausible answers.
 
+## 2026-09-23, driving a Sonos from a sender written here
+
+**What was done.** A Swift sender, written against the reference beside this log and using none of the vendored C++ one, was driven against `Büro`, a SYMFONISK Bookshelf (S33) at `10.0.0.125`. It paired, opened the session, opened the event channel, opened a stream on both paths, and sent audio. Everything below is what that sender read back, and the PTP findings come from listening on ports 319 and 320 whilst the session ran.
+
+**F-098 A receiver refuses the stream SETUP without `streamConnectionID` (confirmed).** A body carrying `type`, `ct`, `audioFormat`, `spf`, `sr`, `shk`, `isMedia`, `audioMode`, the two latencies and `supportsDynamicStreamID` is answered `400 Bad Request`. Adding `streamConnectionID`, the numeric session identifier the URI also names, is the only change that was made, and both stream types then opened. The reference lists the key from a working sender and does not say it is required; it is.
+
+**F-099 A Sonos opens the buffered stream and says how much it will hold (confirmed).** `type: 103` is answered with `dataPort`, `controlPort` and `audioBufferSize: 7130316`, which is about eighty seconds of 44100 Hz stereo. The realtime stream opens in the same session and reports no buffer size, which matches the account that only the buffered reply carries one.
+
+**F-100 The receiver keeps the clock and announces itself as its master (confirmed).** Within a second of `SETPEERS`, the speaker began sending to the address that request named: Announce and Signalling on port 320, Sync and Follow_Up on port 319. 184 packets arrived in half a minute. So on this arrangement the sender is the follower and the receiver the grandmaster, which is the opposite way round from what a sender-led design would assume.
+
+This answers the sender's half of open question 6 for this pairing. Nothing here says what an Apple sender transmits, because no Apple sender was in the session.
+
+**F-101 Its clock identity is its own hardware address in EUI-64 form (confirmed).** The Announce named a grandmaster identity of `542a1bfffe58d1f8`, and the speaker's hardware address is `54:2a:1b:58:d1:f8`. The `fffe` in the middle is the ordinary expansion of a 48-bit address to 64 bits. Both `priority1` and `priority2` read 248, and the domain number is 0, which is the default domain and as far as this measurement reaches into open question 5.
+
+**F-102 The anchor's seconds are the master clock's own uptime, not a wall clock (confirmed).** A Follow_Up carried 90787 seconds and 712649822 nanoseconds, about twenty-five hours, from a speaker that had been up about that long. That matches the order of magnitude of the one anchor measured before, F-035, which read 1409162 seconds. A sender that fills the field with Unix time is out by fifty years.
+
+**F-103 A receiver refuses an anchor on any timeline but its own (confirmed).** `SETRATEANCHORTIME` was answered `400 Bad Request` three times over: with a `networkTimeTimelineID` invented by the sender and Unix seconds, with the same identity and the sender's own uptime, and with the session declaring `timingProtocol: None` and then `PTP`. It was accepted the moment the identity was the grandmaster identity from F-101 and the seconds were that clock's own reading. So the field is not a name the sender chooses; it is a clock the receiver already keeps, and the sender has to read it before it can speak about time at all.
+
+**F-104 `SETPEERS` is accepted carrying the sender's address alone (confirmed).** A flat array holding one string, the sender's IPv4 address, is answered 200, and the receiver starts announcing to it immediately. That is consistent with F-029, where the list held the sender's addresses and not the receiver's.
+
+**F-106 The anchor has to point into the future, and this is what finally made a Sonos audible (confirmed).** With the anchor naming the receiver's own clock and the instant of sending, every block still went unplayed. The anchor says when frame zero sounds, and a block cannot arrive before it is sent, so anchored on the moment of sending every block arrives after its own moment and is dropped as late. Moving frame zero two seconds ahead of the reading, and changing nothing else, produced an audible tone on the speaker. That is the first sound this project has made on a Sonos.
+
+Nothing measured says what the smallest workable lead is, nor what an Apple sender uses. Two seconds was the first value tried and it worked.
+
+**F-107 (method) Padding an empty ring with silence turns a live source into crackle (confirmed).** The first version of the session took a packet from a ring on its own thread and, finding fewer frames than it wanted, sent a packet of silence so the timeline would keep running. The tone came out as crackle where the same audio sent from one thread had been a clean sine.
+
+A live source fills such a ring at the same nominal rate as it is drained, so the two drift against each other constantly and the ring is briefly short several times a second. Every one of those became a hole in the audio. Waiting up to four packet lengths for frames that are almost certainly already on their way, and padding only when they genuinely are not, restored the clean tone.
+
+This is about a sender's own design rather than about the protocol, and it is written down because the symptom points nowhere near the cause: the session is healthy, no packet is refused, and what is heard sounds like a codec fault.
+
+**F-108 (method) A producer that paces by sleeping falls behind, and the crackle arrives at the end (confirmed).** With the padding corrected, a fifteen second tone was clean until shortly before it finished and then crackled briefly. The producer was sleeping one packet's duration after each packet, and a sleep always overshoots a little, so it fell steadily behind real time. Over fifteen seconds that drained the ring, and the drain was audible only once it reached the bottom.
+
+Pacing against a fixed schedule instead, so each packet is due at a time computed from the start rather than from the last sleep, gave twenty seconds clean through. Both halves matter and they fail at different ends of a stream: padding too eagerly is heard from the first second, and pacing by sleeping is heard only after the ring has run down.
+
+**F-105 The buffered path takes the blocks without the anchor and plays none of them (confirmed).** Ten seconds of a 440 Hz tone were written to the data port as length-prefixed blocks, framed and encrypted as the reference describes, before the anchor was solved. The receiver took every block and closed nothing, and the room stayed silent rather than noisy. So a receiver on this path holds what it cannot place in time, which is why a sender that gets the framing right and the anchor wrong sees a healthy session and hears nothing.
+
+## 2026-09-23, what an audit of the sender found
+
+**What was done.** An auditor with no part in writing the package read all of it, looking for weaknesses, redundancy and anything it does twice. Eleven findings came back. The four below are the ones that say something a later reader would otherwise have to find again; the rest were repairs whose reasoning is in the commit that made them.
+
+**F-109 (method) An escaped Bonjour instance name is up to four times its own length (confirmed).** A DNS-SD instance label is 63 bytes on the wire, and `DNSServiceResolve` hands back an escaped form in which a byte needing an escape becomes four characters, such as `\032` for a space. So a name of emoji or accented characters reaches 252 characters before the service type is appended. A buffer sized for a display name truncates it, and truncation is not the damage: the service type is then no longer in the string, the separator search finds nothing, and the tail of the cut becomes the receiver's name. The buffer has to be `kDNSServiceMaxDomainName`, and a name without a service type in it has to be dropped rather than read as far as it goes.
+
+**F-110 (method) A PTP clock cannot be opened on Linux without a capability (confirmed).** The ports are 319 and 320, both below 1024, so a process without `CAP_NET_BIND_SERVICE` cannot bind them. On macOS this never appears, because the sender runs as a user who may. It is worth naming as the sender's own problem, since the failure otherwise arrives as the receiver being unreachable and sends the reader to the network.
+
+**F-111 (method) The ALAC element header is 23 bits, so nothing in the frame is byte aligned (confirmed).** Three bits of element tag, four unused, twelve unknown, one for the frame length flag, two for wasted bytes and one for the uncompressed escape. The first sample therefore begins in the middle of the third byte, and no field after it can be read out of a hex dump. A length calculation that uses 24 gives the same byte count, because the rounding up to a byte boundary absorbs the difference, so the mistake passes its own test and survives.
+
+**F-112 (method) A test that rebuilds the framing tests its own copy (confirmed).** The block builder sat inside the method that writes to the socket, so checking it from outside meant either a receiver on the other end or rewriting the framing in the test. The second is not a test: the two copies drift, and the one that matters is the one nothing reads back. Lifting the builder out, so it takes its inputs and returns the bytes, is what made the layout checkable at all. The test then reads every field at the offset a receiver reads it from and opens the payload with the construction from the other side.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
@@ -533,7 +581,8 @@ This overturns nothing and settles what F-087 left open from one side. A shared 
 2. Whether a macOS sender is stricter than an iOS one at all, which F-082 says nothing measured so far can answer. It needs an iOS 27 device against the same receiver.
 3. Which stream type a macOS sender asks for. F-081 answers it for an iPhone playing music, which used 103 three times out of three, and the macOS sender never reached the stream level SETUP.
 4. Whether two receivers in one group are given the same anchor. This needs two receivers under our control in one session, which an iPhone can drive as soon as the second machine's receiver is usable.
-5. Which PTP domain number and profile a group uses beyond domain 0, and whether the receivers contest the election with a full Best Master Clock exchange or accept the first announcement.
-6. What this Mac transmits as PTP, which decides whether a sender is a plain slave of the elected master or a boundary clock passing the time on to the other members.
+5. Which PTP profile a group uses, and whether the receivers contest the election with a full Best Master Clock exchange or accept the first announcement. F-101 settles the domain for one speaker addressed alone, which is 0, and says both its priorities are 248. What happens when a second speaker with the same priorities joins is untouched.
+6. What an Apple sender transmits as PTP. F-100 answers the other half of this for a sender written here: against one Sonos the receiver is the grandmaster and the sender only listens, so a sender need not be a clock at all. Whether an Apple sender leads instead, and whether it has to once a group has two members, is open.
+9. Whether the one-way estimate F-102 rests on is good enough. The sender reads the master's time out of a Follow_Up and carries it forward on its own uptime, without a Delay_Req, so the network's one-way delay is carried as an error. It has not been measured, and it is the difference between placing one stream and holding two speakers together.
 7. How a member leaves a group.
 8. Why the transport is IPv6 link-local in one direction and IPv4 in the other.

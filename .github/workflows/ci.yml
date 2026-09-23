@@ -32,8 +32,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       # dns_sd.h ships with macOS. On Linux it comes from Avahi's compatibility
       # package, which is the same header and the same calls.

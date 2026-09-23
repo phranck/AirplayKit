@@ -2,7 +2,7 @@
 //  discovery.c
 //  Finding AirPlay receivers on the network.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 #include "PlayableAirplay.h"
@@ -86,6 +86,18 @@ struct PADiscovery {
 
     pthread_t thread;
     volatile bool stopping;
+
+    /**
+     Wakes ::runDiscovery the moment stopping is requested, instead of leaving
+     it to notice on its next select() timeout.
+
+     ::pa_discovery_stop joins that thread before returning, so whatever the
+     timeout is becomes how long the caller blocks. The pipe turns that wait
+     from the length of the timeout into the length of a context switch,
+     which is worth having on its own terms: a caller has no reason to expect
+     stopping to take up to a second.
+     */
+    int wakePipe[2];
 
     pthread_mutex_t mutex;
     PARecord records[PA_MAX_RECEIVERS];
@@ -231,15 +243,27 @@ static void DNSSD_API onResolved(DNSServiceRef service, DNSServiceFlags flags, u
     // The instance name up to the service type. A RAOP instance is the hardware
     // address, then `@`, then the display name; an AirPlay instance is the
     // display name alone.
-    char escaped[PA_MAX_NAME];
+    //
+    // Sized for a whole service name rather than for a display name. An instance
+    // label is 63 bytes on the wire and each byte needing an escape becomes four
+    // characters, so a name with an emoji or an accent in it reaches 252 before
+    // the type is added. Cut short, the service type is no longer in the string,
+    // the separator below is never found, and the tail of the truncation becomes
+    // the receiver's name.
+    char escaped[kDNSServiceMaxDomainName];
     copyString(escaped, sizeof(escaped), fullName);
 
     char *separator = strstr(escaped, isRaop ? "._raop." : "._airplay.");
-    if (separator) *separator = '\0';
+
+    // No service type in it means this is not the name it claims to be, and
+    // carrying on would name the receiver after whatever survived.
+    if (!separator) return;
+
+    *separator = '\0';
 
     // The name arrives in its wire form, where a space is `\032` and a dot is
     // `\.`, so it is made readable before anything reads it or shows it.
-    char instance[PA_MAX_NAME];
+    char instance[kDNSServiceMaxDomainName];
     pa_unescape_instance_name(escaped, instance, sizeof(instance));
 
     char identifier[PA_MAX_ID];
@@ -375,14 +399,26 @@ static void DNSSD_API onBrowsed(DNSServiceRef service, DNSServiceFlags flags, ui
         // being resolvable. A record left behind by a receiver that went away
         // without withdrawing it does exactly that, and blocking here holds the
         // whole discovery, including the stop that is waiting for this thread.
+        // The wake pipe is watched alongside it, so stopping is noticed here
+        // too. Without it a stop that arrives whilst a resolve is waiting has
+        // to sit out the whole timeout, and the caller waits with it, which is
+        // exactly what the pipe was added to prevent.
         const int socket = DNSServiceRefSockFD(resolver);
+        const int wake = discovery->wakePipe[0];
         if (socket >= 0) {
             fd_set readable;
             FD_ZERO(&readable);
             FD_SET(socket, &readable);
+            if (wake >= 0) FD_SET(wake, &readable);
 
+            const int highest = (wake > socket ? wake : socket);
             struct timeval timeout = { .tv_sec = 2, .tv_usec = 0 };
-            if (select(socket + 1, &readable, NULL, NULL, &timeout) > 0) {
+
+            // Only where the resolve itself answered. A wake means stopping,
+            // and processing a result then would hand a record to a handler
+            // that is going away.
+            if (select(highest + 1, &readable, NULL, NULL, &timeout) > 0
+                && FD_ISSET(socket, &readable)) {
                 DNSServiceProcessResult(resolver);
             }
         }
@@ -424,8 +460,12 @@ static void *runDiscovery(void *argument) {
         fd_set readable;
         FD_ZERO(&readable);
 
-        int highest = -1;
+        const int wake = discovery->wakePipe[0];
+        FD_SET(wake, &readable);
+        int highest = wake;
+
         int sockets[2] = { -1, -1 };
+        bool anyBrowsing = false;
 
         for (size_t index = 0; index < 2; index++) {
             if (!discovery->browsers[index]) continue;
@@ -433,15 +473,21 @@ static void *runDiscovery(void *argument) {
             sockets[index] = DNSServiceRefSockFD(discovery->browsers[index]);
             if (sockets[index] < 0) continue;
 
+            anyBrowsing = true;
             FD_SET(sockets[index], &readable);
             if (sockets[index] > highest) highest = sockets[index];
         }
 
-        if (highest < 0) break;
+        if (!anyBrowsing) break;
 
-        // A second at a time, so stopping is noticed promptly without spinning.
-        struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
-        if (select(highest + 1, &readable, NULL, NULL, &timeout) <= 0) continue;
+        // Unbounded: what ends the wait is either a socket becoming readable
+        // or pa_discovery_stop writing to the wake pipe, never a timeout. A
+        // caller joining the thread this runs on is waiting for exactly one
+        // of those two, so a timeout here would only delay it without telling
+        // it anything, and the wake pipe already answers "did stopping happen".
+        if (select(highest + 1, &readable, NULL, NULL, NULL) <= 0) continue;
+
+        if (FD_ISSET(wake, &readable)) break;
 
         for (size_t index = 0; index < 2; index++) {
             if (sockets[index] < 0 || !FD_ISSET(sockets[index], &readable)) continue;
@@ -473,6 +519,14 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
     discovery->context = context;
     pthread_mutex_init(&discovery->mutex, NULL);
 
+    if (pipe(discovery->wakePipe) != 0) {
+        pthread_mutex_destroy(&discovery->mutex);
+        free(discovery);
+
+        if (problem) *problem = PADiscoveryProblemFailed;
+        return NULL;
+    }
+
     const char *types[2] = { kRaopServiceType, kAirplayServiceType };
     const PAServiceKind kinds[2] = { PAServiceRaop, PAServiceAirplay };
     size_t started = 0;
@@ -501,6 +555,8 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
         if (problem) *problem = pa_discovery_problem_for_error(lastError);
         if (code) *code = lastError;
 
+        close(discovery->wakePipe[0]);
+        close(discovery->wakePipe[1]);
         pthread_mutex_destroy(&discovery->mutex);
         free(discovery);
         return NULL;
@@ -510,6 +566,8 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
         for (size_t index = 0; index < 2; index++) {
             if (discovery->browsers[index]) DNSServiceRefDeallocate(discovery->browsers[index]);
         }
+        close(discovery->wakePipe[0]);
+        close(discovery->wakePipe[1]);
         pthread_mutex_destroy(&discovery->mutex);
         free(discovery);
 
@@ -536,7 +594,16 @@ void pa_discovery_stop(PADiscovery *discovery) {
     if (!discovery) return;
 
     discovery->stopping = true;
+
+    // Wakes the select() in runDiscovery at once. What is written does not
+    // matter, only that the read end becomes readable.
+    const uint8_t wake = 0;
+    (void)write(discovery->wakePipe[1], &wake, sizeof(wake));
+
     pthread_join(discovery->thread, NULL);
+
+    close(discovery->wakePipe[0]);
+    close(discovery->wakePipe[1]);
 
     for (size_t index = 0; index < 2; index++) {
         if (discovery->browsers[index]) DNSServiceRefDeallocate(discovery->browsers[index]);

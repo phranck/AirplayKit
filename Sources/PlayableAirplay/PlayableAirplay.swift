@@ -6,12 +6,13 @@
 //  alike, and it is an implementation detail. Nothing outside this file calls a
 //  pa_ function, and nothing outside it sees a C buffer or an opaque pointer.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import CPlayableAirplay
 import Dispatch
 import Foundation
+import PlayableAirplaySender
 
 // MARK: - Receiver
 
@@ -280,12 +281,16 @@ public final class AirPlayDiscovery {
             // Read here rather than on the delivery queue, because by the time
             // that block runs the discovery may already have been stopped and
             // the handle released.
-            var code: Int32 = 0
-            let problem = pa_discovery_problem(discovery.handle, &code)
+            var reported: Int32 = 0
+            let problem = pa_discovery_problem(discovery.handle, &reported)
+
+            // Built here rather than on the delivery queue, so nothing mutable
+            // crosses into the block. Swift 6 refuses the capture outright.
+            let state = Problem(problem, code: reported)
 
             discovery.queue.async {
                 discovery.receivers = found
-                discovery.problem = Problem(problem, code: code)
+                discovery.problem = state
                 discovery.onChange(found)
             }
         }, context, &problem, &code)
@@ -358,7 +363,7 @@ public final class AirPlaySession {
     public static let channelCount = Int(PA_CHANNELS)
 
     /// Whether the receiver is still taking audio.
-    public var isRunning: Bool { pa_session_is_running(handle) }
+    public var isRunning: Bool { heldSender()?.isRunning ?? false }
 
     /// The receiver's own volume, from 0 for silent to 1 for full.
     ///
@@ -374,15 +379,48 @@ public final class AirPlaySession {
     /// Anything outside the range is brought into it, and reading it back gives
     /// what was actually sent.
     public var volume: Float {
-        get { sentVolume }
+        get {
+            state.lock()
+            defer { state.unlock() }
+
+            return sentVolume
+        }
         set {
+            state.lock()
             sentVolume = min(max(newValue, 0), 1)
-            pa_session_set_volume(handle, sentVolume)
+            let level = sentVolume
+            let held = sender
+            state.unlock()
+
+            // Outside the lock, because setting it sends a request and waits
+            // for the answer, and nothing that sends is worth blocking a write
+            // behind.
+            //
+            // Swallowed, because a property setter has no way to report it and
+            // a volume that did not arrive is not worth ending a session over.
+            try? held?.setVolume(level)
         }
     }
 
-    private var handle: OpaquePointer?
+    /**
+     Everything mutable here is reached from two threads at once.
+
+     A caller is told to write from an audio callback and to stop from wherever
+     the stop button is, so the sender and the volume are read on one thread
+     whilst being written on another. The lock is held only long enough to pick
+     up or put down a reference, never across anything that sends.
+     */
+    private let state = NSLock()
+    private var sender: AirPlaySender?
     private var sentVolume: Float = 1
+
+    /// The sender, taken under the lock and used outside it.
+    private func heldSender() -> AirPlaySender? {
+        state.lock()
+        defer { state.unlock() }
+
+        return sender
+    }
 
     /// Opens a session with a receiver and pairs with it.
     ///
@@ -406,12 +444,14 @@ public final class AirPlaySession {
     ///   - senderName: What the receiver shows as the source.
     /// - Throws: An ``AirPlayError`` when the receiver cannot be reached or refuses.
     public init(host: String, port: UInt16 = 7000, senderName: String) throws {
-        var result = PAResultOK
-        guard let opened = pa_session_open(host, port, senderName, &result) else {
-            throw AirPlayError(result)
-        }
+        guard !host.isEmpty, port != 0 else { throw AirPlayError.invalidRequest }
 
-        handle = opened
+        do {
+            sender = try AirPlaySender(host: host, port: port, senderName: senderName)
+        }
+        catch {
+            throw AirPlayError(error)
+        }
     }
 
     deinit {
@@ -448,11 +488,18 @@ public extension AirPlaySession {
     @discardableResult
     func write(_ samples: UnsafeBufferPointer<Int16>) -> WriteOutcome {
         let frameCount = samples.count / Self.channelCount
-        guard let base = samples.baseAddress, frameCount > 0 else { return .taken }
 
-        if pa_session_write(handle, base, frameCount) { return .taken }
+        // Nothing to send is not a failure, and nothing to send it to is. A
+        // closed session that answers taken tells a caller its audio is on its
+        // way for ever, which is exactly what this type exists to prevent.
+        guard frameCount > 0 else { return .taken }
+        guard let sender = heldSender() else { return .ended }
 
-        return isRunning ? .bufferFull : .ended
+        switch sender.write(Array(samples.prefix(frameCount * Self.channelCount))) {
+        case .taken: return .taken
+        case .bufferFull: return .bufferFull
+        case .ended: return .ended
+        }
     }
 
     /// Ends the session.
@@ -463,18 +510,34 @@ public extension AirPlaySession {
     /// just written the end of a file and closes at once cuts off whatever had
     /// not gone out yet.
     func close() {
-        guard let handle else { return }
+        state.lock()
+        let held = sender
+        sender = nil
+        state.unlock()
 
-        pa_session_close(handle)
-        self.handle = nil
+        // Outside the lock, because closing waits for the sending thread.
+        held?.close()
     }
 }
 
 // MARK: - Describing a failure
 
 extension AirPlayError: CustomStringConvertible {
-    /// The sentence the layer underneath gives for this, in English, for a log rather than a person.
-    public var description: String { String(cString: pa_result_description(result)) }
+    /// What this is, in English, for a log rather than for a person.
+    ///
+    /// Said here rather than fetched from the C interface, which says the same
+    /// thing for its own callers. Two sentences for one failure would be two
+    /// sentences to keep in step, and the C one is only there because C has no
+    /// other way to ask.
+    public var description: String {
+        switch self {
+        case .unreachable: return "the receiver could not be reached"
+        case .pairingRefused: return "the receiver refused the pairing"
+        case .sessionEnded: return "the receiver ended the session"
+        case .invalidRequest: return "the caller passed something unusable"
+        case .senderFailed: return "the sender failed for a reason the caller cannot act on"
+        }
+    }
 }
 
 // MARK: - Crossing the C boundary
@@ -513,23 +576,15 @@ private extension AirPlayDiscovery.Problem {
 }
 
 private extension AirPlayError {
-    init(_ result: PAResult) {
-        switch result {
-        case PAResultUnreachable:     self = .unreachable
-        case PAResultPairingRefused:  self = .pairingRefused
-        case PAResultSessionEnded:    self = .sessionEnded
-        case PAResultInvalidArgument: self = .invalidRequest
-        default:                      self = .senderFailed
+    /// Which of these a failure from the sender is, classified in one place for both faces.
+    init(_ error: Error) {
+        switch SenderFailureKind(error) {
+        case .unreachable: self = .unreachable
+        case .pairingRefused: self = .pairingRefused
+        case .sessionEnded: self = .sessionEnded
+        case .invalidRequest: self = .invalidRequest
+        case .senderFailed: self = .senderFailed
         }
     }
 
-    var result: PAResult {
-        switch self {
-        case .unreachable:    return PAResultUnreachable
-        case .pairingRefused: return PAResultPairingRefused
-        case .sessionEnded:   return PAResultSessionEnded
-        case .invalidRequest: return PAResultInvalidArgument
-        case .senderFailed:   return PAResultInternal
-        }
-    }
 }

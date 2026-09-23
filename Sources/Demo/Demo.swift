@@ -3,12 +3,13 @@
 //  Finds receivers, sends a tone to one of them, and shows what this library
 //  looks like at the use site.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import Dispatch
 import Foundation
 import PlayableAirplay
+import PlayableAirplaySender
 import PlayableAirplayUPnP
 
 // The library runs on Linux as well, and AVFoundation does not. Everything that
@@ -111,6 +112,195 @@ func describeSonos(at host: String) async -> Int32 {
     return 0
 }
 
+// MARK: - The Swift sender
+
+/**
+ Pairs with a receiver using the Swift sender, and says what came out.
+
+ This exercises the path being built beside the C++ one. It stops at the keys,
+ because that is as far as that path goes so far.
+
+ @param host The receiver's host name or address.
+ @param port Its RTSP port.
+ @returns Nought where it paired, and one where it did not.
+ */
+func playThroughSwiftSender(at host: String, port: UInt16, seconds: Int) -> Int32 {
+    do {
+        print("connecting to \(host):\(port)")
+        let sender = try AirPlaySender(host: host, port: port, senderName: "PlayableAirplay")
+        try sender.setVolume(0.3)
+        print("session up, sending \(seconds) seconds of 440 Hz at a third of full volume")
+
+        // Handed over from outside, a packet's worth at a time, exactly as a
+        // live source arrives. The sender paces what leaves; this only fills.
+        var frame = 0.0
+        let packets = seconds * ALACFrame.sampleRate / ALACFrame.framesPerPacket
+        var dropped = 0
+        var due = Date()
+
+        for _ in 0..<packets {
+            var samples = [Int16](repeating: 0, count: ALACFrame.framesPerPacket * ALACFrame.channelCount)
+            for index in 0..<ALACFrame.framesPerPacket {
+                let value = Int16(3000.0 * sin(2.0 * .pi * 440.0 * frame / Double(ALACFrame.sampleRate)))
+                samples[index * 2] = value
+                samples[index * 2 + 1] = value
+                frame += 1
+            }
+
+            switch sender.write(samples) {
+            case .taken:
+                break
+            case .bufferFull:
+                dropped += 1
+            case .ended:
+                print("the receiver ended the session")
+                sender.close()
+                return 1
+            }
+
+            // Against a fixed schedule rather than by sleeping a packet's worth
+            // each time. Sleep always overshoots a little, and a producer that
+            // accumulates that drift falls behind real time, empties the ring,
+            // and is heard as crackle towards the end of a long tone.
+            due = due.addingTimeInterval(ALACFrame.packetDuration)
+            let wait = due.timeIntervalSinceNow
+            if wait > 0 { Thread.sleep(forTimeInterval: wait) }
+        }
+
+        // Let the ring drain before closing, or the tail is never sent.
+        Thread.sleep(forTimeInterval: AirPlaySender.anchorLead + 1)
+        sender.close()
+
+        print("done, \(dropped) packet(s) refused for want of room")
+
+        return 0
+    }
+    catch {
+        FileHandle.standardError.write(Data("could not play: \(error)\n".utf8))
+        return 1
+    }
+}
+
+/// Pairs and reports what came out, without sending any audio.
+func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 {
+    do {
+        print("connecting to \(host):\(port)")
+        let connection = try ReceiverConnection(host: host, port: port, senderName: "PlayableAirplay")
+
+        try connection.pair()
+
+        guard let keys = connection.keys else { return 1 }
+
+        print("paired, and the connection is encrypted from here")
+
+        var session = Session(connection: connection)
+
+        // Asked before the session SETUP, which a receiver rejects without it.
+        let info = try session.askWhatItIs()
+        if let name = info["name"] as? String {
+            print("  it says it is \(name), a \(info["model"] as? String ?? "receiver")")
+        }
+
+        // Everything it says about time and about what it can carry, which is
+        // what decides which path can actually be driven.
+        for key in info.keys.sorted() where key.lowercased().contains("timing")
+            || key.lowercased().contains("clock")
+            || key.lowercased().contains("ptp")
+            || key.lowercased().contains("feature")
+            || key.lowercased().contains("status") {
+            print("  \(key) = \(info[key] ?? "")")
+        }
+
+        let eventPort = try session.open(senderName: "PlayableAirplay")
+        print("  session open, event channel wanted on \(eventPort)")
+
+        // Before RECORD, because a receiver answers RECORD with 500 until this
+        // connection exists and then never renders anything.
+        let events = try EventChannel(host: host, port: eventPort, keys: keys)
+        session.record()
+
+        let stream = try session.openStream(.buffered, audioKey: keys.audio)
+        let buffered = stream.audioBufferSize.map { ", buffer \($0)" } ?? ""
+        print("  buffered stream: data \(stream.dataPort), control \(stream.controlPort)\(buffered)")
+
+        try session.setVolume(0.3)
+
+        // An anchor on a timeline of our own, which is the open question here:
+        // the session declared no timing protocol, so there is no shared clock,
+        // and whether a receiver plays against one it was simply handed is what
+        // this finds out.
+        // Opened before SETPEERS, because the receiver starts announcing as
+        // soon as it is told where to announce to.
+        let clock = try PTPClock()
+
+        do {
+            try session.setPeers([connection.localAddress])
+            print("  peers accepted")
+        }
+        catch {
+            print("  peers refused: \(error)")
+        }
+
+        // The receiver keeps the clock and announces it, so the anchor is
+        // expressed on its timeline rather than on one of ours.
+        guard let reading = clock.read(from: connection.peerAddress, timeout: 12) else {
+            print("  the receiver announced no clock, so there is no timeline to anchor to")
+            return 1
+        }
+
+        // Two seconds ahead, because the anchor says when frame zero sounds and
+        // the first block cannot arrive before it is sent. Anchored on the
+        // instant of sending, everything arrives after its own moment and a
+        // receiver drops audio that is already late.
+        let lead = 2.0
+        let time = PTPClock.now(from: reading, ahead: lead)
+        print(String(format: "  its clock is %016llx, reading %lld s", reading.identity, time.seconds))
+
+        do {
+            try session.setAnchor(rtpTime: 0,
+                                  seconds: time.seconds,
+                                  fraction: time.fraction,
+                                  timelineIdentifier: Int64(bitPattern: reading.identity))
+            print("  anchor accepted, frame zero sounds in \(lead) s")
+        }
+        catch {
+            print("  anchor refused: \(error)")
+        }
+
+        let audio = try BufferedAudioStream(host: host, port: stream.dataPort, audioKey: keys.audio)
+        print("  sending \(seconds) seconds of 440 Hz at a third of full volume")
+
+        // Paced against the clock, because a live source cannot be sent ahead
+        // and this is the case the product needs.
+        var frame = 0.0
+        let packets = seconds * ALACFrame.sampleRate / ALACFrame.framesPerPacket
+        for _ in 0..<packets {
+            var samples = [Int16](repeating: 0, count: ALACFrame.framesPerPacket * 2)
+            for index in 0..<ALACFrame.framesPerPacket {
+                let value = Int16(3000.0 * sin(2.0 * .pi * 440.0 * frame / Double(ALACFrame.sampleRate)))
+                samples[index * 2] = value
+                samples[index * 2 + 1] = value
+                frame += 1
+            }
+
+            try audio.write(samples)
+            Thread.sleep(forTimeInterval: ALACFrame.packetDuration)
+        }
+
+        print("  done")
+
+        audio.close()
+        events.close()
+        connection.close()
+
+        return 0
+    }
+    catch {
+        FileHandle.standardError.write(Data("could not pair: \(error)\n".utf8))
+        return 1
+    }
+}
+
 // MARK: - Sending a tone
 
 /// Opens a session and plays a quiet 440 Hz tone for a while.
@@ -132,6 +322,7 @@ func playTone(on host: String, port: UInt16, forSeconds seconds: Int) -> Int32 {
     var chunk = [Int16](repeating: 0, count: framesPerChunk * AirPlaySession.channelCount)
     var frame = 0.0
     var written = 0
+    var due = Date()
 
     while written < seconds * AirPlaySession.sampleRate {
         for index in 0..<framesPerChunk {
@@ -144,7 +335,14 @@ func playTone(on host: String, port: UInt16, forSeconds seconds: Int) -> Int32 {
         switch session.write(chunk) {
         case .taken:
             written += framesPerChunk
-            Thread.sleep(forTimeInterval: chunkDuration)
+
+            // Against a fixed schedule rather than by sleeping a chunk's worth
+            // each time. Sleep always overshoots a little, and a producer that
+            // accumulates that drift falls behind real time, empties the
+            // sender's ring, and is heard as a scratch towards the end.
+            due = due.addingTimeInterval(chunkDuration)
+            let wait = due.timeIntervalSinceNow
+            if wait > 0 { Thread.sleep(forTimeInterval: wait) }
 
         case .bufferFull:
             // This tone is generated as fast as the loop runs, so a full buffer
@@ -158,6 +356,11 @@ func playTone(on host: String, port: UInt16, forSeconds seconds: Int) -> Int32 {
             return 1
         }
     }
+
+    // The anchor places the first frame a little ahead of the clock, so at any
+    // moment that much audio is written and not yet played. Closing at once
+    // takes it with you, which is heard as the tone stopping short.
+    Thread.sleep(forTimeInterval: 3)
 
     session.close()
     print("done")
@@ -338,6 +541,8 @@ struct Demo {
             var usage = """
                         usage: Demo list
                                Demo sonos <host>                what AirPlay will not say
+                               Demo pair <host> [port]          pair only, and say what came out
+                               Demo swift <host> [port] [secs]  play through the Swift sender
                                Demo play <host> [port] [seconds]
                                Demo wave <path> <host> [port]   16 bit stereo at 44100
                         """
@@ -357,6 +562,15 @@ struct Demo {
 
         case "sonos" where arguments.count > 2:
             exit(await describeSonos(at: arguments[2]))
+
+        case "pair" where arguments.count > 2:
+            let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000
+            exit(pairWithReceiver(at: arguments[2], port: port))
+
+        case "swift" where arguments.count > 2:
+            let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000
+            let seconds = Int(arguments.count > 4 ? arguments[4] : "10") ?? 10
+            exit(playThroughSwiftSender(at: arguments[2], port: port, seconds: seconds))
 
         case "play" where arguments.count > 2:
             let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000

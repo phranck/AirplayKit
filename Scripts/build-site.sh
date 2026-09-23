@@ -10,7 +10,7 @@
 #  The reference is served from /docs wherever the site stands, so it is always
 #  built to say so. Serve build/site and both halves work.
 #
-#  Copyright © 2026 cocoa:naut. All rights reserved.
+#  Copyright © 2026 LAYERED. All rights reserved.
 #
 
 set -euo pipefail
@@ -30,9 +30,25 @@ mkdir -p "$symbolDirectory" "$siteDirectory"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 
+# The library imports the sender, which is a Swift module rather than a header,
+# so it has to exist before the compiler can be asked about anything. Building
+# the package is how it comes to exist, and where it lands is what the bin path
+# names.
+swift build > /dev/null
+binPath="$(swift build --show-bin-path)"
+
+# Where a built module lands differs by build system: beside the products under
+# one and in a Modules directory under the other. Both are offered and the
+# compiler takes whichever exists.
+moduleSearch=(-I "$binPath")
+if [[ -d "$binPath/Modules" ]]; then
+    moduleSearch+=(-I "$binPath/Modules")
+fi
+
 swiftc -emit-symbol-graph -emit-symbol-graph-dir "$symbolDirectory" \
     -emit-module -module-name "$moduleName" \
     -I Sources/CPlayableAirplay/include \
+    "${moduleSearch[@]}" \
     Sources/"$moduleName"/"$moduleName".swift \
     -o "$scratch/$moduleName.o"
 
