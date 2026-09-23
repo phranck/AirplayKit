@@ -63,7 +63,7 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     /// Who built it, such as `Sonos`, or an empty string where it said nothing.
     ///
     /// The other half of a product name. With ``model`` it reads as "Sonos One"
-    /// without asking the device anything, which is what ``productName`` does.
+    /// without asking the device anything, which is what `productName` does.
     ///
     /// Empty for Apple's receivers, which publish no such field, and that is
     /// what tells the two cases apart without a table of identifiers.
