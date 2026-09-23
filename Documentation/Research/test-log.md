@@ -553,6 +553,18 @@ Pacing against a fixed schedule instead, so each packet is due at a time compute
 
 **F-105 The buffered path takes the blocks without the anchor and plays none of them (confirmed).** Ten seconds of a 440 Hz tone were written to the data port as length-prefixed blocks, framed and encrypted as the reference describes, before the anchor was solved. The receiver took every block and closed nothing, and the room stayed silent rather than noisy. So a receiver on this path holds what it cannot place in time, which is why a sender that gets the framing right and the anchor wrong sees a healthy session and hears nothing.
 
+## 2026-09-23, what an audit of the sender found
+
+**What was done.** An auditor with no part in writing the package read all of it, looking for weaknesses, redundancy and anything it does twice. Eleven findings came back. The four below are the ones that say something a later reader would otherwise have to find again; the rest were repairs whose reasoning is in the commit that made them.
+
+**F-109 (method) An escaped Bonjour instance name is up to four times its own length (confirmed).** A DNS-SD instance label is 63 bytes on the wire, and `DNSServiceResolve` hands back an escaped form in which a byte needing an escape becomes four characters, such as `\032` for a space. So a name of emoji or accented characters reaches 252 characters before the service type is appended. A buffer sized for a display name truncates it, and truncation is not the damage: the service type is then no longer in the string, the separator search finds nothing, and the tail of the cut becomes the receiver's name. The buffer has to be `kDNSServiceMaxDomainName`, and a name without a service type in it has to be dropped rather than read as far as it goes.
+
+**F-110 (method) A PTP clock cannot be opened on Linux without a capability (confirmed).** The ports are 319 and 320, both below 1024, so a process without `CAP_NET_BIND_SERVICE` cannot bind them. On macOS this never appears, because the sender runs as a user who may. It is worth naming as the sender's own problem, since the failure otherwise arrives as the receiver being unreachable and sends the reader to the network.
+
+**F-111 (method) The ALAC element header is 23 bits, so nothing in the frame is byte aligned (confirmed).** Three bits of element tag, four unused, twelve unknown, one for the frame length flag, two for wasted bytes and one for the uncompressed escape. The first sample therefore begins in the middle of the third byte, and no field after it can be read out of a hex dump. A length calculation that uses 24 gives the same byte count, because the rounding up to a byte boundary absorbs the difference, so the mistake passes its own test and survives.
+
+**F-112 (method) A test that rebuilds the framing tests its own copy (confirmed).** The block builder sat inside the method that writes to the socket, so checking it from outside meant either a receiver on the other end or rewriting the framing in the test. The second is not a test: the two copies drift, and the one that matters is the one nothing reads back. Lifting the builder out, so it takes its inputs and returns the bytes, is what made the layout checkable at all. The test then reads every field at the offset a receiver reads it from and opens the payload with the construction from the other side.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
