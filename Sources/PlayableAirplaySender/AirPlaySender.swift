@@ -55,7 +55,7 @@ public final class AirPlaySender {
     private let audio: BufferedAudioStream
 
     private let lock = NSLock()
-    private var ring: [Int16] = []
+    private let ring: SampleRing
     private var open = true
     private var pump: Thread?
 
@@ -76,6 +76,7 @@ public final class AirPlaySender {
      @throws Whatever the step that failed reports.
      */
     public init(host: String, port: UInt16, senderName: String) throws {
+        ring = SampleRing(capacity: Self.ringFrames * ALACFrame.channelCount)
         connection = try ReceiverConnection(host: host, port: port, senderName: senderName)
         try connection.pair()
 
@@ -99,7 +100,9 @@ public final class AirPlaySender {
         let clock = try PTPClock()
         try session.setPeers([connection.localAddress])
 
-        guard let reading = clock.read(timeout: 12) else {
+        // Only what comes from the receiver this session is with. Anything else
+        // is another speaker's clock, or somebody pretending to be one.
+        guard let reading = clock.read(from: connection.peerAddress, timeout: 12) else {
             throw SenderFailure.receiverAnnouncedNoClock
         }
 
@@ -111,7 +114,6 @@ public final class AirPlaySender {
 
         audio = try BufferedAudioStream(host: host, port: stream.dataPort, audioKey: keys.audio)
 
-        ring.reserveCapacity(Self.ringFrames * ALACFrame.channelCount)
         startPump()
     }
 
@@ -129,17 +131,9 @@ public final class AirPlaySender {
      @returns What became of them.
      */
     public func write(_ frames: [Int16]) -> WriteOutcome {
-        lock.lock()
-        defer { lock.unlock() }
+        guard isRunning else { return .ended }
 
-        guard open else { return .ended }
-        guard ring.count + frames.count <= Self.ringFrames * ALACFrame.channelCount else {
-            return .bufferFull
-        }
-
-        ring.append(contentsOf: frames)
-
-        return .taken
+        return ring.write(frames) ? .taken : .bufferFull
     }
 
     /**
@@ -175,9 +169,11 @@ public final class AirPlaySender {
             let packetDuration = Double(ALACFrame.framesPerPacket) / 44100.0
             var due = Date()
 
-            while let self, self.isRunning {
-                var packet: [Int16]?
+            // Taken once and filled in place, rather than allocated per packet
+            // on a thread that has a deadline.
+            var packet = [Int16](repeating: 0, count: samplesPerPacket)
 
+            while let self, self.isRunning {
                 // A live source fills this ring at the same nominal rate as it
                 // is drained, so the two drift against each other constantly.
                 // Padding an empty ring with silence at the first miss puts a
@@ -185,21 +181,20 @@ public final class AirPlaySender {
                 // crackle rather than as a gap. So wait for the frames that are
                 // almost certainly on their way, and pad only when they are
                 // genuinely not coming.
+                var filled = false
                 let waitUntil = Date().addingTimeInterval(packetDuration * 4)
-                while packet == nil, Date() < waitUntil, self.isRunning {
-                    self.lock.lock()
-                    if self.ring.count >= samplesPerPacket {
-                        packet = Array(self.ring.prefix(samplesPerPacket))
-                        self.ring.removeFirst(samplesPerPacket)
-                    }
-                    self.lock.unlock()
-
-                    if packet == nil { Thread.sleep(forTimeInterval: 0.001) }
+                while !filled, Date() < waitUntil, self.isRunning {
+                    filled = self.ring.read(into: &packet)
+                    if !filled { Thread.sleep(forTimeInterval: 0.001) }
                 }
 
                 // Nothing arrived, so the source has stopped. The timeline has
                 // to keep running or the receiver decides the stream has died.
-                let toSend = packet ?? [Int16](repeating: 0, count: samplesPerPacket)
+                if !filled {
+                    for index in packet.indices { packet[index] = 0 }
+                }
+
+                let toSend = packet
 
                 do { try self.audio.write(toSend) }
                 catch {

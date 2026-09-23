@@ -142,6 +142,13 @@ public struct RTSPResponse: Equatable {
         let declared = headers.first { $0.name.caseInsensitiveCompare("Content-Length") == .orderedSame }
         let length = declared.flatMap { Int($0.value) } ?? 0
 
+        // A length that is not a length at all. `limitedBy` is no limit against
+        // a negative offset, because the limit lies the other way, so the index
+        // comes back before the body starts and slicing it aborts the process.
+        // Anything that can answer on the receiver's port reaches this before
+        // pairing, whilst the connection is still in the clear.
+        guard length >= 0 else { throw RTSPFailure.answerIsNotReadable }
+
         guard let bodyEnd = bytes.index(bodyStart, offsetBy: length, limitedBy: bytes.endIndex) else {
             return nil
         }

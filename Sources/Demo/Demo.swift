@@ -243,7 +243,7 @@ func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 
 
         // The receiver keeps the clock and announces it, so the anchor is
         // expressed on its timeline rather than on one of ours.
-        guard let reading = clock.read(timeout: 12) else {
+        guard let reading = clock.read(from: connection.peerAddress, timeout: 12) else {
             print("  the receiver announced no clock, so there is no timeline to anchor to")
             return 1
         }

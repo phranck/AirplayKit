@@ -45,6 +45,9 @@ public final class ReceiverConnection {
     /// The address this end of the connection sits on, which the session SETUP names.
     public var localAddress: String { connection.localAddress }
 
+    /// The receiver's own address, which is what anything claiming to be it is checked against.
+    public var peerAddress: String { connection.peerAddress }
+
     /**
      Opens a connection, without pairing on it yet.
 
