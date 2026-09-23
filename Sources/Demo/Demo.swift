@@ -190,7 +190,12 @@ func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 
             return 1
         }
 
-        let time = PTPClock.now(from: reading)
+        // Two seconds ahead, because the anchor says when frame zero sounds and
+        // the first block cannot arrive before it is sent. Anchored on the
+        // instant of sending, everything arrives after its own moment and a
+        // receiver drops audio that is already late.
+        let lead = 2.0
+        let time = PTPClock.now(from: reading, ahead: lead)
         print(String(format: "  its clock is %016llx, reading %lld s", reading.identity, time.seconds))
 
         do {
@@ -198,7 +203,7 @@ func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 
                                   seconds: time.seconds,
                                   fraction: time.fraction,
                                   timelineIdentifier: Int64(bitPattern: reading.identity))
-            print("  anchor accepted")
+            print("  anchor accepted, frame zero sounds in \(lead) s")
         }
         catch {
             print("  anchor refused: \(error)")

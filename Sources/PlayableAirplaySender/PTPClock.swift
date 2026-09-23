@@ -114,12 +114,14 @@ public final class PTPClock {
      What that clock reads now, carried forward from when it was last heard.
 
      @param reading What the clock said earlier.
+     @param ahead How far past now to report, which an anchor needs because it
+     says when the first frame sounds and no frame can arrive before it is sent.
      @returns Its seconds and the fraction of a second, the latter as the 64-bit
      binary fraction the anchor carries rather than as nanoseconds.
      */
-    public static func now(from reading: Reading) -> (seconds: Int64, fraction: Int64) {
+    public static func now(from reading: Reading, ahead: TimeInterval = 0) -> (seconds: Int64, fraction: Int64) {
         let elapsed = ProcessInfo.processInfo.systemUptime - reading.heardAt
-        let total = Double(reading.seconds) + Double(reading.nanoseconds) / 1_000_000_000 + elapsed
+        let total = Double(reading.seconds) + Double(reading.nanoseconds) / 1_000_000_000 + elapsed + ahead
 
         let seconds = Int64(total)
         let fraction = total - Double(seconds)

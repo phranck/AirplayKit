@@ -160,6 +160,12 @@ The seconds are that clock's own reading rather than a wall clock. A Follow_Up f
 
 What none of this measures is the one-way delay. Reading the master's time out of a Follow_Up and carrying it forward on the sender's own uptime, with no Delay_Req to measure the path, leaves that delay in the answer as an error. For placing the start of one stream it is immaterial. For holding two speakers in step it is the whole problem.
 
+### The anchor points into the future
+
+Frame zero sounds at the instant the anchor names, and no block can arrive before it is sent. An anchor set to the moment of sending therefore describes audio that is already late when it arrives, and a receiver drops late audio rather than playing it behind itself. The effect is indistinguishable from every other silent failure: the anchor is accepted, the blocks are taken, and nothing is heard.
+
+Moving frame zero two seconds ahead of the clock reading, and changing nothing else, is what first produced sound on a Sonos from this package (measured 2026-09-23, F-106). What the smallest workable lead is, and what an Apple sender uses, is not measured. Two seconds was the first value tried.
+
 ### What a receiver does with blocks it cannot place
 
 It keeps them. Ten seconds of audio written to the data port before the anchor was solved were all taken, the connection stayed open, and nothing was heard, silently rather than noisily (measured 2026-09-23, F-105). So a sender that frames the audio correctly and gets the anchor wrong sees a session that looks healthy in every particular and hears nothing at all, which is the failure this article exists to prevent.

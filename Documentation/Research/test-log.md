@@ -537,6 +537,10 @@ This answers the sender's half of open question 6 for this pairing. Nothing here
 
 **F-104 `SETPEERS` is accepted carrying the sender's address alone (confirmed).** A flat array holding one string, the sender's IPv4 address, is answered 200, and the receiver starts announcing to it immediately. That is consistent with F-029, where the list held the sender's addresses and not the receiver's.
 
+**F-106 The anchor has to point into the future, and this is what finally made a Sonos audible (confirmed).** With the anchor naming the receiver's own clock and the instant of sending, every block still went unplayed. The anchor says when frame zero sounds, and a block cannot arrive before it is sent, so anchored on the moment of sending every block arrives after its own moment and is dropped as late. Moving frame zero two seconds ahead of the reading, and changing nothing else, produced an audible tone on the speaker. That is the first sound this project has made on a Sonos.
+
+Nothing measured says what the smallest workable lead is, nor what an Apple sender uses. Two seconds was the first value tried and it worked.
+
 **F-105 The buffered path takes the blocks without the anchor and plays none of them (confirmed).** Ten seconds of a 440 Hz tone were written to the data port as length-prefixed blocks, framed and encrypted as the reference describes, before the anchor was solved. The receiver took every block and closed nothing, and the room stayed silent rather than noisy. So a receiver on this path holds what it cannot place in time, which is why a sender that gets the framing right and the anchor wrong sees a healthy session and hears nothing.
 
 ## What this means for the method
