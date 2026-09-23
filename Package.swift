@@ -160,7 +160,7 @@ let package = Package(
         // Finds receivers, plays a tone, and plays a file, from a terminal.
         .executableTarget(
             name: "Demo",
-            dependencies: ["PlayableAirplay", "PlayableAirplayUPnP"]
+            dependencies: ["PlayableAirplay", "PlayableAirplayUPnP", "PlayableAirplaySender"]
         ),
 
         .testTarget(

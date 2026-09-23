@@ -9,6 +9,7 @@
 import Dispatch
 import Foundation
 import PlayableAirplay
+import PlayableAirplaySender
 import PlayableAirplayUPnP
 
 // The library runs on Linux as well, and AVFoundation does not. Everything that
@@ -109,6 +110,46 @@ func describeSonos(at host: String) async -> Int32 {
     }
 
     return 0
+}
+
+// MARK: - The Swift sender
+
+/**
+ Pairs with a receiver using the Swift sender, and says what came out.
+
+ This exercises the path being built beside the C++ one. It stops at the keys,
+ because that is as far as that path goes so far.
+
+ @param host The receiver's host name or address.
+ @param port Its RTSP port.
+ @returns Nought where it paired, and one where it did not.
+ */
+func pairWithReceiver(at host: String, port: UInt16) -> Int32 {
+    do {
+        print("connecting to \(host):\(port)")
+        let connection = try ReceiverConnection(host: host, port: port, senderName: "PlayableAirplay")
+
+        try connection.pair()
+
+        guard let keys = connection.keys else { return 1 }
+
+        // The first bytes of each, which is enough to see that four different
+        // keys came out without printing key material in full.
+        print("paired, and the connection is encrypted from here")
+        print("  controlWrite  \(keys.controlWrite.prefix(4).map { String(format: "%02x", $0) }.joined())…")
+        print("  controlRead   \(keys.controlRead.prefix(4).map { String(format: "%02x", $0) }.joined())…")
+        print("  eventsWrite   \(keys.eventsWrite.prefix(4).map { String(format: "%02x", $0) }.joined())…")
+        print("  eventsRead    \(keys.eventsRead.prefix(4).map { String(format: "%02x", $0) }.joined())…")
+        print("  audio         \(keys.audio.count) bytes")
+
+        connection.close()
+
+        return 0
+    }
+    catch {
+        FileHandle.standardError.write(Data("could not pair: \(error)\n".utf8))
+        return 1
+    }
 }
 
 // MARK: - Sending a tone
@@ -338,6 +379,7 @@ struct Demo {
             var usage = """
                         usage: Demo list
                                Demo sonos <host>                what AirPlay will not say
+                               Demo pair <host> [port]          the Swift sender, as far as it goes
                                Demo play <host> [port] [seconds]
                                Demo wave <path> <host> [port]   16 bit stereo at 44100
                         """
@@ -357,6 +399,10 @@ struct Demo {
 
         case "sonos" where arguments.count > 2:
             exit(await describeSonos(at: arguments[2]))
+
+        case "pair" where arguments.count > 2:
+            let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000
+            exit(pairWithReceiver(at: arguments[2], port: port))
 
         case "play" where arguments.count > 2:
             let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000
