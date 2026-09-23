@@ -134,14 +134,14 @@ func playThroughSwiftSender(at host: String, port: UInt16, seconds: Int) -> Int3
         // Handed over from outside, a packet's worth at a time, exactly as a
         // live source arrives. The sender paces what leaves; this only fills.
         var frame = 0.0
-        let packets = seconds * 44100 / ALACFrame.framesPerPacket
+        let packets = seconds * ALACFrame.sampleRate / ALACFrame.framesPerPacket
         var dropped = 0
         var due = Date()
 
         for _ in 0..<packets {
             var samples = [Int16](repeating: 0, count: ALACFrame.framesPerPacket * ALACFrame.channelCount)
             for index in 0..<ALACFrame.framesPerPacket {
-                let value = Int16(3000.0 * sin(2.0 * .pi * 440.0 * frame / 44100.0))
+                let value = Int16(3000.0 * sin(2.0 * .pi * 440.0 * frame / Double(ALACFrame.sampleRate)))
                 samples[index * 2] = value
                 samples[index * 2 + 1] = value
                 frame += 1
@@ -162,7 +162,7 @@ func playThroughSwiftSender(at host: String, port: UInt16, seconds: Int) -> Int3
             // each time. Sleep always overshoots a little, and a producer that
             // accumulates that drift falls behind real time, empties the ring,
             // and is heard as crackle towards the end of a long tone.
-            due = due.addingTimeInterval(Double(ALACFrame.framesPerPacket) / 44100.0)
+            due = due.addingTimeInterval(ALACFrame.packetDuration)
             let wait = due.timeIntervalSinceNow
             if wait > 0 { Thread.sleep(forTimeInterval: wait) }
         }
@@ -243,7 +243,7 @@ func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 
 
         // The receiver keeps the clock and announces it, so the anchor is
         // expressed on its timeline rather than on one of ours.
-        guard let reading = clock.read(timeout: 12) else {
+        guard let reading = clock.read(from: connection.peerAddress, timeout: 12) else {
             print("  the receiver announced no clock, so there is no timeline to anchor to")
             return 1
         }
@@ -273,18 +273,18 @@ func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 
         // Paced against the clock, because a live source cannot be sent ahead
         // and this is the case the product needs.
         var frame = 0.0
-        let packets = seconds * 44100 / ALACFrame.framesPerPacket
+        let packets = seconds * ALACFrame.sampleRate / ALACFrame.framesPerPacket
         for _ in 0..<packets {
             var samples = [Int16](repeating: 0, count: ALACFrame.framesPerPacket * 2)
             for index in 0..<ALACFrame.framesPerPacket {
-                let value = Int16(3000.0 * sin(2.0 * .pi * 440.0 * frame / 44100.0))
+                let value = Int16(3000.0 * sin(2.0 * .pi * 440.0 * frame / Double(ALACFrame.sampleRate)))
                 samples[index * 2] = value
                 samples[index * 2 + 1] = value
                 frame += 1
             }
 
             try audio.write(samples)
-            Thread.sleep(forTimeInterval: Double(ALACFrame.framesPerPacket) / 44100.0)
+            Thread.sleep(forTimeInterval: ALACFrame.packetDuration)
         }
 
         print("  done")

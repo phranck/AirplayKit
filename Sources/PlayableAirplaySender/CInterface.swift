@@ -34,19 +34,12 @@ private enum CResult: Int32 {
 
 /// Which of those an error from the Swift side is. Named apart from the out parameter it fills.
 private func outcome(for error: Error) -> CResult {
-    switch error {
-    case TCPFailure.hostCouldNotBeResolved, TCPFailure.connectionRefused,
-         TCPFailure.socketCouldNotBeOpened, TCPFailure.timedOut:
-        return .unreachable
-
-    case TCPFailure.connectionClosed, SenderFailure.receiverAnnouncedNoClock:
-        return .sessionEnded
-
-    case is SRPError, is PairSetupFailure:
-        return .pairingRefused
-
-    default:
-        return .internalFailure
+    switch SenderFailureKind(error) {
+    case .unreachable: return .unreachable
+    case .sessionEnded: return .sessionEnded
+    case .pairingRefused: return .pairingRefused
+    case .invalidRequest: return .invalidArgument
+    case .senderFailed: return .internalFailure
     }
 }
 

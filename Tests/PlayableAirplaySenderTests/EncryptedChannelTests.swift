@@ -127,6 +127,29 @@ final class EncryptedChannelTests: XCTestCase {
         }
     }
 
+    func testAFrameClaimingToBeLongerThanOneIsRefusedRatherThanWaitedFor() {
+        // The length bytes are authenticated and so cannot be changed in
+        // flight, but they are whatever the other end wrote. Waiting for a
+        // frame this construction never produces means holding a buffer
+        // somebody else decides the size of.
+        var channel = EncryptedChannel(key: Self.key)
+        let oversized = Data([0x01, 0x40]) + Data(repeating: 0, count: 64)
+
+        XCTAssertThrowsError(try channel.open(oversized)) { error in
+            XCTAssertEqual(error as? EncryptedChannelFailure, .frameCouldNotBeOpened)
+        }
+    }
+
+    func testAFrameOfExactlyTheLargestSizeIsStillRead() throws {
+        var sender = EncryptedChannel(key: Self.key)
+        var receiver = EncryptedChannel(key: Self.key)
+        let full = Data(repeating: 0xAB, count: EncryptedChannel.maximumFrameLength)
+
+        let sealed = try sender.seal(full)
+
+        XCTAssertEqual(try receiver.open(sealed)?.message, full)
+    }
+
     func testAFrameUnderTheWrongKeyIsRefused() {
         var other = Data(Self.key)
         other[0] ^= 0x01

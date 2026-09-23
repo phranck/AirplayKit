@@ -95,6 +95,16 @@ public struct EncryptedChannel {
 
         let start = bytes.startIndex
         let length = Int(bytes[start]) | Int(bytes[bytes.index(after: start)]) << 8
+
+        // The length bytes are authenticated, so they cannot be changed in
+        // flight, but they are still whatever the other end chose to write. A
+        // frame longer than this construction ever produces is not a frame, and
+        // waiting for one means holding a buffer somebody else decides the size
+        // of.
+        guard length <= Self.maximumFrameLength else {
+            throw EncryptedChannelFailure.frameCouldNotBeOpened
+        }
+
         let total = header + length + tag
         guard bytes.count >= total else { return nil }
 

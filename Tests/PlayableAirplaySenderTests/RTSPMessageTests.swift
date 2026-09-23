@@ -120,6 +120,23 @@ final class RTSPMessageTests: XCTestCase {
         XCTAssertEqual(read?.response.reason, "Forbidden")
     }
 
+    func testALengthThatIsNegativeIsRefusedRatherThanBelieved() {
+        // Taken at face value this aborts the process, because the index it
+        // produces lies before the body starts and slicing that pair traps.
+        // Anything answering on the receiver's port reaches this before pairing.
+        let bytes = Data("RTSP/1.0 200 OK\r\nContent-Length: -5\r\n\r\n".utf8)
+
+        XCTAssertThrowsError(try RTSPResponse.read(from: bytes)) { error in
+            XCTAssertEqual(error as? RTSPFailure, .answerIsNotReadable)
+        }
+    }
+
+    func testALengthThatIsNotANumberIsTreatedAsNoBody() {
+        let bytes = Data("RTSP/1.0 200 OK\r\nContent-Length: banana\r\n\r\n".utf8)
+
+        XCTAssertEqual(try RTSPResponse.read(from: bytes)?.response.body, Data())
+    }
+
     func testAStatusLineWithNoNumberIsRefused() {
         let bytes = Data("this is not a status line\r\n\r\n".utf8)
 

@@ -54,6 +54,9 @@ public final class TCPConnection {
     /// The address the receiver answered on, which later requests name in their URI.
     public private(set) var localAddress: String = ""
 
+    /// The receiver's own address, which is what anything else claiming to be it is checked against.
+    public private(set) var peerAddress: String = ""
+
     /**
      Opens a connection.
 
@@ -94,7 +97,8 @@ public final class TCPConnection {
             throw TCPFailure.connectionRefused(reason)
         }
 
-        localAddress = Self.addressOfSocket(handle)
+        localAddress = Self.addressOfSocket(handle, peer: false)
+        peerAddress = Self.addressOfSocket(handle, peer: true)
     }
 
     deinit {
@@ -170,14 +174,20 @@ public final class TCPConnection {
     }
     #endif
 
-    /// The address this end of the socket ended up on, which a receiver is told about.
-    private static func addressOfSocket(_ handle: Int32) -> String {
+    /**
+     One end of the socket as text.
+
+     @param handle The socket.
+     @param peer Whether to ask for the far end rather than this one.
+     @returns The address, or an empty string where the socket cannot say.
+     */
+    private static func addressOfSocket(_ handle: Int32, peer: Bool) -> String {
         var storage = sockaddr_storage()
         var length = socklen_t(MemoryLayout<sockaddr_storage>.size)
 
         let found = withUnsafeMutablePointer(to: &storage) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { address in
-                getsockname(handle, address, &length) == 0
+                (peer ? getpeername(handle, address, &length) : getsockname(handle, address, &length)) == 0
             }
         }
         guard found else { return "" }

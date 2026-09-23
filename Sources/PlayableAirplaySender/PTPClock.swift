@@ -13,8 +13,26 @@ import Glibc
 import Darwin
 #endif
 
+/// What can go wrong listening for a receiver's clock.
+public enum PTPFailure: Error, Equatable {
+    /**
+     One of the two ports could not be bound.
+
+     They are 319 and 320, and on Linux a process may not bind below 1024
+     without `CAP_NET_BIND_SERVICE`. That is a permission on this machine rather
+     than anything about the receiver, and saying so is the difference between
+     looking at the network and looking at the process.
+     */
+    case portsCouldNotBeOpened(port: UInt16)
+}
+
 /**
- What a receiver's own PTP clock says.
+ What a receiver's own clock says.
+
+ PTP is the Precision Time Protocol, standardised as IEEE 1588. Devices on one
+ network keep a common clock with it, closely enough for audio: one of them is
+ elected the grandmaster and sends out its time, and the others follow. AirPlay 2
+ expresses the anchor on that clock, which is why a sender has to read it.
 
  A receiver on the buffered path will not take an anchor on a timeline it cannot
  read, and it names that timeline by a clock identity. These receivers keep the
@@ -53,20 +71,38 @@ public final class PTPClock {
 
     private var sockets: [Int32] = []
 
+    /**
+     Opens the two ports a receiver announces to.
+
+     @throws `PTPFailure.portsCouldNotBeOpened` where they cannot be bound. On
+     Linux a process without `CAP_NET_BIND_SERVICE` may not bind a port below
+     1024, and both of these are, so an ordinary desktop application can meet
+     this. It is a matter of what this machine allows rather than of the
+     receiver, and it used to be reported as the receiver being unreachable.
+     */
     public init() throws {
         for port in [Self.eventPort, Self.generalPort] {
-            sockets.append(try Self.listening(on: port))
+            do { sockets.append(try Self.listening(on: port)) }
+            catch {
+                for handle in sockets { Self.closeSocket(handle) }
+                sockets = []
+
+                throw PTPFailure.portsCouldNotBeOpened(port: port)
+            }
         }
     }
 
     deinit {
-        for handle in sockets {
-            #if canImport(Glibc)
-            Glibc.close(handle)
-            #else
-            Darwin.close(handle)
-            #endif
-        }
+        for handle in sockets { Self.closeSocket(handle) }
+    }
+
+    /// Closing a descriptor, which the two platforms spell the same way in different modules.
+    private static func closeSocket(_ handle: Int32) {
+        #if canImport(Glibc)
+        Glibc.close(handle)
+        #else
+        Darwin.close(handle)
+        #endif
     }
 
     /**
@@ -78,20 +114,34 @@ public final class PTPClock {
      @param timeout How long to wait before giving up.
      @returns What the clock said, or nil where it said nothing in time.
      */
-    public func read(timeout: TimeInterval = 10) -> Reading? {
+    public func read(from receiver: String, timeout: TimeInterval = 10) -> Reading? {
         let deadline = Date().addingTimeInterval(timeout)
         var identity: UInt64?
         var time: (seconds: UInt64, nanoseconds: UInt32, heardAt: TimeInterval)?
 
         while Date() < deadline {
-            guard let message = receive(before: deadline) else { continue }
+            guard let heard = receive(before: deadline) else { continue }
 
-            switch message.type {
+            // Anything from anywhere else is somebody else's clock, or somebody
+            // trying to be. A sender that takes an identity from one machine
+            // and a time from another anchors to a reading that belongs to
+            // neither, and the session then plays silence.
+            guard receiver.isEmpty || heard.source == receiver else { continue }
+
+            switch heard.message.type {
             case .announce:
-                identity = message.grandmasterIdentity ?? identity
+                identity = heard.message.grandmasterIdentity ?? identity
+                // The grandmaster changed, so whatever time was held belongs to
+                // the old one and is thrown away rather than mixed in.
+                time = nil
 
             case .followUp:
-                if let stamp = message.timestamp {
+                // Only from the clock that announced itself. Two receivers
+                // announcing at once is ordinary, and each one's seconds are
+                // its own uptime, so a stamp from the wrong one can be days out.
+                guard let identity, heard.message.sourceIdentity == identity else { break }
+
+                if let stamp = heard.message.timestamp {
                     time = (stamp.seconds, stamp.nanoseconds, ProcessInfo.processInfo.systemUptime)
                 }
 
@@ -129,7 +179,17 @@ public final class PTPClock {
         // The anchor carries the fraction as a 64-bit binary fraction, which is
         // what makes the measured value of 207788735369052160 about eleven
         // milliseconds rather than an implausible number of nanoseconds.
-        return (seconds, Int64(fraction * Double(1 << 62)) << 2)
+        //
+        // Half a second and above sets the top bit, which in Int64 is the sign
+        // bit, so the value printed here is negative for half of all readings.
+        // That is the correct bit pattern and it reaches the receiver intact: a
+        // binary property list writes a negative Int64 as the same eight bytes
+        // as a positive one, marker 0x13 and then the pattern, which was
+        // measured rather than assumed. Swift has no unsigned path here because
+        // the property list encoder takes signed integers.
+        let scaled = (fraction * Double(1 << 62)) * 4
+
+        return (seconds, Int64(bitPattern: UInt64(scaled.rounded(.down))))
     }
 
     // MARK: - Private
@@ -142,6 +202,8 @@ public final class PTPClock {
 
     private struct Message {
         let type: MessageType
+        /// The clock that sent this message, which every PTP header carries.
+        let sourceIdentity: UInt64
         let grandmasterIdentity: UInt64?
         let timestamp: (seconds: UInt64, nanoseconds: UInt32)?
     }
@@ -179,8 +241,13 @@ public final class PTPClock {
         return handle
     }
 
-    /// Waits on both sockets for one message, and reads whichever answers first.
-    private func receive(before deadline: Date) -> Message? {
+    /**
+     Waits on both sockets for one message, and reads whichever answers first.
+
+     Read with `recvfrom` rather than `recv`, because who sent it is half of
+     whether it should be believed and `recv` throws that away.
+     */
+    private func receive(before deadline: Date) -> (message: Message, source: String)? {
         var descriptors = sockets.map { pollfd(fd: $0, events: Int16(POLLIN), revents: 0) }
         let remaining = max(0, Int32(deadline.timeIntervalSinceNow * 1000))
 
@@ -188,10 +255,22 @@ public final class PTPClock {
 
         for (index, descriptor) in descriptors.enumerated() where descriptor.revents & Int16(POLLIN) != 0 {
             var buffer = [UInt8](repeating: 0, count: 256)
-            let count = recv(sockets[index], &buffer, buffer.count, 0)
+            var from = sockaddr_in()
+            var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+
+            let count = withUnsafeMutablePointer(to: &from) { pointer in
+                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { address in
+                    recvfrom(sockets[index], &buffer, buffer.count, 0, address, &length)
+                }
+            }
             guard count >= 34 else { continue }
 
-            return Self.parsed(Array(buffer[0..<count]))
+            var text = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+            let source = inet_ntop(AF_INET, &from.sin_addr, &text, socklen_t(INET_ADDRSTRLEN)) != nil
+                ? String(cString: text)
+                : ""
+
+            return (Self.parsed(Array(buffer[0..<count])), source)
         }
 
         return nil
@@ -199,11 +278,15 @@ public final class PTPClock {
 
     /// Reads the header and, for the two messages that matter, what follows it.
     private static func parsed(_ bytes: [UInt8]) -> Message {
+        // Every PTP header names the clock that sent it, at offset 20.
+        let source = unsigned64(bytes, at: 20)
+
         // The low nibble of the first byte names the message. 0 is Sync, 8 is
         // Follow_Up and 11 is Announce.
         switch bytes[0] & 0x0F {
         case 0x0B where bytes.count >= 64:
             return Message(type: .announce,
+                           sourceIdentity: source,
                            grandmasterIdentity: unsigned64(bytes, at: 53),
                            timestamp: nil)
 
@@ -214,10 +297,13 @@ public final class PTPClock {
             var nanoseconds: UInt32 = 0
             for index in 40..<44 { nanoseconds = nanoseconds << 8 | UInt32(bytes[index]) }
 
-            return Message(type: .followUp, grandmasterIdentity: nil, timestamp: (seconds, nanoseconds))
+            return Message(type: .followUp,
+                           sourceIdentity: source,
+                           grandmasterIdentity: nil,
+                           timestamp: (seconds, nanoseconds))
 
         default:
-            return Message(type: .other, grandmasterIdentity: nil, timestamp: nil)
+            return Message(type: .other, sourceIdentity: source, grandmasterIdentity: nil, timestamp: nil)
         }
     }
 

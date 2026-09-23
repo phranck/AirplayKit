@@ -30,9 +30,6 @@ import Foundation
  send and nothing to wait for.
  */
 public final class BufferedAudioStream {
-    /// What the synchronisation source carries for ALAC at 44100 Hz, 16 bit, stereo.
-    public static let alacSource: UInt32 = 0x40000
-
     private let connection: TCPConnection
     private let key: SymmetricKey
 
@@ -74,18 +71,50 @@ public final class BufferedAudioStream {
     public func write(_ samples: [Int16]) throws {
         let payload = ALACFrame.packed(samples, frames: ALACFrame.framesPerPacket)
 
+        try connection.write(try Self.block(payload: payload,
+                                            sequence: sequence,
+                                            timestamp: timestamp,
+                                            nonce: nonce,
+                                            key: key))
+
+        sequence = (sequence + 1) & 0x7F_FFFF
+        timestamp = timestamp &+ UInt32(ALACFrame.framesPerPacket)
+        nonce += 1
+    }
+
+    /**
+     Builds one block, which is the whole of what goes over the wire.
+
+     Apart from the connection, so the layout can be read back and checked
+     without a receiver on the other end. Every field in here is one a receiver
+     reads at a fixed offset, and getting one wrong produces noise rather than a
+     refusal, which is the kind of mistake nothing reports.
+
+     @param payload The packed frame.
+     @param sequence This block's number, which wraps at 23 bits.
+     @param timestamp Where this block sits on the stream's timeline.
+     @param nonce The counter, which rises by one per block and never repeats
+     under one key.
+     @param key The session's audio key.
+     @returns The block, length prefix and all.
+     */
+    static func block(payload: Data,
+                      sequence: UInt32,
+                      timestamp: UInt32,
+                      nonce: UInt64,
+                      key: SymmetricKey) throws -> Data {
         // The marker bit is set on every block, and the sequence number is 23
         // bits wide here rather than the 16 an RTP header gives it.
         var header = Data()
         header.append(bigEndian: 0x8000_0000 | (sequence & 0x7F_FFFF))
         header.append(bigEndian: timestamp)
-        header.append(bigEndian: Self.alacSource)
+        header.append(bigEndian: UInt32(ALACFrame.format))
 
         // The timestamp and the source, which are the eight bytes at offset 4.
         let additional = Data(header.suffix(8))
         let box = try ChaChaPoly.seal(payload,
                                       using: key,
-                                      nonce: try counterNonce(),
+                                      nonce: try counterNonce(nonce),
                                       authenticating: additional)
 
         var counter = Data()
@@ -94,21 +123,16 @@ public final class BufferedAudioStream {
         let block = header + box.ciphertext + box.tag + counter
         var framed = Data()
         framed.append(bigEndian: UInt16(block.count + 2))
-        framed += block
 
-        try connection.write(framed)
-
-        sequence = (sequence + 1) & 0x7F_FFFF
-        timestamp = timestamp &+ UInt32(ALACFrame.framesPerPacket)
-        nonce += 1
+        return framed + block
     }
 
     // MARK: - Private
 
     /// Four zero bytes and then the counter, little-endian, as every AirPlay nonce is.
-    private func counterNonce() throws -> ChaChaPoly.Nonce {
+    private static func counterNonce(_ counter: UInt64) throws -> ChaChaPoly.Nonce {
         var bytes = Data(repeating: 0, count: 4)
-        withUnsafeBytes(of: nonce.littleEndian) { bytes.append(contentsOf: $0) }
+        withUnsafeBytes(of: counter.littleEndian) { bytes.append(contentsOf: $0) }
 
         return try ChaChaPoly.Nonce(data: bytes)
     }
