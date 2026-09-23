@@ -243,15 +243,27 @@ static void DNSSD_API onResolved(DNSServiceRef service, DNSServiceFlags flags, u
     // The instance name up to the service type. A RAOP instance is the hardware
     // address, then `@`, then the display name; an AirPlay instance is the
     // display name alone.
-    char escaped[PA_MAX_NAME];
+    //
+    // Sized for a whole service name rather than for a display name. An instance
+    // label is 63 bytes on the wire and each byte needing an escape becomes four
+    // characters, so a name with an emoji or an accent in it reaches 252 before
+    // the type is added. Cut short, the service type is no longer in the string,
+    // the separator below is never found, and the tail of the truncation becomes
+    // the receiver's name.
+    char escaped[kDNSServiceMaxDomainName];
     copyString(escaped, sizeof(escaped), fullName);
 
     char *separator = strstr(escaped, isRaop ? "._raop." : "._airplay.");
-    if (separator) *separator = '\0';
+
+    // No service type in it means this is not the name it claims to be, and
+    // carrying on would name the receiver after whatever survived.
+    if (!separator) return;
+
+    *separator = '\0';
 
     // The name arrives in its wire form, where a space is `\032` and a dot is
     // `\.`, so it is made readable before anything reads it or shows it.
-    char instance[PA_MAX_NAME];
+    char instance[kDNSServiceMaxDomainName];
     pa_unescape_instance_name(escaped, instance, sizeof(instance));
 
     char identifier[PA_MAX_ID];
@@ -387,14 +399,26 @@ static void DNSSD_API onBrowsed(DNSServiceRef service, DNSServiceFlags flags, ui
         // being resolvable. A record left behind by a receiver that went away
         // without withdrawing it does exactly that, and blocking here holds the
         // whole discovery, including the stop that is waiting for this thread.
+        // The wake pipe is watched alongside it, so stopping is noticed here
+        // too. Without it a stop that arrives whilst a resolve is waiting has
+        // to sit out the whole timeout, and the caller waits with it, which is
+        // exactly what the pipe was added to prevent.
         const int socket = DNSServiceRefSockFD(resolver);
+        const int wake = discovery->wakePipe[0];
         if (socket >= 0) {
             fd_set readable;
             FD_ZERO(&readable);
             FD_SET(socket, &readable);
+            if (wake >= 0) FD_SET(wake, &readable);
 
+            const int highest = (wake > socket ? wake : socket);
             struct timeval timeout = { .tv_sec = 2, .tv_usec = 0 };
-            if (select(socket + 1, &readable, NULL, NULL, &timeout) > 0) {
+
+            // Only where the resolve itself answered. A wake means stopping,
+            // and processing a result then would hand a record to a handler
+            // that is going away.
+            if (select(highest + 1, &readable, NULL, NULL, &timeout) > 0
+                && FD_ISSET(socket, &readable)) {
                 DNSServiceProcessResult(resolver);
             }
         }
