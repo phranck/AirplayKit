@@ -83,10 +83,17 @@ runner=$!
 # Waited on rather than wrapped in `timeout`, because what has to be stopped is
 # the container rather than the client talking to it. Killing the client is what
 # left containers running for hours.
-( sleep $(( minutes * 60 )); kill -TERM "$runner" 2> /dev/null ) &
+# Its own descriptors, closed off from this script's. A background job that
+# inherits the pipe holds it open for as long as it lives, so a reader waits for
+# the watchdog's sleep rather than for the build, and a three second check looks
+# like twenty minutes.
+( sleep $(( minutes * 60 )); kill -TERM "$runner" 2> /dev/null ) > /dev/null 2>&1 < /dev/null &
 watchdog=$!
 
 if wait "$runner"; then
+    # The subshell and the sleep inside it, since killing only the subshell
+    # leaves the sleep running and holding whatever it inherited.
+    pkill -P "$watchdog" 2> /dev/null || true
     kill "$watchdog" 2> /dev/null || true
     echo
     echo "The tests are not run here. They run on Linux in CI, and #25 says why."
