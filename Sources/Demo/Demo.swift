@@ -124,6 +124,64 @@ func describeSonos(at host: String) async -> Int32 {
  @param port Its RTSP port.
  @returns Nought where it paired, and one where it did not.
  */
+func playThroughSwiftSender(at host: String, port: UInt16, seconds: Int) -> Int32 {
+    do {
+        print("connecting to \(host):\(port)")
+        let sender = try AirPlaySender(host: host, port: port, senderName: "PlayableAirplay")
+        try sender.setVolume(0.3)
+        print("session up, sending \(seconds) seconds of 440 Hz at a third of full volume")
+
+        // Handed over from outside, a packet's worth at a time, exactly as a
+        // live source arrives. The sender paces what leaves; this only fills.
+        var frame = 0.0
+        let packets = seconds * 44100 / ALACFrame.framesPerPacket
+        var dropped = 0
+        var due = Date()
+
+        for _ in 0..<packets {
+            var samples = [Int16](repeating: 0, count: ALACFrame.framesPerPacket * ALACFrame.channelCount)
+            for index in 0..<ALACFrame.framesPerPacket {
+                let value = Int16(3000.0 * sin(2.0 * .pi * 440.0 * frame / 44100.0))
+                samples[index * 2] = value
+                samples[index * 2 + 1] = value
+                frame += 1
+            }
+
+            switch sender.write(samples) {
+            case .taken:
+                break
+            case .bufferFull:
+                dropped += 1
+            case .ended:
+                print("the receiver ended the session")
+                sender.close()
+                return 1
+            }
+
+            // Against a fixed schedule rather than by sleeping a packet's worth
+            // each time. Sleep always overshoots a little, and a producer that
+            // accumulates that drift falls behind real time, empties the ring,
+            // and is heard as crackle towards the end of a long tone.
+            due = due.addingTimeInterval(Double(ALACFrame.framesPerPacket) / 44100.0)
+            let wait = due.timeIntervalSinceNow
+            if wait > 0 { Thread.sleep(forTimeInterval: wait) }
+        }
+
+        // Let the ring drain before closing, or the tail is never sent.
+        Thread.sleep(forTimeInterval: AirPlaySender.anchorLead + 1)
+        sender.close()
+
+        print("done, \(dropped) packet(s) refused for want of room")
+
+        return 0
+    }
+    catch {
+        FileHandle.standardError.write(Data("could not play: \(error)\n".utf8))
+        return 1
+    }
+}
+
+/// Pairs and reports what came out, without sending any audio.
 func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 {
     do {
         print("connecting to \(host):\(port)")
@@ -470,7 +528,8 @@ struct Demo {
             var usage = """
                         usage: Demo list
                                Demo sonos <host>                what AirPlay will not say
-                               Demo pair <host> [port]          the Swift sender, as far as it goes
+                               Demo pair <host> [port]          pair only, and say what came out
+                               Demo swift <host> [port] [secs]  play through the Swift sender
                                Demo play <host> [port] [seconds]
                                Demo wave <path> <host> [port]   16 bit stereo at 44100
                         """
@@ -493,8 +552,12 @@ struct Demo {
 
         case "pair" where arguments.count > 2:
             let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000
+            exit(pairWithReceiver(at: arguments[2], port: port))
+
+        case "swift" where arguments.count > 2:
+            let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000
             let seconds = Int(arguments.count > 4 ? arguments[4] : "10") ?? 10
-            exit(pairWithReceiver(at: arguments[2], port: port, seconds: seconds))
+            exit(playThroughSwiftSender(at: arguments[2], port: port, seconds: seconds))
 
         case "play" where arguments.count > 2:
             let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000

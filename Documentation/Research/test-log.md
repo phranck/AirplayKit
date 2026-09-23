@@ -541,6 +541,16 @@ This answers the sender's half of open question 6 for this pairing. Nothing here
 
 Nothing measured says what the smallest workable lead is, nor what an Apple sender uses. Two seconds was the first value tried and it worked.
 
+**F-107 (method) Padding an empty ring with silence turns a live source into crackle (confirmed).** The first version of the session took a packet from a ring on its own thread and, finding fewer frames than it wanted, sent a packet of silence so the timeline would keep running. The tone came out as crackle where the same audio sent from one thread had been a clean sine.
+
+A live source fills such a ring at the same nominal rate as it is drained, so the two drift against each other constantly and the ring is briefly short several times a second. Every one of those became a hole in the audio. Waiting up to four packet lengths for frames that are almost certainly already on their way, and padding only when they genuinely are not, restored the clean tone.
+
+This is about a sender's own design rather than about the protocol, and it is written down because the symptom points nowhere near the cause: the session is healthy, no packet is refused, and what is heard sounds like a codec fault.
+
+**F-108 (method) A producer that paces by sleeping falls behind, and the crackle arrives at the end (confirmed).** With the padding corrected, a fifteen second tone was clean until shortly before it finished and then crackled briefly. The producer was sleeping one packet's duration after each packet, and a sleep always overshoots a little, so it fell steadily behind real time. Over fifteen seconds that drained the ring, and the drain was audible only once it reached the bottom.
+
+Pacing against a fixed schedule instead, so each packet is due at a time computed from the start rather than from the last sleep, gave twenty seconds clean through. Both halves matter and they fail at different ends of a stream: padding too eagerly is heard from the first second, and pacing by sleeping is heard only after the ring has run down.
+
 **F-105 The buffered path takes the blocks without the anchor and plays none of them (confirmed).** Ten seconds of a 440 Hz tone were written to the data port as length-prefixed blocks, framed and encrypted as the reference describes, before the anchor was solved. The receiver took every block and closed nothing, and the room stayed silent rather than noisy. So a receiver on this path holds what it cannot place in time, which is why a sender that gets the framing right and the anchor wrong sees a healthy session and hears nothing.
 
 ## What this means for the method
