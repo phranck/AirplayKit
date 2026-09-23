@@ -52,7 +52,7 @@ let package = Package(
         // The Swift interface, and the only thing a caller sees.
         .target(
             name: "PlayableAirplay",
-            dependencies: ["CPlayableAirplay"]
+            dependencies: ["CPlayableAirplay", "PlayableAirplaySender"]
         ),
 
         /*
