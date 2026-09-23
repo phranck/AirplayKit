@@ -45,6 +45,39 @@ public final class AirPlaySender {
     static let pumpExitTimeout: TimeInterval = 2
 
     /**
+     How much audio is gathered before any of it is sent.
+
+     Without this the pump starts draining the moment the first packet lands, and
+     from then on it consumes at exactly the rate a live source produces, so the
+     ring sits a few tens of milliseconds from empty for the whole session. That
+     was measured: at a change of source there was 0.07 seconds in it. Every
+     hiccup in the source therefore reaches the speaker, as a hole that is heard
+     as crackle.
+
+     Half a second is what the ring stands off from empty instead, and because
+     producer and consumer run at the same rate it stays that far off for the
+     rest of the session. It is bought with silence at the start, which costs
+     nothing: the anchor has already placed the first frame ``anchorLead``
+     seconds into the future, and this sits inside that.
+     */
+    static let primeFrames = ALACFrame.sampleRate / 2
+
+    /**
+     Whether a ring holding this many samples has the cushion yet.
+
+     Apart, because the ring counts samples and the cushion is named in frames,
+     and a comparison that mixes the two is out by a factor of the channel count
+     in one direction or the other. Neither mistake reports itself: too small a
+     cushion sounds like the fault it was meant to cure, and too large a one is
+     a second of latency nobody asked for.
+
+     @param samplesHeld What the ring says it is holding.
+     */
+    static func hasCushion(samplesHeld: Int) -> Bool {
+        samplesHeld >= primeFrames * ALACFrame.channelCount
+    }
+
+    /**
      How far ahead of the clock the first frame is placed.
 
      Public because it is also how long a caller has to wait before closing, or
@@ -61,6 +94,9 @@ public final class AirPlaySender {
     private let ring: SampleRing
     private var open = true
     private var pump: Thread?
+
+    /// Whether the ring is still filling to ``primeFrames`` before anything is sent.
+    private var priming = true
 
     /// Whether the session is still carrying audio.
     public var isRunning: Bool {
@@ -173,6 +209,13 @@ public final class AirPlaySender {
         let held = ring.held
         ring.clear()
 
+        // Gathered again before anything goes out, exactly as at the start. A
+        // new source that is sent the instant its first packet lands leaves the
+        // ring at the edge of empty for as long as it plays.
+        lock.lock()
+        priming = true
+        lock.unlock()
+
         return held / ALACFrame.channelCount
     }
 
@@ -227,7 +270,95 @@ public final class AirPlaySender {
     /// Why the session ended, where it ended by itself rather than being closed.
     public private(set) var endedBecause: String?
 
+    /**
+     What the sender has had to make up, because the source did not keep up.
+
+     A hole in the audio is heard as crackle rather than as a gap, so it gets
+     reported as a bad speaker or a bad connection and points nowhere near the
+     sender. Nothing else says it happened: a caller that is never refused a
+     write concludes its audio arrived whole, and it did, just not in time.
+     */
+    public struct Underruns: Equatable {
+        /// Packets sent as silence because the ring had nothing in time.
+        public var packets: Int
+
+        /// Those packets as a length of audio.
+        public var duration: TimeInterval { Double(packets) * ALACFrame.packetDuration }
+
+        /// How long the pump waited for frames in total, including the waits that ended in frames.
+        public var waited: TimeInterval
+
+        /// Nothing invented and nothing waited for, which is what a closed session reports.
+        public static let none = Underruns(packets: 0, waited: 0)
+
+        public init(packets: Int, waited: TimeInterval) {
+            self.packets = packets
+            self.waited = waited
+        }
+    }
+
+    /**
+     How much silence has been invented, and how long the sender has waited.
+
+     Counted from the start of the session and never reset, so two readings a
+     few seconds apart say what happened in between. A run with none of this is
+     a run where the audio arrived in time; a run with any of it has an
+     explanation for what was heard.
+     */
+    public var underruns: Underruns {
+        lock.lock()
+        defer { lock.unlock() }
+
+        return tally
+    }
+
+    private var tally = Underruns.none
+
     // MARK: - Private
+
+    /**
+     Whether the cushion is still building, and lets it through once it is there.
+
+     Reading it is what ends the priming, because the pump is the only thing
+     that needs to know and asking is the moment the answer matters.
+
+     The ring is asked before the lock is taken rather than inside it, so the
+     two locks are never held at once and the order they are taken in cannot
+     matter.
+     */
+    private var isStillPriming: Bool {
+        let held = ring.held
+
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard priming else { return false }
+
+        if Self.hasCushion(samplesHeld: held) {
+            priming = false
+
+            return false
+        }
+
+        return true
+    }
+
+    /**
+     Records one packet's wait, and whether it ended in silence.
+
+     @param start When the pump began waiting, on the same monotonic clock it
+     paces by.
+     @param invented Whether the wait ran out and a packet of silence went in
+     place of audio.
+     */
+    private func noteWait(from start: TimeInterval, invented silence: Bool) {
+        let waited = ProcessInfo.processInfo.systemUptime - start
+
+        lock.lock()
+        tally.waited += waited
+        if silence { tally.packets += 1 }
+        lock.unlock()
+    }
 
     /// Ends the session because the channel that keeps it alive has stopped.
     private func endBecauseTheEventChannelStopped(_ reason: String) {
@@ -259,24 +390,43 @@ public final class AirPlaySender {
             var packet = [Int16](repeating: 0, count: samplesPerPacket)
 
             while let self, self.isRunning {
-                // A live source fills this ring at the same nominal rate as it
-                // is drained, so the two drift against each other constantly.
-                // Padding an empty ring with silence at the first miss puts a
-                // hole in the audio several times a second, which is heard as
-                // crackle rather than as a gap. So wait for the frames that are
-                // almost certainly on their way, and pad only when they are
-                // genuinely not coming.
                 var filled = false
-                let waitUntil = ProcessInfo.processInfo.systemUptime + packetDuration * 4
-                while !filled, ProcessInfo.processInfo.systemUptime < waitUntil, self.isRunning {
-                    filled = self.ring.read(into: &packet)
-                    if !filled { Thread.sleep(forTimeInterval: 0.001) }
+                let startedWaiting = ProcessInfo.processInfo.systemUptime
+                let priming = self.isStillPriming
+
+                if priming {
+                    // Silence goes out whilst the cushion builds. The timeline
+                    // runs either way, and this is inside the lead the anchor
+                    // bought, so the listener waits no longer for it.
+                    for index in packet.indices { packet[index] = 0 }
+                }
+                else {
+                    // A live source fills this ring at the same nominal rate as
+                    // it is drained, so the two drift against each other
+                    // constantly. Padding an empty ring with silence at the
+                    // first miss puts a hole in the audio several times a
+                    // second, which is heard as crackle rather than as a gap. So
+                    // wait for the frames that are almost certainly on their
+                    // way, and pad only when they are genuinely not coming.
+                    let waitUntil = startedWaiting + packetDuration * 4
+                    while !filled, ProcessInfo.processInfo.systemUptime < waitUntil, self.isRunning {
+                        filled = self.ring.read(into: &packet)
+                        if !filled { Thread.sleep(forTimeInterval: 0.001) }
+                    }
                 }
 
                 // Nothing arrived, so the source has stopped. The timeline has
                 // to keep running or the receiver decides the stream has died.
                 if !filled {
                     for index in packet.indices { packet[index] = 0 }
+                }
+
+                // Counted whether or not it ended in frames, because a pump that
+                // keeps nearly running out is about to, and that is visible here
+                // before anything is audible. Silence sent whilst the cushion
+                // builds is not counted: it is the plan rather than a shortfall.
+                if !priming {
+                    self.noteWait(from: startedWaiting, invented: !filled)
                 }
 
                 let toSend = packet

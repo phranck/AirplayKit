@@ -104,6 +104,27 @@ public func pa_session_held_frames(_ session: UnsafeMutableRawPointer?) -> Int {
     return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.heldFrames
 }
 
+@_cdecl("pa_session_invented_packets")
+public func pa_session_invented_packets(_ session: UnsafeMutableRawPointer?) -> Int {
+    guard let session else { return 0 }
+
+    return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.packets
+}
+
+@_cdecl("pa_session_invented_seconds")
+public func pa_session_invented_seconds(_ session: UnsafeMutableRawPointer?) -> Double {
+    guard let session else { return 0 }
+
+    return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.duration
+}
+
+@_cdecl("pa_session_waited_seconds")
+public func pa_session_waited_seconds(_ session: UnsafeMutableRawPointer?) -> Double {
+    guard let session else { return 0 }
+
+    return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.waited
+}
+
 @_cdecl("pa_session_is_running")
 public func pa_session_is_running(_ session: UnsafeMutableRawPointer?) -> Bool {
     guard let session else { return false }
