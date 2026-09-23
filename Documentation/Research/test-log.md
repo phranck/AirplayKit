@@ -517,6 +517,28 @@ This overturns nothing and settles what F-087 left open from one side. A shared 
 
 **F-097 (method) The description nests three devices and repeats its element names in each (confirmed).** The speaker, its media server and its media renderer each carry `modelName`, `modelNumber` and `UDN`. The outermost is the speaker. A reader taking the last of each would describe a service instead, and the difference is invisible in the values, because they read like plausible answers.
 
+## 2026-09-23, driving a Sonos from a sender written here
+
+**What was done.** A Swift sender, written against the reference beside this log and using none of the vendored C++ one, was driven against `Büro`, a SYMFONISK Bookshelf (S33) at `10.0.0.125`. It paired, opened the session, opened the event channel, opened a stream on both paths, and sent audio. Everything below is what that sender read back, and the PTP findings come from listening on ports 319 and 320 whilst the session ran.
+
+**F-098 A receiver refuses the stream SETUP without `streamConnectionID` (confirmed).** A body carrying `type`, `ct`, `audioFormat`, `spf`, `sr`, `shk`, `isMedia`, `audioMode`, the two latencies and `supportsDynamicStreamID` is answered `400 Bad Request`. Adding `streamConnectionID`, the numeric session identifier the URI also names, is the only change that was made, and both stream types then opened. The reference lists the key from a working sender and does not say it is required; it is.
+
+**F-099 A Sonos opens the buffered stream and says how much it will hold (confirmed).** `type: 103` is answered with `dataPort`, `controlPort` and `audioBufferSize: 7130316`, which is about eighty seconds of 44100 Hz stereo. The realtime stream opens in the same session and reports no buffer size, which matches the account that only the buffered reply carries one.
+
+**F-100 The receiver keeps the clock and announces itself as its master (confirmed).** Within a second of `SETPEERS`, the speaker began sending to the address that request named: Announce and Signalling on port 320, Sync and Follow_Up on port 319. 184 packets arrived in half a minute. So on this arrangement the sender is the follower and the receiver the grandmaster, which is the opposite way round from what a sender-led design would assume.
+
+This answers the sender's half of open question 6 for this pairing. Nothing here says what an Apple sender transmits, because no Apple sender was in the session.
+
+**F-101 Its clock identity is its own hardware address in EUI-64 form (confirmed).** The Announce named a grandmaster identity of `542a1bfffe58d1f8`, and the speaker's hardware address is `54:2a:1b:58:d1:f8`. The `fffe` in the middle is the ordinary expansion of a 48-bit address to 64 bits. Both `priority1` and `priority2` read 248, and the domain number is 0, which is the default domain and as far as this measurement reaches into open question 5.
+
+**F-102 The anchor's seconds are the master clock's own uptime, not a wall clock (confirmed).** A Follow_Up carried 90787 seconds and 712649822 nanoseconds, about twenty-five hours, from a speaker that had been up about that long. That matches the order of magnitude of the one anchor measured before, F-035, which read 1409162 seconds. A sender that fills the field with Unix time is out by fifty years.
+
+**F-103 A receiver refuses an anchor on any timeline but its own (confirmed).** `SETRATEANCHORTIME` was answered `400 Bad Request` three times over: with a `networkTimeTimelineID` invented by the sender and Unix seconds, with the same identity and the sender's own uptime, and with the session declaring `timingProtocol: None` and then `PTP`. It was accepted the moment the identity was the grandmaster identity from F-101 and the seconds were that clock's own reading. So the field is not a name the sender chooses; it is a clock the receiver already keeps, and the sender has to read it before it can speak about time at all.
+
+**F-104 `SETPEERS` is accepted carrying the sender's address alone (confirmed).** A flat array holding one string, the sender's IPv4 address, is answered 200, and the receiver starts announcing to it immediately. That is consistent with F-029, where the list held the sender's addresses and not the receiver's.
+
+**F-105 The buffered path takes the blocks without the anchor and plays none of them (confirmed).** Ten seconds of a 440 Hz tone were written to the data port as length-prefixed blocks, framed and encrypted as the reference describes, before the anchor was solved. The receiver took every block and closed nothing, and the room stayed silent rather than noisy. So a receiver on this path holds what it cannot place in time, which is why a sender that gets the framing right and the anchor wrong sees a healthy session and hears nothing.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
@@ -533,7 +555,8 @@ This overturns nothing and settles what F-087 left open from one side. A shared 
 2. Whether a macOS sender is stricter than an iOS one at all, which F-082 says nothing measured so far can answer. It needs an iOS 27 device against the same receiver.
 3. Which stream type a macOS sender asks for. F-081 answers it for an iPhone playing music, which used 103 three times out of three, and the macOS sender never reached the stream level SETUP.
 4. Whether two receivers in one group are given the same anchor. This needs two receivers under our control in one session, which an iPhone can drive as soon as the second machine's receiver is usable.
-5. Which PTP domain number and profile a group uses beyond domain 0, and whether the receivers contest the election with a full Best Master Clock exchange or accept the first announcement.
-6. What this Mac transmits as PTP, which decides whether a sender is a plain slave of the elected master or a boundary clock passing the time on to the other members.
+5. Which PTP profile a group uses, and whether the receivers contest the election with a full Best Master Clock exchange or accept the first announcement. F-101 settles the domain for one speaker addressed alone, which is 0, and says both its priorities are 248. What happens when a second speaker with the same priorities joins is untouched.
+6. What an Apple sender transmits as PTP. F-100 answers the other half of this for a sender written here: against one Sonos the receiver is the grandmaster and the sender only listens, so a sender need not be a clock at all. Whether an Apple sender leads instead, and whether it has to once a group has two members, is open.
+9. Whether the one-way estimate F-102 rests on is good enough. The sender reads the master's time out of a Follow_Up and carries it forward on its own uptime, without a Delay_Req, so the network's one-way delay is carried as an error. It has not been measured, and it is the difference between placing one stream and holding two speakers together.
 7. How a member leaves a group.
 8. Why the transport is IPv6 link-local in one direction and IPv4 in the other.

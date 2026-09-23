@@ -61,6 +61,9 @@ public struct Session {
     /// The numeric session identifier, which the URI names and which a stream is tied to.
     private let streamConnectionIdentifier: Int64
 
+    /// This sender's PTP clock identity, which the anchor is expressed against.
+    public let clockIdentifier: Int64
+
     /// The TCP port the receiver wants its event channel on.
     public private(set) var eventPort: UInt16 = 0
 
@@ -74,6 +77,7 @@ public struct Session {
         self.connection = connection
         self.sessionIdentifier = UUID().uuidString.uppercased()
         self.streamConnectionIdentifier = Int64(UInt32.random(in: 1...UInt32.max))
+        self.clockIdentifier = Int64.random(in: 1...Int64.max)
         self.uri = "rtsp://\(connection.localAddress)/\(streamConnectionIdentifier)"
     }
 
@@ -98,14 +102,26 @@ public struct Session {
      @returns The event channel's port.
      */
     public mutating func open(senderName: String) throws -> UInt16 {
-        // No timing channel is opened, and the receiver is told so rather than
-        // being left to wait for one. PTP would mean becoming a clock peer,
-        // which is the multi-room question and not this one.
+        // PTP, because a receiver on the buffered path will not take an anchor
+        // without a clock to read it against, and these receivers advertise PTP
+        // and nothing else. What the sender then has to be is a clock the
+        // receiver can follow.
+        let peer: [String: Any] = [
+            "Addresses": [connection.localAddress],
+            "ID": sessionIdentifier,
+            "ClockID": clockIdentifier,
+            "DeviceType": 0,
+            "SupportsClockPortMatchingOverride": true,
+        ]
+
         let body: [String: Any] = [
             "deviceID": Self.deviceIdentifier,
             "macAddress": Self.deviceIdentifier,
             "sessionUUID": sessionIdentifier,
-            "timingProtocol": "None",
+            "groupUUID": sessionIdentifier,
+            "timingProtocol": "PTP",
+            "timingPeerInfo": peer,
+            "timingPeerList": [peer],
             "timingPort": 0,
             "isMultiSelectAirPlay": false,
             "groupContainsGroupLeader": false,
@@ -195,6 +211,22 @@ public struct Session {
         return Stream(dataPort: UInt16(dataPort),
                       controlPort: UInt16(first["controlPort"] as? Int ?? 0),
                       audioBufferSize: first["audioBufferSize"] as? Int)
+    }
+
+    /**
+     Tells the receiver which addresses to watch for clock traffic.
+
+     A flat array of addresses, naming every member of the clock group except
+     the receiver itself, which does not need to be told where it is.
+
+     @param addresses The peers, which with one receiver is this sender alone.
+     */
+    public func setPeers(_ addresses: [String]) throws {
+        try connection.send(RTSPRequest(method: "SETPEERS",
+                                        uri: uri,
+                                        headers: [("Content-Type", "/peer-list-changed")],
+                                        body: try PropertyListSerialization.data(
+                                            fromPropertyList: addresses, format: .binary, options: 0)))
     }
 
     /**

@@ -148,6 +148,22 @@ One `SETRATEANCHORTIME` arrives in a whole session, so the anchor is set at the 
 
 Given that pair, and the sample rate, a receiver computes the network time at which any other RTP timestamp should sound, by linear extrapolation from the anchor. Nothing else is needed to place a frame in time.
 
+### Whose clock, and who keeps it
+
+`networkTimeTimelineID` is not a name the sender chooses. It is a clock the receiver already keeps, and an anchor naming any other timeline is refused with `400 Bad Request` (measured 2026-09-23, from a sender written here against a SYMFONISK Bookshelf, F-103). That was tried three ways, with an invented identity against wall-clock seconds, with the same identity against the sender's own uptime, and with the session declaring first no timing protocol and then PTP. All three were refused, and the anchor was accepted as soon as the identity and the seconds were the receiver's own.
+
+So a sender has to read that clock before it can say anything about time. On this pairing it can, because the receiver announces it. Within a second of `SETPEERS` the speaker began sending PTP to the address that request had named: Announce and Signalling on port 320, Sync and Follow_Up on port 319 (measured 2026-09-23, F-100). The receiver is the grandmaster and the sender the follower, so a sender addressing one receiver does not have to be a clock at all. It has to listen.
+
+The identity in those announcements is the receiver's own hardware address expanded to 64 bits, so `54:2a:1b:58:d1:f8` announces as `542a1bfffe58d1f8`, with both priorities at 248 and the domain number 0 (measured 2026-09-23, F-101).
+
+The seconds are that clock's own reading rather than a wall clock. A Follow_Up from a speaker up about a day carried 90787 seconds, and the one anchor measured before this carried 1409162, which is about sixteen days (measured 2026-09-23, F-102, and 2026-09-22, F-035). A sender filling the field with Unix time is out by fifty years, and the receiver refuses it.
+
+What none of this measures is the one-way delay. Reading the master's time out of a Follow_Up and carrying it forward on the sender's own uptime, with no Delay_Req to measure the path, leaves that delay in the answer as an error. For placing the start of one stream it is immaterial. For holding two speakers in step it is the whole problem.
+
+### What a receiver does with blocks it cannot place
+
+It keeps them. Ten seconds of audio written to the data port before the anchor was solved were all taken, the connection stayed open, and nothing was heard, silently rather than noisily (measured 2026-09-23, F-105). So a sender that frames the audio correctly and gets the anchor wrong sees a session that looks healthy in every particular and hears nothing at all, which is the failure this article exists to prevent.
+
 ### The realtime anchor, packet type 215
 
 The realtime AirPlay 2 stream carries the same anchor as a UDP packet on the receiver's control port instead. It is the classic SYNC packet with the NTP time replaced by a network time in nanoseconds and the master's clock identity appended (reported confirmed, [shairport-sync, `rtp.c`](https://github.com/mikebrady/shairport-sync/blob/master/rtp.c), and a second source names the same type carrying the same triple of an RTP time, an eight-byte network time and a second RTP time, [Cozzi, RTCP](https://web.archive.org/web/20220214214831/https://emanuelecozzi.net/docs/airplay2/rtcp/)).

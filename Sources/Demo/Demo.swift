@@ -143,6 +143,16 @@ func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 
             print("  it says it is \(name), a \(info["model"] as? String ?? "receiver")")
         }
 
+        // Everything it says about time and about what it can carry, which is
+        // what decides which path can actually be driven.
+        for key in info.keys.sorted() where key.lowercased().contains("timing")
+            || key.lowercased().contains("clock")
+            || key.lowercased().contains("ptp")
+            || key.lowercased().contains("feature")
+            || key.lowercased().contains("status") {
+            print("  \(key) = \(info[key] ?? "")")
+        }
+
         let eventPort = try session.open(senderName: "PlayableAirplay")
         print("  session open, event channel wanted on \(eventPort)")
 
@@ -161,12 +171,33 @@ func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 
         // the session declared no timing protocol, so there is no shared clock,
         // and whether a receiver plays against one it was simply handed is what
         // this finds out.
-        let now = Date().timeIntervalSince1970
+        // Opened before SETPEERS, because the receiver starts announcing as
+        // soon as it is told where to announce to.
+        let clock = try PTPClock()
+
+        do {
+            try session.setPeers([connection.localAddress])
+            print("  peers accepted")
+        }
+        catch {
+            print("  peers refused: \(error)")
+        }
+
+        // The receiver keeps the clock and announces it, so the anchor is
+        // expressed on its timeline rather than on one of ours.
+        guard let reading = clock.read(timeout: 12) else {
+            print("  the receiver announced no clock, so there is no timeline to anchor to")
+            return 1
+        }
+
+        let time = PTPClock.now(from: reading)
+        print(String(format: "  its clock is %016llx, reading %lld s", reading.identity, time.seconds))
+
         do {
             try session.setAnchor(rtpTime: 0,
-                                  seconds: Int64(now),
-                                  fraction: 0,
-                                  timelineIdentifier: Int64.random(in: 1...Int64.max))
+                                  seconds: time.seconds,
+                                  fraction: time.fraction,
+                                  timelineIdentifier: Int64(bitPattern: reading.identity))
             print("  anchor accepted")
         }
         catch {
