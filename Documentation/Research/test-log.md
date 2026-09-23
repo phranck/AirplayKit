@@ -565,6 +565,22 @@ Pacing against a fixed schedule instead, so each packet is due at a time compute
 
 **F-112 (method) A test that rebuilds the framing tests its own copy (confirmed).** The block builder sat inside the method that writes to the socket, so checking it from outside meant either a receiver on the other end or rewriting the framing in the test. The second is not a test: the two copies drift, and the one that matters is the one nothing reads back. Lifting the builder out, so it takes its inputs and returns the bytes, is what made the layout checkable at all. The test then reads every field at the offset a receiver reads it from and opens the payload with the construction from the other side.
 
+## 2026-09-24, the sender kept no buffer, and three symptoms came of it
+
+**What was done.** Podlive played podcasts to a Sonos through this package, and three complaints came out of that: a speaker that sounded rougher than the same source did locally, a change of podcast that crackled, and a second or two before a new one settled. F-113 is what settled all three, and it was found by instrumenting rather than by listening.
+
+**F-113 A sender that drains as fast as it is filled keeps no buffer at all, and every hiccup in the source is heard (confirmed).** The pump began taking packets the moment the first one landed, and from then on consumed at exactly the rate a live source produces. The ring therefore sat a few tens of milliseconds from empty for the whole session. Asking it to discard at a change of source reported 0.07 seconds, then 0.01 seconds, which is the measurement: there was nothing in it to discard.
+
+Gathering half a second before sending anything, and gathering it again after a discard, moved that to 0.51 to 0.58 seconds and it stayed there, because producer and consumer run at the same rate and the distance between them is set once. Over the same runs afterwards, not one packet of silence went out in place of audio.
+
+The half second is free. The anchor has already placed the first frame two seconds ahead, so a cushion inside that lead delays nothing a listener can notice.
+
+**F-114 (method) A caller whose writes are never refused still cannot tell whether its audio arrived in time (confirmed).** Podlive reported 5.1 seconds taken in 5.1 seconds with nothing refused, whilst the speaker sounded rough. Both figures were true and neither was about the question. What was missing is the consumer's side: how often the sender had to invent silence because the ring was empty when the packet was due.
+
+That is now counted and readable, and it is what turned the third attempt at this into a measurement instead of a fourth guess. F-107 and F-108 were the same failure found by ear, twice, each after a false trail. Anything that pads, drops, or makes up data counts what it did, or the next person hears the symptom and looks in the wrong place.
+
+**F-115 (method) A buffer that is full and a buffer that is empty produce the same complaint (confirmed).** The crackle at a change of source was first read as the session holding seconds of the old one, which is the full case, and the discard was written for it. The discard was right to write and it was not the cure. The cause was the opposite condition, and the two are told apart by one number that nothing was reporting.
+
 ## What this means for the method
 
 **F-024** **A packet recording cannot answer the questions the multi-room work turns on (confirmed).** `SETPEERS`, `SETRATEANCHORTIME`, the per-device volume commands and the teardown of a group member are all inside the encrypted control channel. No amount of recording reaches them, and repeating a run with a step that was missed the first time would not have helped.
