@@ -502,6 +502,34 @@ public extension AirPlaySession {
         }
     }
 
+    /// Throws away the audio this session is holding and has not sent.
+    ///
+    /// For a caller that changes source, such as one podcast to the next. Without
+    /// this the old source's tail goes on leaving at real time whilst the new one
+    /// has not started, and a source trickling to a stop leaves the buffer
+    /// repeatedly almost empty, so what is heard is crackle rather than an ending.
+    ///
+    /// Afterwards the session sends silence, which is quiet, until the new source
+    /// produces. The session stays up, so nothing is paired again.
+    ///
+    /// What it cannot do is take back what the receiver already has. A couple of
+    /// seconds of audio is already at the speaker, so the cut is heard about that
+    /// much later.
+    ///
+    /// - Returns: How many frames were thrown away.
+    @discardableResult
+    func discardHeldAudio() -> Int {
+        heldSender()?.discardHeldAudio() ?? 0
+    }
+
+    /// How many frames are waiting to be sent.
+    ///
+    /// How far ahead of the speaker the source has run, which is the latency a
+    /// listener would notice on a change of source. Nought on a closed session.
+    var heldFrames: Int {
+        heldSender()?.heldFrames ?? 0
+    }
+
     /// Ends the session.
     ///
     /// Calling it twice is allowed, and releasing the session does it anyway.

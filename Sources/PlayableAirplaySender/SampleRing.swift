@@ -103,7 +103,15 @@ final class SampleRing {
         return true
     }
 
-    /// Throws away everything in it, which is what ending a session does.
+    /// How many samples are waiting, which is how far ahead of the speaker the source has run.
+    var held: Int {
+        lock.lock()
+        defer { lock.unlock() }
+
+        return count
+    }
+
+    /// Throws away everything in it, which ending a session does and changing source does.
     func clear() {
         lock.lock()
         defer { lock.unlock() }

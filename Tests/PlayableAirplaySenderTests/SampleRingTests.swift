@@ -87,6 +87,37 @@ final class SampleRingTests: XCTestCase {
         XCTAssertFalse(ring.read(into: &out))
     }
 
+    func testWhatItHoldsIsWhatHasBeenWrittenAndNotYetRead() {
+        // How far ahead of the speaker the source has run, which is the latency
+        // a listener notices when the source changes.
+        let ring = SampleRing(capacity: 8)
+        var out = [Int16](repeating: 0, count: 2)
+
+        XCTAssertEqual(ring.held, 0)
+
+        XCTAssertTrue(ring.write([1, 2, 3, 4]))
+        XCTAssertEqual(ring.held, 4)
+
+        XCTAssertTrue(ring.read(into: &out))
+        XCTAssertEqual(ring.held, 2)
+
+        ring.clear()
+        XCTAssertEqual(ring.held, 0)
+    }
+
+    func testWhatItHoldsIsRightAfterAWrap() {
+        // The count is kept rather than derived from the two indices, so the
+        // wrap is where a derived one would go wrong.
+        let ring = SampleRing(capacity: 4)
+        var out = [Int16](repeating: 0, count: 3)
+
+        XCTAssertTrue(ring.write([1, 2, 3]))
+        XCTAssertTrue(ring.read(into: &out))
+        XCTAssertTrue(ring.write([4, 5, 6]))
+
+        XCTAssertEqual(ring.held, 3)
+    }
+
     // MARK: - Two threads
 
     func testAProducerAndASenderKeepEveryFrameAndItsOrder() {
