@@ -332,6 +332,44 @@ size_t pa_session_held_frames(PASession *session);
  @param session  The open session, or NULL, which has invented nothing.
  @return The packet count.
  */
+/**
+ What to call a receiver on screen, under the name its owner gave it.
+
+ "Sonos One" for a receiver that publishes a manufacturer, which is the two
+ fields joined, and "HomePod mini" for one of Apple's, whose identifier is
+ turned into a name from a table the library carries.
+
+ Also answers for a machine that is not a receiver at all, such as the one this
+ is running on: pass an empty manufacturer and the identifier from
+ `sysctlbyname("hw.model", ...)`.
+
+ @param manufacturer  What the receiver published, or NULL or empty for Apple's.
+ @param model         The model or identifier.
+ @param out           Where to write the name. Left empty where there is none.
+ @param capacity      How many bytes `out` holds, including the terminator.
+ */
+void pa_product_name(const char *manufacturer, const char *model, char *out, size_t capacity);
+
+/**
+ The SF Symbol that draws a receiver, such as `hifispeaker` or `homepod.mini`.
+
+ Apple's hardware is drawn as itself, because the symbol catalogue has one
+ shaped like each of them. Everybody else's is drawn as a speaker, because the
+ catalogue has nothing shaped like a Sonos and no soundbar at all.
+
+ Takes the same two fields as pa_product_name and answers for a machine that is
+ not a receiver in the same way.
+ */
+void pa_symbol_name(const char *manufacturer, const char *model, char *out, size_t capacity);
+
+/**
+ The SF Symbol for two of these playing as one, such as a stereo set.
+
+ For a caller that knows two receivers are bonded. Nothing in a service record
+ says a pair is a pair, so this is offered rather than chosen by the library.
+ */
+void pa_pair_symbol_name(const char *manufacturer, const char *model, char *out, size_t capacity);
+
 size_t pa_session_invented_packets(PASession *session);
 
 /// The same, as a length of audio in seconds.

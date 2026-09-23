@@ -52,7 +52,7 @@ let package = Package(
         // The Swift interface, and the only thing a caller sees.
         .target(
             name: "PlayableAirplay",
-            dependencies: ["CPlayableAirplay", "PlayableAirplaySender"]
+            dependencies: ["CPlayableAirplay", "PlayableAirplaySender", "PlayableAirplayDevices"]
         ),
 
         /*
@@ -83,6 +83,22 @@ let package = Package(
         .target(name: "PlayableAirplayUPnP"),
 
         /*
+         What a device is called and what to draw it as.
+
+         Its own target, and the lowest Swift one, because the C interface has
+         to reach it. An Objective-C application takes the C library and gets
+         everything through the header, and that header cannot promise
+         something declared above it: CPlayableAirplay sits under the Swift
+         library that knows about receivers, and the reverse would be a cycle.
+
+         Depends on nothing. It answers from two strings and a table.
+
+         Not a product. The Swift library hands it on as properties of a
+         receiver, and C hands it on through the header.
+         */
+        .target(name: "PlayableAirplayDevices"),
+
+        /*
          Everything underneath, in one target.
 
          The C interface, the C++ sender, ed25519 and Mbed TLS could each be a
@@ -98,7 +114,7 @@ let package = Package(
          */
         .target(
             name: "CPlayableAirplay",
-            dependencies: ["PlayableAirplaySender"],
+            dependencies: ["PlayableAirplaySender", "PlayableAirplayDevices"],
             linkerSettings: [
                 // Bonjour. Apple's own on its platforms, Avahi's compatibility
                 // library everywhere else.
@@ -114,7 +130,7 @@ let package = Package(
 
         .testTarget(
             name: "PlayableAirplayTests",
-            dependencies: ["PlayableAirplay", "CPlayableAirplay", "PlayableAirplayUPnP"]
+            dependencies: ["PlayableAirplay", "CPlayableAirplay", "PlayableAirplayUPnP", "PlayableAirplayDevices"]
         ),
 
         .testTarget(

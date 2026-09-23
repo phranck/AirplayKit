@@ -7,6 +7,7 @@
 
 import XCTest
 @testable import PlayableAirplay
+@testable import PlayableAirplayDevices
 
 /**
  Naming and drawing a receiver from what it publishes.
@@ -80,11 +81,11 @@ final class ReceiverAppearanceTests: XCTestCase {
         // that carry their name, and no further for a Mac, because a Mac16,12
         // is a MacBook Air and a Mac16,11 is a Mac mini and nothing in the
         // identifier says which.
-        XCTAssertEqual(AirPlayReceiver.familyName(for: "AudioAccessory5,1"), "HomePod mini")
-        XCTAssertEqual(AirPlayReceiver.familyName(for: "AudioAccessory1,2"), "HomePod")
-        XCTAssertEqual(AirPlayReceiver.familyName(for: "AppleTV11,1"), "Apple TV")
-        XCTAssertEqual(AirPlayReceiver.familyName(for: "Mac16,12"), "Mac")
-        XCTAssertEqual(AirPlayReceiver.familyName(for: "Macmini9,1"), "Mac")
+        XCTAssertEqual(DeviceAppearance.familyName(for: "AudioAccessory5,1"), "HomePod mini")
+        XCTAssertEqual(DeviceAppearance.familyName(for: "AudioAccessory1,2"), "HomePod")
+        XCTAssertEqual(DeviceAppearance.familyName(for: "AppleTV11,1"), "Apple TV")
+        XCTAssertEqual(DeviceAppearance.familyName(for: "Mac16,12"), "Mac")
+        XCTAssertEqual(DeviceAppearance.familyName(for: "Macmini9,1"), "Mac")
     }
 
     func testTheTableGivesTheExactProduct() {
@@ -135,10 +136,53 @@ final class ReceiverAppearanceTests: XCTestCase {
     func testAMacIsDrawnByWhatItIsCalledRatherThanByItsIdentifier() {
         // The identifier stopped saying what the machine is when it became
         // Mac16,x. The name still says it.
-        XCTAssertEqual(AirPlayReceiver.macSymbolName(for: "MacBook Air"), "laptopcomputer")
-        XCTAssertEqual(AirPlayReceiver.macSymbolName(for: "Mac mini"), "macmini.gen3")
-        XCTAssertEqual(AirPlayReceiver.macSymbolName(for: "Mac Studio"), "macstudio")
-        XCTAssertEqual(AirPlayReceiver.macSymbolName(for: "Mac Pro"), "macpro.gen3")
-        XCTAssertEqual(AirPlayReceiver.macSymbolName(for: "iMac"), "desktopcomputer")
+        XCTAssertEqual(DeviceAppearance.macSymbolName(for: "MacBook Air"), "laptopcomputer")
+        XCTAssertEqual(DeviceAppearance.macSymbolName(for: "Mac mini"), "macmini.gen3")
+        XCTAssertEqual(DeviceAppearance.macSymbolName(for: "Mac Studio"), "macstudio")
+        XCTAssertEqual(DeviceAppearance.macSymbolName(for: "Mac Pro"), "macpro.gen3")
+        XCTAssertEqual(DeviceAppearance.macSymbolName(for: "iMac"), "desktopcomputer")
+    }
+}
+
+/**
+ The same question asked about a bare identifier.
+
+ A list of destinations holds this machine as well as the receivers, and this
+ machine is not a receiver: it arrives as an identifier out of `sysctl` rather
+ than out of a service record. Both answers come from the same place as a
+ receiver's, so the two cannot drift apart.
+ */
+final class AppleDeviceTests: XCTestCase {
+
+    func testAnIdentifierIsNamedTheWayAReceiverIs() {
+        XCTAssertEqual(AppleDevice.productName(for: "Mac16,12"), "MacBook Air")
+        XCTAssertEqual(AppleDevice.productName(for: "Macmini9,1"), "Mac mini")
+        XCTAssertEqual(AppleDevice.productName(for: "AudioAccessory5,1"), "HomePod mini")
+    }
+
+    func testSomethingThatIsNotApplesIsNotNamedAtAll() {
+        // A caller draws this as whatever it uses for a stranger, rather than
+        // showing the string back as though it were a product.
+        XCTAssertNil(AppleDevice.productName(for: "One"))
+        XCTAssertNil(AppleDevice.productName(for: ""))
+        XCTAssertNil(AppleDevice.symbolName(for: "One"))
+    }
+
+    func testAModelNewerThanTheTableIsStillPlacedByItsFamily() {
+        XCTAssertEqual(AppleDevice.productName(for: "AudioAccessory99,9"), "HomePod")
+        XCTAssertEqual(AppleDevice.symbolName(for: "AppleTV99,9"), "appletv")
+    }
+
+    func testTheSymbolAgreesWithWhatAReceiverWouldBeDrawnAs() {
+        // Two entry points, one answer. They would otherwise drift, and the one
+        // that drifted would be the one nobody is looking at.
+        for identifier in ["AudioAccessory5,1", "AudioAccessory1,1", "AppleTV11,1", "Mac16,12", "Macmini9,1"] {
+            let receiver = AirPlayReceiver(id: "test", name: "Room", host: "test.local.", port: 7000,
+                                           model: identifier, manufacturer: "", groupID: "",
+                                           supportsAirPlay2: true, hasSender: false, isPlaying: false)
+
+            XCTAssertEqual(AppleDevice.symbolName(for: identifier), receiver.symbolName, identifier)
+            XCTAssertEqual(AppleDevice.productName(for: identifier), receiver.productName, identifier)
+        }
     }
 }
