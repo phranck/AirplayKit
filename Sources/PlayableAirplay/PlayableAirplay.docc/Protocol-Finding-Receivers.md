@@ -97,6 +97,32 @@ A Sonos will say what it really is if asked over its own UPnP device description
 
 Only the coordinator of a bonded set advertises `_raop._tcp` at all. Five of those eight speakers publish the service and the other three are reachable only through the zone topology that any one of them will answer for the whole network (measured 2026-09-22, queried, F-055).
 
+### What the manufacturer field is worth
+
+`manufacturer` is the other half of a product name, and it is published by everybody except Apple.
+
+Sonos announces `manufacturer=Sonos` beside its short `model`, so the two together read as "Sonos One" or "Sonos Arc" without asking the device anything. Apple announces no `manufacturer` at all, and its `model` is the identifier rather than a name (measured 2026-09-24, browsed, F-116).
+
+That divides naming a receiver into two cases and no more. A record carrying a manufacturer is named by joining the two fields. A record carrying none is Apple's, and its identifier is turned into a name the way macOS turns it into a picture.
+
+What the joined name does not give is the brand on the box. A SYMFONISK Bookshelf announces `manufacturer=Sonos` and `model=Bookshelf`, because Sonos builds it, and only the UPnP description says SYMFONISK (measured 2026-09-24, queried, F-116).
+
+### What a receiver's own picture is worth
+
+A Sonos serves a picture of itself, and the artwork is not consistent enough to put in a list.
+
+Its UPnP description carries an `iconList`, and every model answers on the same path with a single 48 by 48 PNG. There is one size and no larger variant: `/img/icon-S18_x2.png` and the other obvious spellings answer 404, and the directory itself is forbidden (measured 2026-09-24, queried, F-117).
+
+What comes back differs in kind rather than in quality. `icon-S33.png` for a SYMFONISK Bookshelf and `icon-S19.png` for a Sonos Arc are dark product photographs. `icon-S18.png` for a Sonos One is a pale line drawing. Side by side in one list the drawing reads as a fault in the application rather than as a speaker (measured 2026-09-24, queried, F-117).
+
+Nothing in the description says which of the two a model will serve, and a rule guessing it from the image would have to distinguish a line drawing from a photograph of a white speaker, which Sonos also sells.
+
+### What is available to draw a receiver with instead
+
+Apple's SF Symbols carry a device-shaped symbol for every one of Apple's own products that can receive AirPlay, and nothing shaped like anybody else's. For a third-party receiver the catalogue offers `hifispeaker`, `hifispeaker.2` for a pair and `hifireceiver`, all generic. There is no soundbar (measured 2026-09-24, read from `name_availability.plist` in `CoreGlyphs.bundle`, F-118).
+
+So a list drawn from one hand shows Apple's hardware as itself and everybody else's as a speaker. The alternative is a set drawn for the purpose, by silhouette rather than by model, since at the size a list uses a Sonos One and a HomePod mini are the same picture.
+
 ### What the pk field is worth
 
 `pk` is the pairing key. Every one of the nine receivers on the measured network advertises one (measured 2026-09-22, browsed, F-001). Its presence is what says a receiver speaks AirPlay 2, and a receiver without one runs the older RSA challenge instead (reported confirmed, [openairplay, Unofficial AirPlay Specification](https://openairplay.github.io/airplay-spec/)). No receiver without one was seen, so that half is not measured here.
@@ -116,7 +142,8 @@ Only the coordinator of a bonded set advertises `_raop._tcp` at all. Five of tho
 | `gid` | The group's UUID. A receiver that is in no group publishes its own `pi` value here. | reported confirmed |
 | `igl` | Is group leader, `0` or `1`. | reported confirmed |
 | `gcgl` | Group contains a discoverable leader, `0` or `1`. | reported confirmed |
-| `manufacturer`, `serialNumber`, `fv`, `osvers`, `protovers`, `acl`, `hmid`, `rsf` | Descriptive or access-control fields an audio sender does not need. | reported confirmed |
+| `manufacturer` | Who built it, such as `Sonos`. Everybody but Apple publishes one, and with `model` it makes the product name. | measured |
+| `serialNumber`, `fv`, `osvers`, `protovers`, `acl`, `hmid`, `rsf` | Descriptive or access-control fields an audio sender does not need. | reported confirmed |
 
 Source for the table: [openairplay, Service Discovery](https://openairplay.github.io/airplay-spec/service_discovery.html), with the grouping keys corroborated by [shairport-sync, `bonjour_strings.c`](https://github.com/mikebrady/shairport-sync/blob/master/bonjour_strings.c) for what a receiver publishes and by [Cozzi, Service discovery](https://web.archive.org/web/20220214214811/https://emanuelecozzi.net/docs/airplay2/discovery/) for the field Apple's sender reads each one into.
 
