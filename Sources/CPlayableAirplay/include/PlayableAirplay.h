@@ -272,6 +272,37 @@ bool pa_session_write(PASession *session, const int16_t *frames, size_t frameCou
 bool pa_session_is_running(PASession *session);
 
 /**
+ Throws away the audio this session is holding and has not sent.
+
+ For a caller that changes source, such as one podcast to the next. Without this
+ the old source's tail goes on leaving at real time whilst the new one has not
+ started, and a source trickling to a stop leaves the buffer repeatedly almost
+ empty, so what is heard is crackle rather than an ending.
+
+ Afterwards the session sends silence, which is quiet, until the new source
+ produces. The session stays up, so nothing is paired again.
+
+ What it cannot do is take back what the receiver already has. A couple of
+ seconds of audio is already at the speaker, so the cut is heard about that much
+ later.
+
+ @param session  The open session, or NULL, which holds nothing.
+ @return How many frames were thrown away.
+ */
+size_t pa_session_discard_held_audio(PASession *session);
+
+/**
+ How many frames are waiting to be sent.
+
+ How far ahead of the speaker the source has run, which is the latency a
+ listener would notice on a change of source.
+
+ @param session  The open session, or NULL, which holds nothing.
+ @return The frame count.
+ */
+size_t pa_session_held_frames(PASession *session);
+
+/**
  Sets the receiver's own volume.
 
  This is the device's volume rather than a gain applied to the samples, so it

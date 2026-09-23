@@ -150,6 +150,36 @@ public final class AirPlaySender {
     }
 
     /**
+     Throws away the audio this session is holding and has not sent.
+
+     For a caller that changes source. Without it the old source's tail goes on
+     leaving at real time whilst the new one has not started, and a source that
+     is trickling to a stop leaves the ring repeatedly almost empty, so the pump
+     alternates between the little that is there and padding silence. That is
+     heard as crackle rather than as an ending.
+
+     Afterwards the pump pads continuously, which is quiet, until the new source
+     produces. The session stays up, so nothing is paired again and no anchor is
+     set again.
+
+     What this cannot do is take back what the receiver already has. The anchor
+     buys a lead of ``anchorLead``, and everything inside it is at the speaker
+     already, so the cut is heard about that much later.
+
+     @returns How many frames were thrown away.
+     */
+    @discardableResult
+    public func discardHeldAudio() -> Int {
+        let held = ring.held
+        ring.clear()
+
+        return held / ALACFrame.channelCount
+    }
+
+    /// How many frames are waiting, which is how far ahead of the speaker the source has run.
+    public var heldFrames: Int { ring.held / ALACFrame.channelCount }
+
+    /**
      Sets the receiver's own volume.
 
      This moves the speaker's own control rather than scaling the samples, so it

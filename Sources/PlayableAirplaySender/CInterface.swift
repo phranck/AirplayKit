@@ -90,6 +90,20 @@ public func pa_session_write(_ session: UnsafeMutableRawPointer?,
     return held.sender.write(samples) == .taken
 }
 
+@_cdecl("pa_session_discard_held_audio")
+public func pa_session_discard_held_audio(_ session: UnsafeMutableRawPointer?) -> Int {
+    guard let session else { return 0 }
+
+    return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.discardHeldAudio()
+}
+
+@_cdecl("pa_session_held_frames")
+public func pa_session_held_frames(_ session: UnsafeMutableRawPointer?) -> Int {
+    guard let session else { return 0 }
+
+    return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.heldFrames
+}
+
 @_cdecl("pa_session_is_running")
 public func pa_session_is_running(_ session: UnsafeMutableRawPointer?) -> Bool {
     guard let session else { return false }
