@@ -57,11 +57,18 @@ func listReceivers(forSeconds seconds: Int) -> Int32 {
 
         for receiver in receivers {
             let generation = receiver.supportsAirPlay2 ? "AirPlay 2" : "AirPlay 1"
-            let name = receiver.name.padding(toLength: 24, withPad: " ", startingAt: 0)
-            let model = receiver.model.isEmpty ? "unknown model" : receiver.model
+            let name = receiver.name.padding(toLength: 22, withPad: " ", startingAt: 0)
             let state = receiver.isPlaying ? "playing" : (receiver.hasSender ? "in use" : "free")
             let group = shared[receiver.groupID].map { " same group as \($0.count - 1) other(s)" } ?? ""
-            print("  \(name) \(receiver.host):\(receiver.port)  \(generation)  \(model)  \(state)\(group)")
+
+            // What a list would put under the name, and the symbol it would draw
+            // beside it. Printed here so both can be read against real hardware.
+            let product = (receiver.productName.isEmpty ? "unknown" : receiver.productName)
+                .padding(toLength: 22, withPad: " ", startingAt: 0)
+            let symbol = receiver.symbolName.padding(toLength: 16, withPad: " ", startingAt: 0)
+
+            print("  \(name) \(product) \(symbol) \(generation)  \(state)\(group)")
+            print("  \(String(repeating: " ", count: 22)) \(receiver.host):\(receiver.port)")
         }
     }
 

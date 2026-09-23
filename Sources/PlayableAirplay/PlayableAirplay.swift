@@ -60,6 +60,19 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     /// worth ignoring where it is not, rather than something to branch on.
     public let model: String
 
+    /// Who built it, such as `Sonos`, or an empty string where it said nothing.
+    ///
+    /// The other half of a product name. With ``model`` it reads as "Sonos One"
+    /// without asking the device anything, which is what ``productName`` does.
+    ///
+    /// Empty for Apple's receivers, which publish no such field, and that is
+    /// what tells the two cases apart without a table of identifiers.
+    ///
+    /// The brand on the box is not always this. A SYMFONISK Bookshelf says
+    /// `Sonos` here, because Sonos builds it, and only its own UPnP description
+    /// says SYMFONISK.
+    public let manufacturer: String
+
     /// Which group of receivers this one says it belongs to, or an empty string
     /// where it said nothing.
     ///
@@ -590,6 +603,7 @@ private extension AirPlayReceiver {
                   host: Self.string(from: receiver.host, capacity: Int(PA_MAX_HOST)),
                   port: receiver.port,
                   model: Self.string(from: receiver.model, capacity: Int(PA_MAX_MODEL)),
+                  manufacturer: Self.string(from: receiver.manufacturer, capacity: Int(PA_MAX_MODEL)),
                   groupID: Self.string(from: receiver.groupID, capacity: Int(PA_MAX_GROUP)),
                   supportsAirPlay2: receiver.supportsAirPlay2,
                   hasSender: receiver.hasSender,
