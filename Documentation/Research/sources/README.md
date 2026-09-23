@@ -10,6 +10,7 @@ Applies to `openairplay/airplay2-receiver` at commit `6c343d3`. It carries every
 2. Every reply was sent as `RTSP/1.0`, including the answer to a plain HTTP `GET /info`. The reply now speaks whichever protocol was asked in. See F-079.
 3. Handlers echoed `CSeq` back even when the request carried none, producing a header reading `None`. An absent value now sends no header at all. See F-079.
 4. `/info` ignored the `?txtAirPlay&txtRAOP` a macOS sender asks with, and the receiver's own description named no audio formats. It now answers both service records, built from the one set of properties it keeps, and names what it supports. See F-070 and F-072.
+5. The audio sink set `channels` on the codec context, which PyAV 18 made read-only and now derives from the layout. The sink raised an `AttributeError` before a single packet was decoded, so the receiver completed a whole session and played nothing. The count is now set by naming the layout.
 
 Apply it with `git apply` inside a fresh clone.
 

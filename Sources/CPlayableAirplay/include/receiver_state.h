@@ -2,7 +2,7 @@
 //  receiver_state.h
 //  Reading what a receiver is doing out of the status field it advertises.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 #ifndef PLAYABLE_AIRPLAY_RECEIVER_STATE_H

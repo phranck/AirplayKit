@@ -23,7 +23,7 @@
 #
 #  Needs root, because reading from the network needs /dev/bpf. Nothing else.
 #
-#  Copyright © 2026 cocoa:naut. All rights reserved.
+#  Copyright © 2026 LAYERED. All rights reserved.
 #
 
 set -euo pipefail

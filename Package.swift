@@ -53,11 +53,43 @@ let package = Package(
          */
         .library(name: "PlayableAirplayUPnP", targets: ["PlayableAirplayUPnP"]),
     ],
+    dependencies: [
+        /*
+         The cryptography AirPlay 2 needs, on Apple's platforms and on Linux
+         alike: X25519, Ed25519, ChaCha20-Poly1305, HKDF and SHA-512.
+         */
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+
+        /*
+         Arbitrary-precision integers, for the one thing swift-crypto does not
+         cover. Pairing is SRP-6a over a 3072-bit group, which needs modular
+         exponentiation, and neither swift-crypto nor Foundation offers one.
+         */
+        .package(url: "https://github.com/attaswift/BigInt.git", from: "5.3.0"),
+    ],
     targets: [
         // The Swift interface, and the only thing a caller sees.
         .target(
             name: "PlayableAirplay",
             dependencies: ["CPlayableAirplay"]
+        ),
+
+        /*
+         The sender, in Swift.
+
+         Built beside the C++ one rather than in place of it, so there is never
+         a state in which nothing plays. It takes over underneath the two faces
+         above once it does, which is #31, and the C++ checkout goes with it.
+
+         Not a product. Nothing outside this package has a reason to reach it,
+         and the two libraries above stay the whole of what a caller sees.
+         */
+        .target(
+            name: "PlayableAirplaySender",
+            dependencies: [
+                .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "BigInt", package: "BigInt"),
+            ]
         ),
 
         /*
@@ -128,12 +160,17 @@ let package = Package(
         // Finds receivers, plays a tone, and plays a file, from a terminal.
         .executableTarget(
             name: "Demo",
-            dependencies: ["PlayableAirplay", "PlayableAirplayUPnP"]
+            dependencies: ["PlayableAirplay", "PlayableAirplayUPnP", "PlayableAirplaySender"]
         ),
 
         .testTarget(
             name: "PlayableAirplayTests",
             dependencies: ["PlayableAirplay", "CPlayableAirplay", "PlayableAirplayUPnP"]
+        ),
+
+        .testTarget(
+            name: "PlayableAirplaySenderTests",
+            dependencies: ["PlayableAirplaySender"]
         ),
     ],
     cxxLanguageStandard: .cxx20

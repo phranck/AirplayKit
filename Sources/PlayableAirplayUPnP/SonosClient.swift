@@ -2,7 +2,7 @@
 //  SonosClient.swift
 //  Asking a speaker directly, over the services it offers on port 1400.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import Foundation

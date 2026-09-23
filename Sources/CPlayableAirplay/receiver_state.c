@@ -2,7 +2,7 @@
 //  receiver_state.c
 //  Reading what a receiver is doing out of the status field it advertises.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 #include "include/receiver_state.h"

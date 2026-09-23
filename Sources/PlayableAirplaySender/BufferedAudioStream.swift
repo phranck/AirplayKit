@@ -1,0 +1,131 @@
+//
+//  BufferedAudioStream.swift
+//  The audio path Apple's own senders take.
+//
+//  Copyright © 2026 LAYERED. All rights reserved.
+//
+
+import Crypto
+import Foundation
+
+/**
+ Audio over TCP, as a stream of length-prefixed blocks.
+
+ This is stream type 103, which is what an iPhone uses and what a Sonos plays.
+ The realtime path exists beside it and is what the older sender here speaks,
+ and a receiver that accepts realtime may still render nothing from it.
+
+ ```text
+ 2 bytes   big-endian length, counting itself
+ 4 bytes   big-endian: the marker bit, then a 23-bit sequence number
+ 4 bytes   big-endian timestamp
+ 4 bytes   big-endian synchronisation source, which names this block's codec
+ n bytes   ciphertext
+ 16 bytes  Poly1305 tag
+ 8 bytes   the nonce counter, little-endian
+ ```
+
+ Flow control falls out of TCP. The receiver reports how much it will hold, and
+ beyond that it simply stops draining the connection, so there is no message to
+ send and nothing to wait for.
+ */
+public final class BufferedAudioStream {
+    /// What the synchronisation source carries for ALAC at 44100 Hz, 16 bit, stereo.
+    public static let alacSource: UInt32 = 0x40000
+
+    private let connection: TCPConnection
+    private let key: SymmetricKey
+
+    private var sequence: UInt32 = 0
+    private var timestamp: UInt32
+    private var nonce: UInt64 = 0
+
+    /**
+     Opens the connection the audio goes down.
+
+     @param host The receiver.
+     @param port The data port its stream SETUP reply named.
+     @param audioKey The session's audio key, which the SETUP also carried as `shk`.
+     @param startTimestamp Where this stream's timeline begins.
+     */
+    public init(host: String, port: UInt16, audioKey: Data, startTimestamp: UInt32 = 0) throws {
+        self.connection = try TCPConnection(host: host, port: port, timeout: 30)
+        self.key = SymmetricKey(data: audioKey)
+        self.timestamp = startTimestamp
+    }
+
+    deinit {
+        close()
+    }
+
+    /// Closes the connection.
+    public func close() {
+        connection.close()
+    }
+
+    /**
+     Sends one packet's worth of samples.
+
+     @param samples Interleaved 16-bit stereo, `ALACFrame.framesPerPacket * 2` of them.
+     @throws Whatever the socket reports. A receiver whose buffer is full does
+     not refuse: it stops reading, and this waits in the socket until it starts
+     again.
+     */
+    public func write(_ samples: [Int16]) throws {
+        let payload = ALACFrame.packed(samples, frames: ALACFrame.framesPerPacket)
+
+        // The marker bit is set on every block, and the sequence number is 23
+        // bits wide here rather than the 16 an RTP header gives it.
+        var header = Data()
+        header.append(bigEndian: 0x8000_0000 | (sequence & 0x7F_FFFF))
+        header.append(bigEndian: timestamp)
+        header.append(bigEndian: Self.alacSource)
+
+        // The timestamp and the source, which are the eight bytes at offset 4.
+        let additional = Data(header.suffix(8))
+        let box = try ChaChaPoly.seal(payload,
+                                      using: key,
+                                      nonce: try counterNonce(),
+                                      authenticating: additional)
+
+        var counter = Data()
+        withUnsafeBytes(of: nonce.littleEndian) { counter.append(contentsOf: $0) }
+
+        let block = header + box.ciphertext + box.tag + counter
+        var framed = Data()
+        framed.append(bigEndian: UInt16(block.count + 2))
+        framed += block
+
+        try connection.write(framed)
+
+        sequence = (sequence + 1) & 0x7F_FFFF
+        timestamp = timestamp &+ UInt32(ALACFrame.framesPerPacket)
+        nonce += 1
+    }
+
+    // MARK: - Private
+
+    /// Four zero bytes and then the counter, little-endian, as every AirPlay nonce is.
+    private func counterNonce() throws -> ChaChaPoly.Nonce {
+        var bytes = Data(repeating: 0, count: 4)
+        withUnsafeBytes(of: nonce.littleEndian) { bytes.append(contentsOf: $0) }
+
+        return try ChaChaPoly.Nonce(data: bytes)
+    }
+}
+
+extension Data {
+    /// Appends a number most significant byte first, which everything in this family is.
+    mutating func append(bigEndian value: UInt32) {
+        append(UInt8((value >> 24) & 0xFF))
+        append(UInt8((value >> 16) & 0xFF))
+        append(UInt8((value >> 8) & 0xFF))
+        append(UInt8(value & 0xFF))
+    }
+
+    /// The same for a sixteen-bit one.
+    mutating func append(bigEndian value: UInt16) {
+        append(UInt8((value >> 8) & 0xFF))
+        append(UInt8(value & 0xFF))
+    }
+}

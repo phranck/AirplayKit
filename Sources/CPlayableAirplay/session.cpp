@@ -2,7 +2,7 @@
 //  session.cpp
 //  The C session interface, over the C++ sender.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 #include "PlayableAirplay.h"

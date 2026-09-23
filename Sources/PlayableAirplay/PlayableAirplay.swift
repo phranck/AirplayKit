@@ -6,7 +6,7 @@
 //  alike, and it is an implementation detail. Nothing outside this file calls a
 //  pa_ function, and nothing outside it sees a C buffer or an opaque pointer.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import CPlayableAirplay

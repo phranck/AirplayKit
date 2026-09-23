@@ -6,7 +6,7 @@
 //  and shows one. The buttons in its caption say which, and the panel keeps its
 //  choice on its own element so two panels on a page do not fight over it.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 (function setUpVariantSwitches() {

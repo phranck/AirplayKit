@@ -17,7 +17,7 @@
 #  Needs no root. It does need the port, which macOS holds whilst its own
 #  AirPlay Receiver is switched on.
 #
-#  Copyright © 2026 cocoa:naut. All rights reserved.
+#  Copyright © 2026 LAYERED. All rights reserved.
 #
 
 set -euo pipefail

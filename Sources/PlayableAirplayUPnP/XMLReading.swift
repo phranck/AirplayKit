@@ -2,7 +2,7 @@
 //  XMLReading.swift
 //  Taking the few values that matter out of the documents a speaker answers with.
 //
-//  Copyright © 2026 cocoa:naut. All rights reserved.
+//  Copyright © 2026 LAYERED. All rights reserved.
 //
 
 import Foundation
