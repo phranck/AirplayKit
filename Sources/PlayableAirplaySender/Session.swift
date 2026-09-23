@@ -198,6 +198,38 @@ public struct Session {
     }
 
     /**
+     Ties a position in the audio to an instant on a clock.
+
+     Without this a receiver on the buffered path holds everything it is sent
+     and plays none of it, because nothing has told it when the first frame
+     sounds. One of these arrives in a whole session.
+
+     @param rtpTime The timestamp the stream starts at.
+     @param seconds The network time that timestamp corresponds to.
+     @param fraction Its fractional part, fixed point.
+     @param timelineIdentifier The clock the time is expressed against.
+     */
+    public func setAnchor(rtpTime: UInt32,
+                          seconds: Int64,
+                          fraction: Int64,
+                          timelineIdentifier: Int64) throws {
+        let body: [String: Any] = [
+            "networkTimeFlags": 0,
+            "networkTimeFrac": fraction,
+            "networkTimeSecs": seconds,
+            "networkTimeTimelineID": timelineIdentifier,
+            // The low bit decides playback: odd plays, even pauses.
+            "rate": 1,
+            "rtpTime": Int64(rtpTime),
+        ]
+
+        try connection.send(RTSPRequest(method: "SETRATEANCHORTIME",
+                                        uri: uri,
+                                        headers: [("Content-Type", Self.propertyListType)],
+                                        body: try Self.encoded(body)))
+    }
+
+    /**
      Sets the receiver's own volume.
 
      @param volume From 0 for silent to 1 for full. Carried as decibels from -30

@@ -124,7 +124,7 @@ func describeSonos(at host: String) async -> Int32 {
  @param port Its RTSP port.
  @returns Nought where it paired, and one where it did not.
  */
-func pairWithReceiver(at host: String, port: UInt16) -> Int32 {
+func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 {
     do {
         print("connecting to \(host):\(port)")
         let connection = try ReceiverConnection(host: host, port: port, senderName: "PlayableAirplay")
@@ -151,17 +151,51 @@ func pairWithReceiver(at host: String, port: UInt16) -> Int32 {
         let events = try EventChannel(host: host, port: eventPort, keys: keys)
         session.record()
 
-        for kind in [StreamKind.buffered, StreamKind.realtime] {
-            do {
-                let stream = try session.openStream(kind, audioKey: keys.audio)
-                let buffered = stream.audioBufferSize.map { ", buffer \($0)" } ?? ""
-                print("  \(kind == .buffered ? "buffered" : "realtime") stream: data \(stream.dataPort), control \(stream.controlPort)\(buffered)")
-            }
-            catch {
-                print("  \(kind == .buffered ? "buffered" : "realtime") stream refused: \(error)")
-            }
+        let stream = try session.openStream(.buffered, audioKey: keys.audio)
+        let buffered = stream.audioBufferSize.map { ", buffer \($0)" } ?? ""
+        print("  buffered stream: data \(stream.dataPort), control \(stream.controlPort)\(buffered)")
+
+        try session.setVolume(0.3)
+
+        // An anchor on a timeline of our own, which is the open question here:
+        // the session declared no timing protocol, so there is no shared clock,
+        // and whether a receiver plays against one it was simply handed is what
+        // this finds out.
+        let now = Date().timeIntervalSince1970
+        do {
+            try session.setAnchor(rtpTime: 0,
+                                  seconds: Int64(now),
+                                  fraction: 0,
+                                  timelineIdentifier: Int64.random(in: 1...Int64.max))
+            print("  anchor accepted")
+        }
+        catch {
+            print("  anchor refused: \(error)")
         }
 
+        let audio = try BufferedAudioStream(host: host, port: stream.dataPort, audioKey: keys.audio)
+        print("  sending \(seconds) seconds of 440 Hz at a third of full volume")
+
+        // Paced against the clock, because a live source cannot be sent ahead
+        // and this is the case the product needs.
+        var frame = 0.0
+        let packets = seconds * 44100 / ALACFrame.framesPerPacket
+        for _ in 0..<packets {
+            var samples = [Int16](repeating: 0, count: ALACFrame.framesPerPacket * 2)
+            for index in 0..<ALACFrame.framesPerPacket {
+                let value = Int16(3000.0 * sin(2.0 * .pi * 440.0 * frame / 44100.0))
+                samples[index * 2] = value
+                samples[index * 2 + 1] = value
+                frame += 1
+            }
+
+            try audio.write(samples)
+            Thread.sleep(forTimeInterval: Double(ALACFrame.framesPerPacket) / 44100.0)
+        }
+
+        print("  done")
+
+        audio.close()
         events.close()
         connection.close()
 
@@ -423,7 +457,8 @@ struct Demo {
 
         case "pair" where arguments.count > 2:
             let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000
-            exit(pairWithReceiver(at: arguments[2], port: port))
+            let seconds = Int(arguments.count > 4 ? arguments[4] : "10") ?? 10
+            exit(pairWithReceiver(at: arguments[2], port: port, seconds: seconds))
 
         case "play" where arguments.count > 2:
             let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000
