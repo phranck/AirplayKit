@@ -490,7 +490,7 @@ func readWave(at path: String) throws -> WaveFile {
 }
 
 /// Plays a WAVE file to a speaker. Nothing here is Apple's, so it runs on Linux too.
-func streamWave(at path: String, to host: String, port: UInt16) throws {
+func streamWave(at path: String, to host: String, port: UInt16, volume: Float = 0.2) throws {
     let wave = try readWave(at: path)
 
     // No resampling here: what the file holds has to be what AirPlay carries.
@@ -503,7 +503,9 @@ func streamWave(at path: String, to host: String, port: UInt16) throws {
     }
 
     let session = try AirPlaySession(host: host, port: port, senderName: "My App")
-    session.volume = 0.2
+    session.volume = volume
+    print("  volume set to \(session.volume), told to the receiver as "
+          + String(format: "%.1f dB", volume <= 0 ? -144 : Double(volume) * 30 - 30))
 
     let samplesPerChunk = 4096 * AirPlaySession.channelCount
     let bytesPerChunk = samplesPerChunk * MemoryLayout<Int16>.size
@@ -544,7 +546,7 @@ struct Demo {
                                Demo pair <host> [port]          pair only, and say what came out
                                Demo swift <host> [port] [secs]  play through the Swift sender
                                Demo play <host> [port] [seconds]
-                               Demo wave <path> <host> [port]   16 bit stereo at 44100
+                               Demo wave <path> <host> [port] [volume]   16 bit stereo at 44100
                         """
 
             // Only where AVFoundation is, because it does the conversion.
@@ -579,9 +581,10 @@ struct Demo {
 
         case "wave" where arguments.count > 3:
             let port = UInt16(arguments.count > 4 ? arguments[4] : "7000") ?? 7000
+            let volume = Float(arguments.count > 5 ? arguments[5] : "0.2") ?? 0.2
             do {
                 print("playing \(arguments[2]) on \(arguments[3]):\(port)")
-                try streamWave(at: arguments[2], to: arguments[3], port: port)
+                try streamWave(at: arguments[2], to: arguments[3], port: port, volume: volume)
                 print("done")
             } catch {
                 FileHandle.standardError.write(Data("\(error)\n".utf8))
