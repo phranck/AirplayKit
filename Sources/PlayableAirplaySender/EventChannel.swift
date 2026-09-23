@@ -30,7 +30,40 @@ public final class EventChannel {
     private var read: EncryptedChannel
     private var write: EncryptedChannel
     private let queue = DispatchQueue(label: "PlayableAirplay.events")
-    private var running = true
+
+    // Read by the queue's thread and written by whoever closes, so it is
+    // guarded rather than left to chance.
+    private let lock = NSLock()
+    private var isOpen = true
+
+    /**
+     Told when this channel stops answering, and why.
+
+     The whole session depends on it: a receiver tears everything down roughly
+     half a minute after RECORD unless these are answered, so a channel that
+     falls over silently ends the audio later, somewhere else, for no visible
+     reason. Whoever set this up gets to hear about it instead.
+     */
+    public var stoppedHandler: ((String) -> Void)?
+
+    private var running: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+
+        return isOpen
+    }
+
+    /// Records that the channel is finished and says why, once.
+    private func stopped(because reason: String) {
+        lock.lock()
+        let wasOpen = isOpen
+        isOpen = false
+        lock.unlock()
+
+        guard wasOpen else { return }
+
+        stoppedHandler?(reason)
+    }
 
     /**
      Opens the channel and begins answering what arrives on it.
@@ -53,7 +86,10 @@ public final class EventChannel {
 
     /// Stops answering and closes the connection.
     public func close() {
-        running = false
+        lock.lock()
+        isOpen = false
+        lock.unlock()
+
         connection.close()
     }
 
@@ -72,12 +108,24 @@ public final class EventChannel {
                 continue
             }
             catch {
+                stopped(because: "the event connection closed")
                 return
             }
 
-            while let frame = try? read.open(buffer) {
-                plaintext += frame.message
-                buffer = Data(buffer.dropFirst(frame.consumed))
+            // A frame that will not open never will. The counter is deliberately
+            // left where it was, so the same bytes are at the head of the buffer
+            // next time round and they fail again for ever, in silence. The
+            // session then looks healthy and the receiver tears it down half a
+            // minute later, which is the most expensive way this can go wrong.
+            do {
+                while let frame = try read.open(buffer) {
+                    plaintext += frame.message
+                    buffer = Data(buffer.dropFirst(frame.consumed))
+                }
+            }
+            catch {
+                stopped(because: "a frame on the event channel could not be opened")
+                return
             }
 
             while let request = Self.requestEnd(in: plaintext) {

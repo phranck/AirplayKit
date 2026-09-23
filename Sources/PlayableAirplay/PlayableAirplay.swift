@@ -359,7 +359,7 @@ public final class AirPlaySession {
     public static let channelCount = Int(PA_CHANNELS)
 
     /// Whether the receiver is still taking audio.
-    public var isRunning: Bool { sender?.isRunning ?? false }
+    public var isRunning: Bool { heldSender()?.isRunning ?? false }
 
     /// The receiver's own volume, from 0 for silent to 1 for full.
     ///
@@ -375,18 +375,48 @@ public final class AirPlaySession {
     /// Anything outside the range is brought into it, and reading it back gives
     /// what was actually sent.
     public var volume: Float {
-        get { sentVolume }
-        set {
-            sentVolume = min(max(newValue, 0), 1)
+        get {
+            state.lock()
+            defer { state.unlock() }
 
-            // Swallowed, because there is no way to report it here and a volume
-            // that did not arrive is not worth ending a session over.
-            try? sender?.setVolume(sentVolume)
+            return sentVolume
+        }
+        set {
+            state.lock()
+            sentVolume = min(max(newValue, 0), 1)
+            let level = sentVolume
+            let held = sender
+            state.unlock()
+
+            // Outside the lock, because setting it sends a request and waits
+            // for the answer, and nothing that sends is worth blocking a write
+            // behind.
+            //
+            // Swallowed, because a property setter has no way to report it and
+            // a volume that did not arrive is not worth ending a session over.
+            try? held?.setVolume(level)
         }
     }
 
+    /**
+     Everything mutable here is reached from two threads at once.
+
+     A caller is told to write from an audio callback and to stop from wherever
+     the stop button is, so the sender and the volume are read on one thread
+     whilst being written on another. The lock is held only long enough to pick
+     up or put down a reference, never across anything that sends.
+     */
+    private let state = NSLock()
     private var sender: AirPlaySender?
     private var sentVolume: Float = 1
+
+    /// The sender, taken under the lock and used outside it.
+    private func heldSender() -> AirPlaySender? {
+        state.lock()
+        defer { state.unlock() }
+
+        return sender
+    }
 
     /// Opens a session with a receiver and pairs with it.
     ///
@@ -454,7 +484,12 @@ public extension AirPlaySession {
     @discardableResult
     func write(_ samples: UnsafeBufferPointer<Int16>) -> WriteOutcome {
         let frameCount = samples.count / Self.channelCount
-        guard let sender, frameCount > 0 else { return .taken }
+
+        // Nothing to send is not a failure, and nothing to send it to is. A
+        // closed session that answers taken tells a caller its audio is on its
+        // way for ever, which is exactly what this type exists to prevent.
+        guard frameCount > 0 else { return .taken }
+        guard let sender = heldSender() else { return .ended }
 
         switch sender.write(Array(samples.prefix(frameCount * Self.channelCount))) {
         case .taken: return .taken
@@ -471,8 +506,13 @@ public extension AirPlaySession {
     /// just written the end of a file and closes at once cuts off whatever had
     /// not gone out yet.
     func close() {
-        sender?.close()
+        state.lock()
+        let held = sender
         sender = nil
+        state.unlock()
+
+        // Outside the lock, because closing waits for the sending thread.
+        held?.close()
     }
 }
 

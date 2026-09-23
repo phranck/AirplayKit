@@ -148,7 +148,17 @@ public final class PTPClock {
         // The anchor carries the fraction as a 64-bit binary fraction, which is
         // what makes the measured value of 207788735369052160 about eleven
         // milliseconds rather than an implausible number of nanoseconds.
-        return (seconds, Int64(fraction * Double(1 << 62)) << 2)
+        //
+        // Half a second and above sets the top bit, which in Int64 is the sign
+        // bit, so the value printed here is negative for half of all readings.
+        // That is the correct bit pattern and it reaches the receiver intact: a
+        // binary property list writes a negative Int64 as the same eight bytes
+        // as a positive one, marker 0x13 and then the pattern, which was
+        // measured rather than assumed. Swift has no unsigned path here because
+        // the property list encoder takes signed integers.
+        let scaled = (fraction * Double(1 << 62)) * 4
+
+        return (seconds, Int64(bitPattern: UInt64(scaled.rounded(.down))))
     }
 
     // MARK: - Private

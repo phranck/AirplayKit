@@ -41,6 +41,9 @@ public final class AirPlaySender {
     /// How much audio the ring holds, which is four seconds.
     static let ringFrames = 44100 * 4
 
+    /// How long closing waits for the sending thread before going ahead regardless.
+    static let pumpExitTimeout: TimeInterval = 2
+
     /**
      How far ahead of the clock the first frame is placed.
 
@@ -114,6 +117,16 @@ public final class AirPlaySender {
 
         audio = try BufferedAudioStream(host: host, port: stream.dataPort, audioKey: keys.audio)
 
+        // Set once everything is in place, because a closure over self cannot
+        // be handed out before the last stored property has a value.
+        //
+        // The receiver tears the session down about half a minute after RECORD
+        // unless these are answered, so a channel that stops is the session
+        // stopping, half a minute early and for a reason worth knowing.
+        events.stoppedHandler = { [weak self] reason in
+            self?.endBecauseTheEventChannelStopped(reason)
+        }
+
         startPump()
     }
 
@@ -148,26 +161,68 @@ public final class AirPlaySender {
         try session.setVolume(min(max(volume, 0), 1))
     }
 
-    /// Ends the session and closes everything it opened.
+    /**
+     Ends the session and closes everything it opened.
+
+     Waits for the sending thread to stop before closing anything. Closing a
+     socket whilst another thread is inside a call on it is a use after free in
+     slow motion: the descriptor number is reused by whatever opens next, and
+     the write lands in somebody else's connection. So the flag goes down, the
+     thread is joined, and only then do the sockets close.
+
+     Calling it twice is allowed, and releasing the session does it anyway.
+     */
     public func close() {
         lock.lock()
         guard open else { return lock.unlock() }
         open = false
         lock.unlock()
 
+        // Not from the pump itself, which would wait for its own exit. The pump
+        // clears the flag and returns when the connection fails under it.
+        if let pump, !pump.isFinished, Thread.current !== pump {
+            let deadline = Date().addingTimeInterval(Self.pumpExitTimeout)
+            while !pump.isFinished, Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.002)
+            }
+        }
+        pump = nil
+
         audio.close()
         events.close()
         connection.close()
+        ring.clear()
     }
 
+    /// Why the session ended, where it ended by itself rather than being closed.
+    public private(set) var endedBecause: String?
+
     // MARK: - Private
+
+    /// Ends the session because the channel that keeps it alive has stopped.
+    private func endBecauseTheEventChannelStopped(_ reason: String) {
+        lock.lock()
+        let wasOpen = open
+        if wasOpen { endedBecause = reason }
+        lock.unlock()
+
+        guard wasOpen else { return }
+
+        close()
+    }
 
     /// Takes a packet's worth out of the ring every packet's worth of time.
     private func startPump() {
         let thread = Thread { [weak self] in
             let samplesPerPacket = ALACFrame.framesPerPacket * ALACFrame.channelCount
             let packetDuration = Double(ALACFrame.framesPerPacket) / 44100.0
-            var due = Date()
+
+            // The uptime rather than the wall clock. The wall clock steps when
+            // the time service corrects it and can move backwards, and the
+            // receiver's own clock is read against this same monotonic
+            // reference, so pacing against anything else means measuring the
+            // anchor with one ruler and honouring it with another.
+            var due = ProcessInfo.processInfo.systemUptime
 
             // Taken once and filled in place, rather than allocated per packet
             // on a thread that has a deadline.
@@ -182,8 +237,8 @@ public final class AirPlaySender {
                 // almost certainly on their way, and pad only when they are
                 // genuinely not coming.
                 var filled = false
-                let waitUntil = Date().addingTimeInterval(packetDuration * 4)
-                while !filled, Date() < waitUntil, self.isRunning {
+                let waitUntil = ProcessInfo.processInfo.systemUptime + packetDuration * 4
+                while !filled, ProcessInfo.processInfo.systemUptime < waitUntil, self.isRunning {
                     filled = self.ring.read(into: &packet)
                     if !filled { Thread.sleep(forTimeInterval: 0.001) }
                 }
@@ -205,10 +260,29 @@ public final class AirPlaySender {
                     return
                 }
 
-                due = due.addingTimeInterval(packetDuration)
-                let wait = due.timeIntervalSinceNow
-                if wait > 0 { Thread.sleep(forTimeInterval: wait) }
-                else { due = Date() }
+                // The deficit is kept rather than forgiven. Every block carries
+                // a timestamp that advances by its own length whatever happens,
+                // and the anchor turned those timestamps into a promise about
+                // when each one sounds. Sending slower than the timestamps
+                // advance spends the lead the anchor bought, and resetting the
+                // schedule after each underrun spends it permanently, a little
+                // at a time, until the receiver starts dropping audio that is
+                // already late and the session plays silence whilst looking
+                // healthy.
+                due += packetDuration
+
+                let now = ProcessInfo.processInfo.systemUptime
+                let wait = due - now
+
+                if wait > 0 {
+                    Thread.sleep(forTimeInterval: wait)
+                }
+                else if now - due > Self.anchorLead {
+                    // Further behind than the lead can absorb, so catching up
+                    // would send a burst that arrives late anyway. Start again
+                    // from here and say so by the only means this thread has.
+                    due = now
+                }
             }
         }
 
