@@ -92,8 +92,12 @@ final class SampleRingTests: XCTestCase {
     func testAProducerAndASenderKeepEveryFrameAndItsOrder() {
         // One thread writing whilst another reads is the whole arrangement, and
         // a wrong index shows up as an out-of-order sample rather than a crash.
+        // Deliberately small, so the ring fills and the producer is refused
+        // often. A ring that never fills exercises neither the wrap nor the
+        // refusal, which is how this test passed on one machine and failed on
+        // another.
         let packet = 352 * 2
-        let ring = SampleRing(capacity: packet * 8)
+        let ring = SampleRing(capacity: packet * 3)
         let packets = 200
 
         let sent = expectation(description: "everything written")
@@ -107,11 +111,21 @@ final class SampleRingTests: XCTestCase {
             var written = 0
             while written < packets {
                 var chunk = [Int16](repeating: 0, count: packet)
+                var value = next
                 for index in 0..<packet {
-                    chunk[index] = next
-                    next = next &+ 1
+                    chunk[index] = value
+                    value = value &+ 1
                 }
-                if ring.write(chunk) { written += 1 } else { usleep(200) }
+
+                // The counter moves only once the ring has taken the chunk. A
+                // refused write must offer the same samples again, or the
+                // sequence gains a gap that looks exactly like a ring that
+                // dropped a packet.
+                if ring.write(chunk) {
+                    next = value
+                    written += 1
+                }
+                else { usleep(200) }
             }
             sent.fulfill()
         }
