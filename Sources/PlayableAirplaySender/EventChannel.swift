@@ -43,8 +43,29 @@ public final class EventChannel {
      half a minute after RECORD unless these are answered, so a channel that
      falls over silently ends the audio later, somewhere else, for no visible
      reason. Whoever set this up gets to hear about it instead.
+
+     Held under the lock, because the reading thread is already running by the
+     time anybody sets this: the channel starts answering inside its own
+     initialiser, and a caller can only reach the instance afterwards. So the
+     thread that reads this closure and the thread that writes it overlap from
+     the first millisecond, and a closure is a reference, which means a reader
+     without the lock can take one half replaced.
      */
-    public var stoppedHandler: ((String) -> Void)?
+    public var stoppedHandler: ((String) -> Void)? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+
+            return handlerForStopping
+        }
+        set {
+            lock.lock()
+            handlerForStopping = newValue
+            lock.unlock()
+        }
+    }
+
+    private var handlerForStopping: ((String) -> Void)?
 
     private var running: Bool {
         lock.lock()
@@ -55,14 +76,20 @@ public final class EventChannel {
 
     /// Records that the channel is finished and says why, once.
     private func stopped(because reason: String) {
+        // Taken in the same breath as the flag, so the one call this makes is
+        // to whatever was set when the channel stopped rather than to whatever
+        // happens to be there a moment later.
         lock.lock()
         let wasOpen = isOpen
         isOpen = false
+        let handler = handlerForStopping
         lock.unlock()
 
         guard wasOpen else { return }
 
-        stoppedHandler?(reason)
+        // Outside the lock. It ends the session, which closes this channel,
+        // which takes the same lock.
+        handler?(reason)
     }
 
     /**
