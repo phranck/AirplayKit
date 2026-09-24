@@ -18,6 +18,12 @@ public extension AirPlayReceiver {
     /// ``model``, so the identifier's family says what they are. Everybody else
     /// publishes a manufacturer, and nothing they publish says what shape the
     /// thing is, so they are all ``DeviceKind/speaker``.
+    ///
+    /// A receiver whose ``AirPlayReceiver/isFullyDescribed`` is false has not
+    /// published a manufacturer yet rather than published none, so this answers
+    /// from its identifier alone. Apple's hardware is still recognised, because
+    /// its identifier says so by itself, and everybody else's is
+    /// ``DeviceKind/unknown`` until the rest of the record arrives.
     var kind: Kind {
         DeviceAppearance.kind(manufacturer: manufacturer, model: model)
     }
@@ -36,6 +42,12 @@ public extension AirPlayReceiver {
     ///
     /// An empty string where nothing was published, which a caller shows as
     /// nothing rather than as "unknown".
+    ///
+    /// This is what is known at the moment it is read. A receiver whose
+    /// ``AirPlayReceiver/isFullyDescribed`` is false answers from half a record,
+    /// so a Sonos reads as "One" here and as "Sonos One" once the rest has
+    /// arrived, and a caller that shows the first without marking it provisional
+    /// shows two names for one speaker a moment apart.
     var productName: String {
         DeviceAppearance.productName(manufacturer: manufacturer, model: model)
     }
