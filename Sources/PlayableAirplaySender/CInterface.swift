@@ -85,7 +85,12 @@ public func pa_session_write(_ session: UnsafeMutableRawPointer?,
     guard let session, let frames, frameCount > 0 else { return false }
 
     let held = Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue()
-    let samples = Array(UnsafeBufferPointer(start: frames, count: frameCount * ALACFrame.channelCount))
+
+    // The caller's own memory, handed on as it is. C hands audio over from
+    // whatever produced it, which is as likely to be a callback with a deadline
+    // as anything in Swift, and an array made here would be a heap allocation
+    // on that thread.
+    let samples = UnsafeBufferPointer(start: frames, count: frameCount * ALACFrame.channelCount)
 
     return held.sender.write(samples) == .taken
 }

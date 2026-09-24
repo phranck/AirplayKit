@@ -107,7 +107,7 @@ case .ended:
 
 Writing never waits, because the thread producing live audio must not. `.bufferFull` is therefore back pressure rather than a failure, and it says the four seconds the sender holds are not yet spent. `.ended` is the receiver having hung up, and the answer to it is to close the session.
 
-In an audio callback the samples usually arrive as a pointer already, and there is a `write` for that which copies nothing on the way in.
+In an audio callback the samples usually arrive as a pointer already, and there is a `write` for that. It copies them once, from where they are into the session's buffer, and allocates nothing on the way.
 
 ## The example
 

@@ -66,15 +66,48 @@ final class SampleRing {
      @returns Whether they were written.
      */
     func write(_ samples: [Int16]) -> Bool {
+        samples.withUnsafeBufferPointer { write($0) }
+    }
+
+    /**
+     Writes samples from a buffer the caller already holds, or none of them.
+
+     The route an audio callback takes, and the reason this overload is the one
+     the rest of the write path is built on rather than the other way round. The
+     samples are copied from where they already are straight into the storage,
+     so nothing between the callback and this copy allocates, and a heap
+     allocation is the one thing a thread with a deadline cannot afford.
+
+     All or nothing, for the same reason as above.
+
+     @param samples What to write.
+     @returns Whether they were written.
+     */
+    func write(_ samples: UnsafeBufferPointer<Int16>) -> Bool {
+        // Nothing to write is written, which is what the storage already holds.
+        // It leaves before the indices move, because a ring of no capacity has
+        // no remainder to take one modulo.
+        guard let source = samples.baseAddress, !samples.isEmpty else { return true }
+
         lock.lock()
         defer { lock.unlock() }
 
         guard samples.count <= capacity - count else { return false }
 
-        for sample in samples {
-            storage[writeIndex] = sample
-            writeIndex = (writeIndex + 1) % capacity
+        // In two pieces where the write reaches the end of the storage and
+        // carries on at the front of it, which is the whole of what makes this
+        // a ring.
+        let untilTheEnd = min(samples.count, capacity - writeIndex)
+        storage.withUnsafeMutableBufferPointer { destination in
+            destination.baseAddress?.advanced(by: writeIndex).update(from: source, count: untilTheEnd)
+
+            if untilTheEnd < samples.count {
+                destination.baseAddress?.update(from: source.advanced(by: untilTheEnd),
+                                                count: samples.count - untilTheEnd)
+            }
         }
+
+        writeIndex = (writeIndex + samples.count) % capacity
         count += samples.count
 
         return true
