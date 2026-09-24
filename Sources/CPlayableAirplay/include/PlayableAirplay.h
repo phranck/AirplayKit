@@ -380,6 +380,16 @@ size_t pa_session_discard_held_audio(PASession *session);
  */
 size_t pa_session_held_frames(PASession *session);
 
+/*
+ What a session is doing, and what it did.
+
+ The four functions below answer whilst the session is open. They read through
+ the pointer, so none of them may be called after pa_session_close, which
+ releases what that pointer names. Asking how a session went is something a
+ caller does once it has stopped, though, so pa_session_close hands the same
+ four figures back as a PASessionReport at the moment it ends the session.
+ */
+
 /**
  How many packets the session has sent as silence because no audio arrived in
  time.
@@ -440,8 +450,36 @@ double pa_session_waited_seconds(PASession *session);
  */
 void pa_session_set_volume(PASession *session, float volume);
 
-/** Ends the session and releases it. Safe to call with NULL. */
-void pa_session_close(PASession *session);
+/**
+ What a session did, for reading once it has ended.
+
+ The same four figures the functions above answer whilst a session is open, so
+ a caller that wants them afterwards does not have to keep polling for them
+ whilst it plays.
+ */
+typedef struct PASessionReport {
+    /** Packets sent as silence because the ring had nothing in time. */
+    size_t inventedPackets;
+    /** Those packets as a length of audio, in seconds. */
+    double inventedSeconds;
+    /** How long the sender waited for frames in total, including the waits that ended in frames. */
+    double waitedSeconds;
+    /** How many times the sender slipped past the anchor and placed a fresh one. */
+    size_t fellBehind;
+} PASessionReport;
+
+/**
+ Ends the session, says how it went, and releases it. Safe to call with NULL.
+
+ The figures come back here rather than being left to be fetched, because this
+ releases what `session` names: reading through that pointer afterwards is a
+ read of memory that has gone. This is the last moment they exist, and a caller
+ that asks how a session went asks once it has stopped.
+
+ @param session  The session, or NULL.
+ @param report   Where to write what the session did, or NULL to discard it.
+ */
+void pa_session_close(PASession *session, PASessionReport *report);
 
 /** A sentence describing a result, in English, for a log rather than a person. */
 const char *pa_result_description(PAResult result);
