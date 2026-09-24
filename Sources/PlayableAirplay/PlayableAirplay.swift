@@ -431,6 +431,16 @@ public final class AirPlaySession {
     private var sender: AirPlaySender?
     private var sentVolume: Float = 1
 
+    /**
+     What the session had recorded when it was closed.
+
+     Kept because the figures exist to explain a session after the fact, and
+     after the fact is exactly when the sender that holds them has gone. Without
+     it a caller that stops playback and then asks how the session went is told
+     that nothing happened.
+     */
+    private var lastUnderruns = AirPlaySender.Underruns.none
+
     /// The sender, taken under the lock and used outside it.
     private func heldSender() -> AirPlaySender? {
         state.lock()
@@ -560,7 +570,9 @@ public extension AirPlaySession {
     /// did, just not in time.
     ///
     /// Counted from the start of the session and never reset, so two readings a
-    /// few seconds apart say what happened in between.
+    /// few seconds apart say what happened in between. Closing the session does
+    /// not reset it either: the last reading stands afterwards, because asking
+    /// how a session went is something a caller does once it has stopped.
     ///
     /// `fellBehind` is the one to watch, and it means something worse than the
     /// other two. A hole in the audio is a hole; that one says the whole stream
@@ -569,7 +581,14 @@ public extension AirPlaySession {
     /// keeps taking frames whilst the speaker is silent, so nothing else about
     /// it looks wrong.
     var underruns: AirPlaySender.Underruns {
-        heldSender()?.underruns ?? .none
+        guard let held = heldSender() else {
+            state.lock()
+            defer { state.unlock() }
+
+            return lastUnderruns
+        }
+
+        return held.underruns
     }
 
     /// Ends the session.
@@ -579,14 +598,33 @@ public extension AirPlaySession {
     /// It does not wait for what is still in the buffer, so a caller that has
     /// just written the end of a file and closes at once cuts off whatever had
     /// not gone out yet.
+    ///
+    /// ``underruns`` goes on answering afterwards, with what the session had
+    /// recorded when it stopped.
     func close() {
+        // Read before the reference is put down, and written in the same
+        // moment it is, so nothing reading this sees the session as having
+        // recorded nothing.
+        let held = heldSender()
+        let recorded = held?.underruns
+
         state.lock()
-        let held = sender
+        if let recorded { lastUnderruns = recorded }
         sender = nil
         state.unlock()
 
         // Outside the lock, because closing waits for the sending thread.
         held?.close()
+
+        // Again once it has stopped, because the pump can pad another packet
+        // or two whilst it is being waited for, and those belong in the total.
+        if let held {
+            let afterStopping = held.underruns
+
+            state.lock()
+            lastUnderruns = afterStopping
+            state.unlock()
+        }
     }
 }
 
