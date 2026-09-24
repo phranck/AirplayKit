@@ -180,9 +180,24 @@ public final class AirPlaySender {
      @returns What became of them.
      */
     public func write(_ frames: [Int16]) -> WriteOutcome {
+        frames.withUnsafeBufferPointer { write($0) }
+    }
+
+    /**
+     Hands the session the next audio to play, from a buffer the caller already
+     holds.
+
+     The route for an audio callback, where the samples arrive as a pointer.
+     They go from there into the ring and nowhere else on the way, so nothing
+     on this path allocates.
+
+     @param samples Interleaved samples, two per frame.
+     @returns What became of them.
+     */
+    public func write(_ samples: UnsafeBufferPointer<Int16>) -> WriteOutcome {
         guard isRunning else { return .ended }
 
-        return ring.write(frames) ? .taken : .bufferFull
+        return ring.write(samples) ? .taken : .bufferFull
     }
 
     /**

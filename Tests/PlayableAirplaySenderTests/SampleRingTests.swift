@@ -118,6 +118,80 @@ final class SampleRingTests: XCTestCase {
         XCTAssertEqual(ring.held, 3)
     }
 
+    // MARK: - Writing from a pointer
+
+    /// Writes through the overload an audio callback uses, which takes the samples where they lie.
+    private func write(_ samples: [Int16], into ring: SampleRing) -> Bool {
+        samples.withUnsafeBufferPointer { ring.write($0) }
+    }
+
+    func testAPointerWriteWrapsWithoutLosingOrderOrContent() {
+        // The copy goes in two pieces where it reaches the end of the storage,
+        // and a wrong length on either of them is heard rather than reported.
+        let ring = SampleRing(capacity: 8)
+        var out = [Int16](repeating: 0, count: 6)
+
+        XCTAssertTrue(write([1, 2, 3, 4, 5, 6], into: ring))
+        XCTAssertTrue(ring.read(into: &out))
+
+        XCTAssertTrue(write([7, 8, 9, 10, 11, 12], into: ring))
+        XCTAssertTrue(ring.read(into: &out))
+        XCTAssertEqual(out, [7, 8, 9, 10, 11, 12])
+    }
+
+    func testAPointerWriteThatWouldNotFitTakesNothing() {
+        let ring = SampleRing(capacity: 4)
+        var out = [Int16](repeating: 0, count: 2)
+
+        XCTAssertTrue(write([1, 2], into: ring))
+        XCTAssertFalse(write([3, 4, 5], into: ring))
+
+        XCTAssertTrue(ring.read(into: &out))
+        XCTAssertEqual(out, [1, 2])
+        XCTAssertEqual(ring.held, 0)
+    }
+
+    func testBothRoutesLeaveTheSameRing() {
+        // The array overload borrows a pointer from its array rather than the
+        // other way round, so there is one copy into the storage and both ways
+        // in reach it.
+        let throughPointer = SampleRing(capacity: 8)
+        let throughArray = SampleRing(capacity: 8)
+        var fromPointer = [Int16](repeating: 0, count: 5)
+        var fromArray = [Int16](repeating: 0, count: 5)
+
+        XCTAssertTrue(write([9, 8, 7, 6, 5], into: throughPointer))
+        XCTAssertTrue(throughArray.write([9, 8, 7, 6, 5]))
+
+        XCTAssertTrue(throughPointer.read(into: &fromPointer))
+        XCTAssertTrue(throughArray.read(into: &fromArray))
+        XCTAssertEqual(fromPointer, fromArray)
+    }
+
+    func testAPointerWriteOfNothingChangesNothing() {
+        let ring = SampleRing(capacity: 4)
+
+        XCTAssertTrue(write([], into: ring))
+        XCTAssertEqual(ring.held, 0)
+        XCTAssertEqual(ring.available, 4)
+    }
+
+    func testOnlyTheSamplesTheBufferNamesAreTaken() {
+        // A session hands over a rebased slice of whatever the caller holds, so
+        // anything past the end of that slice is the caller's and not this.
+        let source: [Int16] = [1, 2, 3, 4, 5, 6]
+        let ring = SampleRing(capacity: 8)
+        var out = [Int16](repeating: 0, count: 4)
+
+        source.withUnsafeBufferPointer { buffer in
+            XCTAssertTrue(ring.write(UnsafeBufferPointer(rebasing: buffer.prefix(4))))
+        }
+
+        XCTAssertEqual(ring.held, 4)
+        XCTAssertTrue(ring.read(into: &out))
+        XCTAssertEqual(out, [1, 2, 3, 4])
+    }
+
     // MARK: - Two threads
 
     func testAProducerAndASenderKeepEveryFrameAndItsOrder() {

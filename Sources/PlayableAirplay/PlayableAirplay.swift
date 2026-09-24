@@ -512,7 +512,12 @@ public extension AirPlaySession {
         guard frameCount > 0 else { return .taken }
         guard let sender = heldSender() else { return .ended }
 
-        switch sender.write(Array(samples.prefix(frameCount * Self.channelCount))) {
+        // Rebased rather than copied, so what reaches the buffer underneath is
+        // the caller's own memory and nothing is allocated on a thread that
+        // cannot afford it.
+        let wholeFrames = UnsafeBufferPointer(rebasing: samples.prefix(frameCount * Self.channelCount))
+
+        switch sender.write(wholeFrames) {
         case .taken: return .taken
         case .bufferFull: return .bufferFull
         case .ended: return .ended

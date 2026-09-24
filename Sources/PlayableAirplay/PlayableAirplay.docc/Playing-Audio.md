@@ -68,7 +68,7 @@ Closing does not wait for what is still in the buffer. A caller that has just wr
 
 ### Feeding it from an audio callback
 
-In a callback the samples usually arrive as a pointer, and there is a `write` that takes one, so nothing is copied on the way in.
+In a callback the samples usually arrive as a pointer, and there is a `write` that takes one. They are copied once, from where they already are into the session's buffer, and nothing on that path allocates.
 
 ```swift
 func render(_ samples: UnsafeBufferPointer<Int16>) {
