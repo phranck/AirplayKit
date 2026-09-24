@@ -17,6 +17,17 @@ import Foundation
 
  A receiver that is sent a request in the clear after pairing closes the socket
  almost at once, so the switch is not something to get approximately right.
+
+ One request at a time, whoever asks. Several threads reach this: a caller sets
+ the volume from wherever its stop button is, the sending thread places a fresh
+ anchor when it has slipped, and closing runs from a third. Each request moves a
+ sequence number, seals a frame under a counter that must never repeat, and then
+ reads an answer out of two buffers, so two of them interleaved leave the
+ receiver's counter behind this one for good and nothing opens on the connection
+ again. ``send(_:)`` therefore holds a lock for the whole exchange.
+
+ ``stop()`` deliberately takes no lock, because its whole purpose is to bring
+ back a thread that is blocked inside one of those exchanges.
  */
 public final class ReceiverConnection {
     /// What a sender calls itself to a receiver, matching what an Apple sender sends.
@@ -29,6 +40,15 @@ public final class ReceiverConnection {
     private let senderName: String
     private let identifier: String
     private let activeRemote: String
+
+    /**
+     Held for one whole request and its answer.
+
+     Nothing on this connection is in the audio thread's way: the audio has a
+     connection of its own and never touches this one, so waiting here costs a
+     caller its own moment and nothing else.
+     */
+    private let exchange = NSLock()
 
     private var sequence = 0
     private var buffer = Data()
@@ -106,6 +126,10 @@ public final class ReceiverConnection {
      Encrypted or not according to where the connection stands, which the caller
      does not have to know.
 
+     One at a time. A second thread asking whilst this one is part way through
+     waits for it, because the sequence number, the frame counter and the two
+     buffers are one state and a request is what moves all of them.
+
      @param request What to send. The identity headers are added here.
      @returns The receiver's answer.
      @throws `RTSPFailure.receiverAnswered` where the status is not 200, plus
@@ -113,6 +137,9 @@ public final class ReceiverConnection {
      */
     @discardableResult
     public func send(_ request: RTSPRequest) throws -> RTSPResponse {
+        exchange.lock()
+        defer { exchange.unlock() }
+
         var carried = request
         carried.headers += identityHeaders()
 
