@@ -45,7 +45,11 @@ public enum SenderFailureKind {
              TCPFailure.socketCouldNotBeOpened, TCPFailure.timedOut:
             self = .unreachable
 
-        case TCPFailure.connectionClosed, SenderFailure.receiverAnnouncedNoClock:
+        // Every way a connection that was open stops being usable. They are
+        // told apart at the socket so a log says which happened, and they mean
+        // the same thing to a caller: the session is over.
+        case TCPFailure.connectionClosed, TCPFailure.connectionWasStopped,
+             TCPFailure.messageWasPartlySent, SenderFailure.receiverAnnouncedNoClock:
             self = .sessionEnded
 
         case is SRPError, is PairSetupFailure:

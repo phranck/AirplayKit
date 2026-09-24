@@ -32,11 +32,35 @@ public enum TCPFailure: Error, Equatable {
     /// The receiver did not accept the connection.
     case connectionRefused(String)
 
-    /// The connection was open and is not any more.
+    /// The connection was open and is not any more, because the far end hung up.
     case connectionClosed
 
-    /// Nothing arrived within the time allowed.
+    /// Nothing moved within the time allowed.
     case timedOut
+
+    /**
+     This end shut the socket down, which is what ``TCPConnection/stop()`` does.
+
+     Told apart from a hangup by remembering the call rather than by reading the
+     error number, because the two give the same one. Without that, a session
+     that was closed on purpose and one the receiver dropped are the same line
+     in a log.
+     */
+    case connectionWasStopped
+
+    /**
+     Part of a message went out and the rest did not.
+
+     The connection is finished, whatever ended the write. Half a frame is on
+     the wire, the encrypted channel's counter has already moved past it, and
+     nothing the far end reads afterwards will open, so a retry on this socket
+     sends good bytes after bad ones. Every later call on it throws this again
+     rather than pretending otherwise.
+
+     `because` carries whichever of the three actually happened, since a
+     half-written message is a consequence rather than a cause.
+     */
+    indirect case messageWasPartlySent(bytes: Int, of: Int, because: TCPFailure)
 }
 
 /**
@@ -50,6 +74,18 @@ public enum TCPFailure: Error, Equatable {
  */
 public final class TCPConnection {
     private var handle: Int32 = -1
+
+    /**
+     What this end has done to the socket, and what that did to a message.
+
+     Under a lock because ``stop()`` and ``close()`` run on a different thread
+     from the one inside `send` or `recv`, which is the whole arrangement those
+     two exist for. Held only around these two values and never across a
+     syscall, or ``stop()`` would wait for the call it is meant to bring back.
+     */
+    private let state = NSLock()
+    private var wasStopped = false
+    private var messageLeftHalfSent: (bytes: Int, of: Int, because: TCPFailure)?
 
     /// The address the receiver answered on, which later requests name in their URI.
     public private(set) var localAddress: String = ""
@@ -122,6 +158,12 @@ public final class TCPConnection {
      Calling it twice is allowed, and it does nothing on a closed socket.
      */
     public func stop() {
+        // Recorded before the shutdown, so the thread this is about to bring
+        // back out of its syscall finds the answer already there.
+        state.lock()
+        wasStopped = true
+        state.unlock()
+
         guard handle >= 0 else { return }
 
         shutdown(handle, Int32(SHUT_RDWR))
@@ -149,18 +191,34 @@ public final class TCPConnection {
      Writes everything, however many times the kernel takes only part of it.
 
      @param bytes What to send.
-     @throws `TCPFailure.connectionClosed` where the receiver hung up.
+     @throws `TCPFailure.connectionClosed` where the far end hung up,
+     `TCPFailure.timedOut` where the send ran out of time,
+     `TCPFailure.connectionWasStopped` where this end shut the socket down, or
+     `TCPFailure.messageWasPartlySent` where any of those happened after some of
+     the message had already gone, which ends the connection.
      */
     public func write(_ bytes: Data) throws {
+        try refuseIfHalfAMessageWentOut()
+
         var sent = 0
 
         while sent < bytes.count {
-            let written = bytes.withUnsafeBytes { buffer -> Int in
-                send(handle, buffer.baseAddress!.advanced(by: sent), bytes.count - sent, Self.sendFlags)
+            // The error number is taken inside the same closure as the call,
+            // because anything at all in between can replace it.
+            let outcome = bytes.withUnsafeBytes { buffer -> (written: Int, code: Int32) in
+                let written = send(handle,
+                                   buffer.baseAddress!.advanced(by: sent),
+                                   bytes.count - sent,
+                                   Self.sendFlags)
+
+                return (written, errno)
             }
 
-            guard written > 0 else { throw TCPFailure.connectionClosed }
-            sent += written
+            guard outcome.written > 0 else {
+                throw failure(afterSending: sent, of: bytes.count, code: outcome.code)
+            }
+
+            sent += outcome.written
         }
     }
 
@@ -190,21 +248,77 @@ public final class TCPConnection {
 
      @param maximum The most to take in one go.
      @returns The bytes read, never empty.
-     @throws `TCPFailure.timedOut` where nothing arrived in time, or
-     `TCPFailure.connectionClosed` where the receiver hung up.
+     @throws `TCPFailure.timedOut` where nothing arrived in time,
+     `TCPFailure.connectionWasStopped` where this end shut the socket down,
+     `TCPFailure.connectionClosed` where the far end hung up, or
+     `TCPFailure.messageWasPartlySent` where a write already left half a message
+     on this socket, after which nothing read from it means anything.
      */
     public func read(maximum: Int = 16 * 1024) throws -> Data {
+        try refuseIfHalfAMessageWentOut()
+
         var buffer = [UInt8](repeating: 0, count: maximum)
         let count = recv(handle, &buffer, maximum, 0)
+        let code = errno
 
         if count > 0 { return Data(buffer[0..<count]) }
-        if count == 0 { throw TCPFailure.connectionClosed }
-        if errno == EAGAIN || errno == EWOULDBLOCK { throw TCPFailure.timedOut }
 
-        throw TCPFailure.connectionClosed
+        // Nothing partial to report: a read either brought bytes or it did not,
+        // so this only has to say which of the three ended it.
+        throw failure(afterSending: 0, of: 0, code: code)
     }
 
     // MARK: - Private
+
+    /**
+     Which of the three things that end a call actually happened.
+
+     @param sent How much of the message had already gone. Nought for a read,
+     and for a write that failed on its first attempt.
+     @param total How long the whole message is.
+     @param code The error number the call left behind.
+     */
+    private func failure(afterSending sent: Int, of total: Int, code: Int32) -> TCPFailure {
+        state.lock()
+        let stopped = wasStopped
+        state.unlock()
+
+        // A shutdown here and a hangup at the far end leave the same number, so
+        // the one this end did is told by remembering that it did it.
+        let cause: TCPFailure
+        if stopped {
+            cause = .connectionWasStopped
+        }
+        else if code == EAGAIN || code == EWOULDBLOCK {
+            cause = .timedOut
+        }
+        else {
+            cause = .connectionClosed
+        }
+
+        guard sent > 0 else { return cause }
+
+        let partial = (bytes: sent, of: total, because: cause)
+
+        state.lock()
+        messageLeftHalfSent = partial
+        state.unlock()
+
+        return .messageWasPartlySent(bytes: partial.bytes, of: partial.of, because: partial.because)
+    }
+
+    /// Refuses anything on a connection that already has half a message on the wire.
+    private func refuseIfHalfAMessageWentOut() throws {
+        state.lock()
+        let partial = messageLeftHalfSent
+        state.unlock()
+
+        guard let partial else { return }
+
+        throw TCPFailure.messageWasPartlySent(bytes: partial.bytes,
+                                              of: partial.of,
+                                              because: partial.because)
+    }
 
     private func setTimeout(_ seconds: TimeInterval, for option: Int32) {
         var value = timeval(tv_sec: Int(seconds),
