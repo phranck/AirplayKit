@@ -119,7 +119,9 @@ private final class RedirectingSpeaker {
         stopping = true
         lock.unlock()
 
-        shutdown(handle, SHUT_RDWR)
+        // Written out, because Glibc declares this constant as an Int and Darwin
+        // as an Int32, and the call takes an Int32 on both.
+        shutdown(handle, Int32(SHUT_RDWR))
         Self.closeSocket(handle)
     }
 
