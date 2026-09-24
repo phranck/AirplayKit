@@ -41,7 +41,11 @@ image="playable-airplay-linux:${swift_version}"
 # person can find it with `docker volume ls` and remove it when it is in the way.
 # It has to stay off the macOS build, which shares nothing with it, and off the
 # bind mount, where SwiftPM's build database does not work at all.
-volume="playable-airplay-linux-build"
+#
+# The version is in the name because objects compiled by one toolchain have no
+# business being linked by another. Raising the pin therefore starts from
+# nothing and leaves the old volume behind, which `docker volume rm` clears.
+volume="playable-airplay-linux-build-${swift_version}"
 
 # A name of its own per run, so the container can be found and removed even
 # where this script is killed before it can tidy up.

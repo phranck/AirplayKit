@@ -124,11 +124,11 @@ swift run Demo file ~/Music/track.m4a speaker.local
 
 ## The toolchain
 
-The package is built and tested with Swift 6.2.3, and `.swift-version` is where that version is written down. Both CI runners are pinned to it: the macOS one builds with Xcode 26.3, which [carries that compiler](https://developer.apple.com/documentation/xcode-release-notes/xcode-26_3-release-notes), and the Linux one runs in the `swift:6.2.3` image, which `Scripts/check-linux.sh` builds from as well.
+The package is built and tested with Swift 6.2.4, and `.swift-version` is where that version is written down. Both CI runners are pinned to it: the macOS one builds with Xcode 26.3, whose compiler reports 6.2.4 on that runner, and the Linux one runs in the `swift:6.2.4` image, which `Scripts/check-linux.sh` builds from as well.
 
 The pin is there because the compilers disagree about what they accept. Swift 6.1.2 aborts on a call into an `@_cdecl` function from a test target that also imports the C header, and later versions compile it without a word, so a gate run on another compiler promises less than it looks like it promises.
 
-A local run means what a CI run means when it uses the same compiler, which is Xcode 26.3 or the toolchain of that version from [swift.org](https://www.swift.org/install/). [swiftly](https://github.com/swiftlang/swiftly) picks it from `.swift-version` without being told. Where the two differ, `Scripts/build-and-test.sh` says which compiler it ran on and which one CI will use.
+A local run means what a CI run means when it uses the same compiler, which is the toolchain of that version from [swift.org](https://www.swift.org/install/) or an Xcode carrying it. [swiftly](https://github.com/swiftlang/swiftly) picks it from `.swift-version` without being told. Where the two differ, `Scripts/build-and-test.sh` says which compiler it ran on and which one CI will use.
 
 ## Tests
 
