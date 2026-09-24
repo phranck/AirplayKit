@@ -260,6 +260,15 @@ void pa_discovery_stop(PADiscovery *discovery);
  About a PAReceiver rather than about a session, and kept here beside the
  discovery that produces one. They take the two fields rather than the whole
  receiver, so they also answer for a machine that was never found by browsing.
+
+ All three write into a buffer the caller owns and all three return how many
+ bytes the whole answer needed, not counting the terminator. Where that is
+ `capacity` or more, what was written is cut short at a character boundary
+ rather than abandoned, so a short buffer gives a short name. A caller that
+ wants the whole of it makes room for the returned length plus one and asks
+ again, and one that does not mind a short one can ignore the result.
+
+ An empty buffer therefore means the device published nothing, and only that.
  */
 
 /**
@@ -275,10 +284,12 @@ void pa_discovery_stop(PADiscovery *discovery);
 
  @param manufacturer  What the receiver published, or NULL or empty for Apple's.
  @param model         The model or identifier.
- @param out           Where to write the name. Left empty where there is none.
+ @param out           Where to write the name, or NULL to ask only how long it
+                      is. Left empty where the device published none.
  @param capacity      How many bytes `out` holds, including the terminator.
+ @return How many bytes the whole name needs, not counting the terminator.
  */
-void pa_product_name(const char *manufacturer, const char *model, char *out, size_t capacity);
+size_t pa_product_name(const char *manufacturer, const char *model, char *out, size_t capacity);
 
 /**
  The SF Symbol that draws a receiver, such as `hifispeaker` or `homepod.mini`.
@@ -287,10 +298,10 @@ void pa_product_name(const char *manufacturer, const char *model, char *out, siz
  shaped like each of them. Everybody else's is drawn as a speaker, because the
  catalogue has nothing shaped like a Sonos and no soundbar at all.
 
- Takes the same two fields as pa_product_name and answers for a machine that is
- not a receiver in the same way.
+ Takes the same two fields as pa_product_name, answers for a machine that is not
+ a receiver in the same way, and reports its length the same way.
  */
-void pa_symbol_name(const char *manufacturer, const char *model, char *out, size_t capacity);
+size_t pa_symbol_name(const char *manufacturer, const char *model, char *out, size_t capacity);
 
 /**
  The SF Symbol for two of these playing as one, such as a stereo set.
@@ -298,7 +309,7 @@ void pa_symbol_name(const char *manufacturer, const char *model, char *out, size
  For a caller that knows two receivers are bonded. Nothing in a service record
  says a pair is a pair, so this is offered rather than chosen by the library.
  */
-void pa_pair_symbol_name(const char *manufacturer, const char *model, char *out, size_t capacity);
+size_t pa_pair_symbol_name(const char *manufacturer, const char *model, char *out, size_t capacity);
 
 /** A connection to one receiver, carrying audio. */
 typedef struct PASession PASession;
