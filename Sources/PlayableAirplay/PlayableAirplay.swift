@@ -370,10 +370,14 @@ public final class AirPlaySession {
     }
 
     /// The audio a session takes. Fixed, because this is what AirPlay carries.
-    public static let sampleRate = Int(PA_SAMPLE_RATE)
+    ///
+    /// From the same place the wire format takes it. It used to come from the C
+    /// macro instead, so the number a caller was told and the number that went
+    /// into the stream were two declarations of one fact.
+    public static let sampleRate = ALACFrame.sampleRate
 
     /// How many channels a frame holds, interleaved.
-    public static let channelCount = Int(PA_CHANNELS)
+    public static let channelCount = ALACFrame.channelCount
 
     /// Whether the receiver is still taking audio.
     public var isRunning: Bool { heldSender()?.isRunning ?? false }

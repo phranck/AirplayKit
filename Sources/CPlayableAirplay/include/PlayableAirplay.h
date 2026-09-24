@@ -44,7 +44,18 @@ extern "C" {
  */
 #define PA_MAX_GROUP 256
 
-/** The audio the sender takes. Fixed, because this is what AirPlay carries. */
+/**
+ The audio the sender takes. Fixed, because this is what AirPlay carries.
+
+ Written out here because a C header cannot read a Swift constant, and the one
+ that decides what goes on the wire is `ALACFrame` in the Swift sender. These
+ two are therefore one fact in two places, which is the shape that drifts: a
+ caller sizes its buffers from these and the stream is built from the others,
+ and nothing in either would report the difference.
+
+ What keeps them together is a test, `ProtocolConstantsTests`, which compares
+ them. Change one and it fails naming the other.
+ */
 #define PA_SAMPLE_RATE 44100
 #define PA_CHANNELS        2
 

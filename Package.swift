@@ -130,7 +130,8 @@ let package = Package(
 
         .testTarget(
             name: "PlayableAirplayTests",
-            dependencies: ["PlayableAirplay", "CPlayableAirplay", "PlayableAirplayUPnP", "PlayableAirplayDevices"]
+            dependencies: ["PlayableAirplay", "CPlayableAirplay", "PlayableAirplayUPnP",
+                           "PlayableAirplayDevices", "PlayableAirplaySender"]
         ),
 
         .testTarget(
