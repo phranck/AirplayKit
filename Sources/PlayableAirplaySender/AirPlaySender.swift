@@ -9,7 +9,13 @@ import Foundation
 
 /// What can go wrong opening a session, beyond what each step reports for itself.
 public enum SenderFailure: Error, Equatable {
-    /// The receiver announced no clock, so there is no timeline to place audio on.
+    /**
+     There is no timeline to place audio on.
+
+     Either the receiver announced no clock at all, or it announced a reading
+     that will not go on one. The two are the same thing to a session, which
+     has nothing to anchor its first frame against in either case.
+     */
     case receiverAnnouncedNoClock
 }
 
@@ -145,7 +151,13 @@ public final class AirPlaySender {
             throw SenderFailure.receiverAnnouncedNoClock
         }
 
-        let time = PTPClock.now(from: reading, ahead: Self.anchorLead)
+        // A reading that will not go on a timeline is the same to this session
+        // as no reading at all: there is nothing to place the first frame
+        // against, and anchoring to a made-up time plays silence.
+        guard let time = PTPClock.now(from: reading, ahead: Self.anchorLead) else {
+            throw SenderFailure.receiverAnnouncedNoClock
+        }
+
         try session.setAnchor(rtpTime: 0,
                               seconds: time.seconds,
                               fraction: time.fraction,
