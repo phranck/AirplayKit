@@ -132,6 +132,8 @@ They cover what can be checked without a receiver on the network: the parsing of
 
 `Scripts/build-and-test.sh` is the whole gate, and `Scripts/check-linux.sh` runs that same script inside the Swift image CI uses, so Linux is checked here before anything is pushed.
 
+`Scripts/check-callers.sh` builds the application that takes this package by a local path, which is how a change to `PlayableAirplay.h` reaches a caller before any release does. Run it before pushing anything that touches that header. On a machine without that application it says so and passes, and it cannot run in CI, because the runner has no copy of it.
+
 ## What it rests on
 
 The protocol, which is written down in the reference under `Sources/PlayableAirplay/PlayableAirplay.docc` from published descriptions and from measurements taken here. Every statement there says where it came from and whether it was measured or reported.
