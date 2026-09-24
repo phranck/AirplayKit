@@ -71,7 +71,9 @@ typedef struct PARecord {
 
  One of these lives inside the discovery per service, so its lifetime is the
  discovery's exactly. The callbacks have stopped by the time the discovery is
- freed, because stopping joins the thread first.
+ freed: a stop from elsewhere joins the thread before freeing anything, and a
+ stop from inside a callback leaves the freeing to that thread, once the
+ callback has returned and the loop behind it has left.
  */
 typedef struct PABrowseContext {
     struct PADiscovery *discovery;
@@ -86,6 +88,28 @@ struct PADiscovery {
 
     pthread_t thread;
     volatile bool stopping;
+
+    /**
+     Which thread ::runDiscovery is on, and whether it has said so yet.
+
+     Recorded by that thread itself rather than taken from ::pthread_create,
+     because the new thread can be running before the parent has stored what
+     ::pthread_create returns, and this is read from inside the handler. Both
+     are written and read under ::PADiscovery::mutex for the same reason.
+     */
+    pthread_t owner;
+    bool ownerKnown;
+
+    /**
+     Whether the teardown is ::runDiscovery's to do rather than the caller's.
+
+     Set when ::pa_discovery_stop is called from the discovery's own thread,
+     which is where the handler runs. That call cannot join the thread it is on
+     and cannot free the structure the stack above it is still standing in, so
+     it asks instead, and the run loop finishes the job once that stack has
+     unwound.
+     */
+    bool releaseOnOwnThread;
 
     /**
      Wakes ::runDiscovery the moment stopping is requested, instead of leaving
@@ -465,9 +489,36 @@ static void DNSSD_API onBrowsed(DNSServiceRef service, DNSServiceFlags flags, ui
     announce(discovery);
 }
 
+/**
+ Releases everything the discovery holds.
+
+ Called once, with nothing left inside it: either by ::pa_discovery_stop once it
+ has joined the thread, or by that thread itself where the stop came from a
+ handler and there is nobody to join it.
+ */
+static void releaseDiscovery(PADiscovery *discovery) {
+    close(discovery->wakePipe[0]);
+    close(discovery->wakePipe[1]);
+
+    for (size_t index = 0; index < 2; index++) {
+        if (discovery->browsers[index]) DNSServiceRefDeallocate(discovery->browsers[index]);
+    }
+
+    pthread_mutex_destroy(&discovery->mutex);
+    free(discovery);
+}
+
 /** Waits on both browse sockets and hands anything that arrives to the callbacks. */
 static void *runDiscovery(void *argument) {
     PADiscovery *discovery = (PADiscovery *)argument;
+
+    // Before the first callback can run, since callbacks only happen inside the
+    // loop below and this is what tells ::pa_discovery_stop that it is being
+    // called from one of them.
+    pthread_mutex_lock(&discovery->mutex);
+    discovery->owner = pthread_self();
+    discovery->ownerKnown = true;
+    pthread_mutex_unlock(&discovery->mutex);
 
     while (!discovery->stopping) {
         fd_set readable;
@@ -512,6 +563,18 @@ static void *runDiscovery(void *argument) {
                 discovery->browsers[index] = NULL;
             }
         }
+    }
+
+    pthread_mutex_lock(&discovery->mutex);
+    const bool releaseHere = discovery->releaseOnOwnThread;
+    pthread_mutex_unlock(&discovery->mutex);
+
+    // Stopped from inside a handler, so the stack that asked for it was
+    // standing in this discovery and has only now unwound. Nobody is going to
+    // join this thread, so it detaches itself and frees what it was using.
+    if (releaseHere) {
+        pthread_detach(pthread_self());
+        releaseDiscovery(discovery);
     }
 
     return NULL;
@@ -568,21 +631,12 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
         if (problem) *problem = pa_discovery_problem_for_error(lastError);
         if (code) *code = lastError;
 
-        close(discovery->wakePipe[0]);
-        close(discovery->wakePipe[1]);
-        pthread_mutex_destroy(&discovery->mutex);
-        free(discovery);
+        releaseDiscovery(discovery);
         return NULL;
     }
 
     if (pthread_create(&discovery->thread, NULL, runDiscovery, discovery) != 0) {
-        for (size_t index = 0; index < 2; index++) {
-            if (discovery->browsers[index]) DNSServiceRefDeallocate(discovery->browsers[index]);
-        }
-        close(discovery->wakePipe[0]);
-        close(discovery->wakePipe[1]);
-        pthread_mutex_destroy(&discovery->mutex);
-        free(discovery);
+        releaseDiscovery(discovery);
 
         if (problem) *problem = PADiscoveryProblemFailed;
         return NULL;
@@ -606,6 +660,22 @@ PADiscoveryProblem pa_discovery_problem(PADiscovery *discovery, int32_t *code) {
 void pa_discovery_stop(PADiscovery *discovery) {
     if (!discovery) return;
 
+    // The handler runs on the discovery's own thread, so stopping from inside
+    // one arrives here on that thread. Joining it would return EDEADLK at once
+    // and freeing the discovery would pull the ground from under the stack that
+    // is still standing in it: the handler returns into a browse or resolve
+    // callback, which returns into the run loop, which reads `stopping`, the
+    // wake pipe and the browser list out of memory that is no longer there.
+    //
+    // So this asks and returns, and ::runDiscovery finishes the job once that
+    // stack has unwound. The handler is not called again either way, because
+    // the loop sees `stopping` before it processes anything further.
+    pthread_mutex_lock(&discovery->mutex);
+    const bool fromOwnThread = discovery->ownerKnown
+        && pthread_equal(discovery->owner, pthread_self()) != 0;
+    if (fromOwnThread) discovery->releaseOnOwnThread = true;
+    pthread_mutex_unlock(&discovery->mutex);
+
     discovery->stopping = true;
 
     // Wakes the select() in runDiscovery at once. What is written does not
@@ -613,15 +683,8 @@ void pa_discovery_stop(PADiscovery *discovery) {
     const uint8_t wake = 0;
     (void)write(discovery->wakePipe[1], &wake, sizeof(wake));
 
+    if (fromOwnThread) return;
+
     pthread_join(discovery->thread, NULL);
-
-    close(discovery->wakePipe[0]);
-    close(discovery->wakePipe[1]);
-
-    for (size_t index = 0; index < 2; index++) {
-        if (discovery->browsers[index]) DNSServiceRefDeallocate(discovery->browsers[index]);
-    }
-
-    pthread_mutex_destroy(&discovery->mutex);
-    free(discovery);
+    releaseDiscovery(discovery);
 }
