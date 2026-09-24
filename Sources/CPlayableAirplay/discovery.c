@@ -12,12 +12,40 @@
 
 #include <arpa/inet.h>
 #include <dns_sd.h>
+#include <poll.h>
 #include <pthread.h>
 #include <strings.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/select.h>
 #include <unistd.h>
+
+/*
+ Why poll rather than select.
+
+ An `fd_set` is a fixed bitmap of FD_SETSIZE entries, which is 1024, and FD_SET
+ writes past the end of one for any descriptor at or above that. The numbers
+ here come from DNS-SD and are whatever the process happens to have open, so
+ nothing about them is bounded by anything in this file. In a long-running
+ application they go past the limit, and what that produces is stack corruption
+ on the discovery thread, with no crash at the point of the damage.
+
+ poll takes its descriptors by number and has no such limit. It is also what
+ PTPClock in the Swift sender already waits with.
+
+ The one thing that changes with it is error reporting. select marked a failed
+ descriptor readable and left the call after it to find out; poll says POLLERR,
+ POLLHUP or POLLNVAL in as many words, so those are handled here rather than
+ being polled again for ever.
+ */
+
+/**
+ How long a resolve is waited on before it is given up.
+
+ A service can be announced and not be resolvable, which is what a record left
+ behind by a receiver that went away without withdrawing it looks like, so this
+ wait has to end by itself.
+ */
+#define PA_RESOLVE_TIMEOUT_MILLISECONDS 2000
 
 /*
  Why dns_sd rather than each platform's own.
@@ -112,14 +140,16 @@ struct PADiscovery {
     bool releaseOnOwnThread;
 
     /**
-     Wakes ::runDiscovery the moment stopping is requested, instead of leaving
-     it to notice on its next select() timeout.
+     Wakes ::runDiscovery the moment stopping is requested, rather than leaving
+     it waiting in poll() until a browse socket says something.
 
-     ::pa_discovery_stop joins that thread before returning, so whatever the
-     timeout is becomes how long the caller blocks. The pipe turns that wait
-     from the length of the timeout into the length of a context switch,
-     which is worth having on its own terms: a caller has no reason to expect
-     stopping to take up to a second.
+     ::pa_discovery_stop joins that thread before returning, so however long
+     that wait runs is how long the caller blocks. The pipe turns it into the
+     length of a context switch, which is worth having on its own terms: a
+     caller has no reason to expect stopping to take any time at all.
+
+     It is watched in the resolve wait as well, where it cuts a stop short
+     rather than leaving it to sit out ::PA_RESOLVE_TIMEOUT_MILLISECONDS.
      */
     int wakePipe[2];
 
@@ -440,22 +470,24 @@ static void DNSSD_API onBrowsed(DNSServiceRef service, DNSServiceFlags flags, ui
         // too. Without it a stop that arrives whilst a resolve is waiting has
         // to sit out the whole timeout, and the caller waits with it, which is
         // exactly what the pipe was added to prevent.
-        const int socket = DNSServiceRefSockFD(resolver);
+        const int resolveSocket = DNSServiceRefSockFD(resolver);
         const int wake = discovery->wakePipe[0];
-        if (socket >= 0) {
-            fd_set readable;
-            FD_ZERO(&readable);
-            FD_SET(socket, &readable);
-            if (wake >= 0) FD_SET(wake, &readable);
+        if (resolveSocket >= 0) {
+            struct pollfd watched[2];
+            nfds_t watchedCount = 0;
 
-            const int highest = (wake > socket ? wake : socket);
-            struct timeval timeout = { .tv_sec = 2, .tv_usec = 0 };
+            // The resolve is always first, so the answer to "did the resolve
+            // itself answer" is read from a fixed place.
+            watched[watchedCount++] = (struct pollfd){ .fd = resolveSocket, .events = POLLIN, .revents = 0 };
+            if (wake >= 0) {
+                watched[watchedCount++] = (struct pollfd){ .fd = wake, .events = POLLIN, .revents = 0 };
+            }
 
             // Only where the resolve itself answered. A wake means stopping,
             // and processing a result then would hand a record to a handler
             // that is going away.
-            if (select(highest + 1, &readable, NULL, NULL, &timeout) > 0
-                && FD_ISSET(socket, &readable)) {
+            if (poll(watched, watchedCount, PA_RESOLVE_TIMEOUT_MILLISECONDS) > 0
+                && (watched[0].revents & POLLIN)) {
                 DNSServiceProcessResult(resolver);
             }
         }
@@ -521,25 +553,29 @@ static void *runDiscovery(void *argument) {
     pthread_mutex_unlock(&discovery->mutex);
 
     while (!discovery->stopping) {
-        fd_set readable;
-        FD_ZERO(&readable);
+        struct pollfd watched[3];
+        nfds_t watchedCount = 0;
 
-        const int wake = discovery->wakePipe[0];
-        FD_SET(wake, &readable);
-        int highest = wake;
+        // The wake pipe is always first, so the answer to "is this stopping"
+        // is read from a fixed place however many browsers are running.
+        watched[watchedCount++] =
+            (struct pollfd){ .fd = discovery->wakePipe[0], .events = POLLIN, .revents = 0 };
 
-        int sockets[2] = { -1, -1 };
+        // Where each browser ended up in the array, or -1 for one that is not
+        // running, since poll answers by position rather than by descriptor.
+        int watchedAt[2] = { -1, -1 };
         bool anyBrowsing = false;
 
         for (size_t index = 0; index < 2; index++) {
             if (!discovery->browsers[index]) continue;
 
-            sockets[index] = DNSServiceRefSockFD(discovery->browsers[index]);
-            if (sockets[index] < 0) continue;
+            const int browseSocket = DNSServiceRefSockFD(discovery->browsers[index]);
+            if (browseSocket < 0) continue;
 
             anyBrowsing = true;
-            FD_SET(sockets[index], &readable);
-            if (sockets[index] > highest) highest = sockets[index];
+            watchedAt[index] = (int)watchedCount;
+            watched[watchedCount++] =
+                (struct pollfd){ .fd = browseSocket, .events = POLLIN, .revents = 0 };
         }
 
         if (!anyBrowsing) break;
@@ -549,16 +585,24 @@ static void *runDiscovery(void *argument) {
         // caller joining the thread this runs on is waiting for exactly one
         // of those two, so a timeout here would only delay it without telling
         // it anything, and the wake pipe already answers "did stopping happen".
-        if (select(highest + 1, &readable, NULL, NULL, NULL) <= 0) continue;
+        if (poll(watched, watchedCount, -1) <= 0) continue;
 
-        if (FD_ISSET(wake, &readable)) break;
+        // Anything at all on the wake pipe, because a hang-up on it means the
+        // same as a byte written to it.
+        if (watched[0].revents != 0) break;
 
         for (size_t index = 0; index < 2; index++) {
-            if (sockets[index] < 0 || !FD_ISSET(sockets[index], &readable)) continue;
+            if (watchedAt[index] < 0) continue;
+
+            const short answered = watched[watchedAt[index]].revents;
+            if (answered == 0) continue;
 
             // One service failing takes only that service down. The other keeps
             // finding receivers, which is better than a list that empties.
-            if (DNSServiceProcessResult(discovery->browsers[index]) != kDNSServiceErr_NoError) {
+            // A descriptor that reports an error rather than something to read
+            // goes the same way, since polling it again would spin for ever.
+            if (!(answered & POLLIN)
+                || DNSServiceProcessResult(discovery->browsers[index]) != kDNSServiceErr_NoError) {
                 DNSServiceRefDeallocate(discovery->browsers[index]);
                 discovery->browsers[index] = NULL;
             }
@@ -678,7 +722,7 @@ void pa_discovery_stop(PADiscovery *discovery) {
 
     discovery->stopping = true;
 
-    // Wakes the select() in runDiscovery at once. What is written does not
+    // Wakes the poll() in runDiscovery at once. What is written does not
     // matter, only that the read end becomes readable.
     const uint8_t wake = 0;
     (void)write(discovery->wakePipe[1], &wake, sizeof(wake));
