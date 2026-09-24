@@ -122,16 +122,38 @@ final class SampleRing {
      one.
      */
     func read(into destination: inout [Int16]) -> Bool {
+        // Nothing to read is read, and it leaves before the indices move,
+        // because a ring of no capacity has no remainder to take one modulo.
+        guard !destination.isEmpty else { return true }
+
         lock.lock()
         defer { lock.unlock() }
 
-        guard destination.count <= count else { return false }
+        // Taken before the buffer is borrowed, because reading the array's own
+        // count inside that is a second access to something being written.
+        let wanted = destination.count
+        guard wanted <= count else { return false }
 
-        for index in 0..<destination.count {
-            destination[index] = storage[readIndex]
-            readIndex = (readIndex + 1) % capacity
+        // In two pieces, the same way a write goes in, rather than a sample at
+        // a time. A sample at a time is a division per sample inside the lock,
+        // and the lock is the one the thread carrying live audio waits on.
+        let untilTheEnd = min(wanted, capacity - readIndex)
+        let from = readIndex
+
+        storage.withUnsafeBufferPointer { source in
+            destination.withUnsafeMutableBufferPointer { target in
+                guard let stored = source.baseAddress, let into = target.baseAddress else { return }
+
+                into.update(from: stored.advanced(by: from), count: untilTheEnd)
+
+                if untilTheEnd < wanted {
+                    into.advanced(by: untilTheEnd).update(from: stored, count: wanted - untilTheEnd)
+                }
+            }
         }
-        count -= destination.count
+
+        readIndex = (readIndex + wanted) % capacity
+        count -= wanted
 
         return true
     }
@@ -144,13 +166,28 @@ final class SampleRing {
         return count
     }
 
-    /// Throws away everything in it, which ending a session does and changing source does.
-    func clear() {
+    /**
+     Throws away everything in it and says how much that was.
+
+     Which ending a session does, and changing source does. One acquisition
+     rather than two: asking what it holds and then emptying it lets the sending
+     thread take a packet in between, so the figure a caller is handed is out by
+     up to a packet's worth of audio. That figure is only ever reported, so this
+     is not worth a lock of its own, and doing it in one is free.
+
+     @returns How many samples were thrown away.
+     */
+    @discardableResult
+    func drain() -> Int {
         lock.lock()
         defer { lock.unlock() }
+
+        let held = count
 
         readIndex = 0
         writeIndex = 0
         count = 0
+
+        return held
     }
 }

@@ -64,6 +64,33 @@ final class SampleRingTests: XCTestCase {
         XCTAssertEqual(out, [1, 2])
     }
 
+    func testAReadThatCrossesTheEndComesBackInOrder() {
+        // The read goes in two pieces now, the same way a write does, so the
+        // join between them is where a wrong length would show. The first read
+        // leaves the index part way along, and the second one steps over the
+        // end of the storage.
+        let ring = SampleRing(capacity: 6)
+        var first = [Int16](repeating: 0, count: 4)
+        var second = [Int16](repeating: 0, count: 4)
+
+        XCTAssertTrue(ring.write([1, 2, 3, 4]))
+        XCTAssertTrue(ring.read(into: &first))
+        XCTAssertEqual(first, [1, 2, 3, 4])
+
+        XCTAssertTrue(ring.write([5, 6, 7, 8]))
+        XCTAssertTrue(ring.read(into: &second))
+        XCTAssertEqual(second, [5, 6, 7, 8])
+    }
+
+    func testAReadOfNothingTakesNothingAndSaysSo() {
+        let ring = SampleRing(capacity: 4)
+        var nothing: [Int16] = []
+
+        XCTAssertTrue(ring.write([1, 2]))
+        XCTAssertTrue(ring.read(into: &nothing))
+        XCTAssertEqual(ring.held, 2)
+    }
+
     func testAReadWithTooLittleInItTakesNothing() {
         let ring = SampleRing(capacity: 4)
         var out = [Int16](repeating: 0, count: 3)
@@ -76,12 +103,39 @@ final class SampleRingTests: XCTestCase {
         XCTAssertEqual(smaller, [1, 2])
     }
 
+    func testDrainingSaysHowMuchItThrewAway() {
+        // One acquisition rather than two. Asking what it holds and then
+        // emptying it lets the sender take a packet in between, and the figure
+        // a caller is handed is then short by that much.
+        let ring = SampleRing(capacity: 8)
+
+        XCTAssertEqual(ring.drain(), 0)
+
+        XCTAssertTrue(ring.write([1, 2, 3, 4, 5]))
+        XCTAssertEqual(ring.drain(), 5)
+        XCTAssertEqual(ring.held, 0)
+        XCTAssertEqual(ring.available, 8)
+    }
+
+    func testDrainingAfterAWrapSaysWhatWasStillInIt() {
+        // The count is kept rather than derived from the two indices, so the
+        // wrap is where a derived one would answer wrongly.
+        let ring = SampleRing(capacity: 4)
+        var out = [Int16](repeating: 0, count: 3)
+
+        XCTAssertTrue(ring.write([1, 2, 3]))
+        XCTAssertTrue(ring.read(into: &out))
+        XCTAssertTrue(ring.write([4, 5, 6]))
+
+        XCTAssertEqual(ring.drain(), 3)
+    }
+
     func testClearingEmptiesIt() {
         let ring = SampleRing(capacity: 4)
         var out = [Int16](repeating: 0, count: 2)
 
         XCTAssertTrue(ring.write([1, 2]))
-        ring.clear()
+        ring.drain()
 
         XCTAssertEqual(ring.available, 4)
         XCTAssertFalse(ring.read(into: &out))
@@ -101,7 +155,7 @@ final class SampleRingTests: XCTestCase {
         XCTAssertTrue(ring.read(into: &out))
         XCTAssertEqual(ring.held, 2)
 
-        ring.clear()
+        ring.drain()
         XCTAssertEqual(ring.held, 0)
     }
 

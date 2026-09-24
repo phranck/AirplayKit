@@ -244,8 +244,10 @@ public final class AirPlaySender {
      */
     @discardableResult
     public func discardHeldAudio() -> Int {
-        let held = ring.held
-        ring.clear()
+        // Emptied and counted together. Asking what it holds and then emptying
+        // it lets the sending thread take a packet in between, and the number
+        // that comes back is then short by that much.
+        let held = ring.drain()
 
         // Gathered again before anything goes out, exactly as at the start. A
         // new source that is sent the instant its first packet lands leaves the
@@ -327,7 +329,7 @@ public final class AirPlaySender {
         events.close()
         connection.stop()
         connection.close()
-        ring.clear()
+        ring.drain()
     }
 
     /**
