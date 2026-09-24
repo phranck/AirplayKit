@@ -171,11 +171,18 @@ public final class EventChannel {
                 return
             }
 
-            while let request = Self.requestEnd(in: plaintext) {
-                let head = String(data: Data(plaintext.prefix(request)), encoding: .utf8) ?? ""
-                plaintext = Data(plaintext.dropFirst(request))
-
-                try? answer(echoing: Self.sequence(in: head))
+            // A reply that did not reach the socket ends the channel, for the
+            // same reason a frame that will not open does. Sealing has already
+            // moved the counter, so from here this side and the receiver
+            // disagree about every later frame.
+            do {
+                try Self.answerRequests(in: &plaintext,
+                                        sealedWith: &write,
+                                        sendingThrough: connection.write)
+            }
+            catch {
+                stopped(because: "a reply on the event channel could not be written")
+                return
             }
         }
     }
@@ -198,13 +205,56 @@ public final class EventChannel {
         return nil
     }
 
-    private func answer(echoing sequence: String?) throws {
+    /**
+     Answers every whole request at the front of the buffer and leaves the rest
+     of it alone.
+
+     Kept apart from the socket so that the failure it guards against can be
+     provoked without one, which is also why it is not private.
+
+     A reply is sealed before it is written, and sealing advances the counter.
+     So a write that does not happen leaves this side one frame ahead of the
+     receiver, every later reply fails to open there, the keep-alive stops being
+     answered, and the receiver tears the session down about half a minute later
+     with nothing anywhere saying why. The counter and the socket are one thing:
+     once the bytes have not gone, the channel is over, which is why this stops
+     at the first failure rather than going on to the next request.
+
+     @param plaintext What has been decrypted and not yet answered. Whatever is
+     answered comes off the front of it.
+     @param channel The direction replies are sealed with, whose counter each
+     reply moves.
+     @param send Where a sealed reply goes.
+     @throws Whatever `send` throws, at the first reply that does not go.
+     */
+    static func answerRequests(in plaintext: inout Data,
+                               sealedWith channel: inout EncryptedChannel,
+                               sendingThrough send: (Data) throws -> Void) throws {
+        while let request = requestEnd(in: plaintext) {
+            let head = String(data: Data(plaintext.prefix(request)), encoding: .utf8) ?? ""
+            plaintext = Data(plaintext.dropFirst(request))
+
+            try send(try channel.seal(reply(echoing: sequence(in: head))))
+        }
+    }
+
+    /**
+     The whole of a reply to a pushed request.
+
+     A status line, a server name, and the `CSeq` where the request carried one.
+     Nothing else: `Content-Length: 0` or `Audio-Latency: 0` in here corrupts the
+     receiver's timeline, and what that produces is a session that stays
+     connected and renders silence.
+
+     @param sequence The `CSeq` to echo, or nil where the request carried none.
+     */
+    static func reply(echoing sequence: String?) -> Data {
         var text = "RTSP/1.0 200 OK\r\nServer: AirTunes/550.10\r\n"
         if let sequence {
             text += "CSeq: \(sequence)\r\n"
         }
         text += "\r\n"
 
-        try connection.write(try write.seal(Data(text.utf8)))
+        return Data(text.utf8)
     }
 }
