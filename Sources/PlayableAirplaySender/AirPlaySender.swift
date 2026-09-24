@@ -330,8 +330,23 @@ public final class AirPlaySender {
         ring.clear()
     }
 
-    /// Why the session ended, where it ended by itself rather than being closed.
-    public private(set) var endedBecause: String?
+    /**
+     Why the session ended, where it ended by itself rather than being closed.
+
+     Read under the lock it is written under. A caller asks this the moment a
+     write comes back ended, which is the same moment the event channel is
+     writing it from its own thread, and a `String` is a reference: a reader
+     without the lock can pick one up half replaced and take the process down
+     rather than merely read something stale.
+     */
+    public var endedBecause: String? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        return reasonItEnded
+    }
+
+    private var reasonItEnded: String?
 
     /**
      What the sender has had to make up, because the source did not keep up.
@@ -498,7 +513,7 @@ public final class AirPlaySender {
     private func endBecauseTheEventChannelStopped(_ reason: String) {
         lock.lock()
         let wasOpen = open
-        if wasOpen { endedBecause = reason }
+        if wasOpen { reasonItEnded = reason }
         lock.unlock()
 
         guard wasOpen else { return }
