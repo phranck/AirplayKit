@@ -29,6 +29,20 @@ extern "C" {
  produced those frames is the caller's business.
  */
 
+/*
+ Who reads this header, and what proves a change to it.
+
+ podlive-macos takes the CPlayableAirplay product by a relative path rather than
+ by a version, so it compiles against whatever is checked out here and a changed
+ declaration reaches it the moment it is saved. It calls the session, the
+ discovery and the naming functions below.
+
+ Nothing in this repository builds it, so `Scripts/check-callers.sh` runs that
+ application's own gate, which is `Scripts/run-tests.sh` in its checkout. Run it
+ before pushing anything that touches this file. It cannot run in CI, because the
+ runner has no copy of that application.
+ */
+
 /** How large a name or address may be, including its terminator. */
 #define PA_MAX_NAME  128
 #define PA_MAX_HOST  256
