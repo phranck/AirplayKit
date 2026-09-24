@@ -35,13 +35,21 @@ private final class Listener {
     private let handle: Int32
     private var accepted: Int32 = -1
     private let ready = DispatchSemaphore(value: 0)
+    private let asked = DispatchSemaphore(value: 0)
+    private let done = DispatchSemaphore(value: 0)
 
     /// What the far end does once it has accepted.
     enum Behaviour {
         /// Accept and never read, so the sender's buffers fill and it waits.
         case goQuiet
 
-        /// Accept and hang up at once, with no lingering, which sends a reset.
+        /// Accept, wait to be asked, then hang up with no lingering, which sends a reset.
+        ///
+        /// Asked rather than immediate, because a listener that resets the
+        /// moment it accepts can do so before the connection at the other end
+        /// has finished being made, and then it is `connect` that fails rather
+        /// than the write under test. That was measured on a CI runner and not
+        /// on this machine, which is what a race of this shape looks like.
         case hangUp
     }
 
@@ -90,22 +98,33 @@ private final class Listener {
                 self?.ready.signal()
 
             case .hangUp:
+                self?.accepted = taken
+                self?.ready.signal()
+                _ = self?.asked.wait(timeout: .now() + 10)
+
                 // A reset rather than an orderly close, so the next write to it
                 // fails rather than being quietly accepted.
                 var immediate = linger(l_onoff: 1, l_linger: 0)
                 setsockopt(taken, SOL_SOCKET, SO_LINGER,
                            &immediate, socklen_t(MemoryLayout<linger>.size))
                 Self.closeSocket(taken)
-                self?.ready.signal()
+                self?.accepted = -1
+                self?.done.signal()
             }
         }
         thread.name = "PlayableAirplay.tests.listener"
         thread.start()
     }
 
-    /// Waits until the far end has done what it was told, so a test is not racing it.
+    /// Waits until the far end has accepted, so a test is not racing the connection.
     func waitUntilReady() {
         _ = ready.wait(timeout: .now() + 5)
+    }
+
+    /// Hangs up, and comes back once it has, so what follows meets a reset connection.
+    func hangUpNow() {
+        asked.signal()
+        _ = done.wait(timeout: .now() + 5)
     }
 
     func close() {
@@ -173,8 +192,11 @@ final class TCPConnectionFailureTests: XCTestCase {
         let listener = try Listener(.hangUp)
         defer { listener.close() }
 
+        // Connected and accepted before the reset is asked for, so what fails
+        // is the write rather than the connection being made.
         let connection = try TCPConnection(host: "127.0.0.1", port: listener.port, timeout: 2)
         listener.waitUntilReady()
+        listener.hangUpNow()
 
         // Writing enough that the reset cannot be missed, however much the
         // kernel was willing to take before it arrived.
