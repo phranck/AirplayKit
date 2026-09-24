@@ -102,7 +102,8 @@ public extension SonosClient {
     /// shipped with an application and stays right when a model is replaced.
     func iconURL(for device: SonosDevice) -> URL? {
         guard let path = device.iconPath else { return nil }
-        return URL(string: "http://\(host):\(port)\(path)")
+
+        return address(of: path)
     }
 }
 
@@ -177,6 +178,47 @@ public extension SonosClient {
     }
 }
 
+// MARK: - Where a request goes
+
+extension SonosClient {
+    /**
+     The address of one path on this speaker, or nil where the two do not make
+     one.
+
+     Built out of components rather than written into a string, because neither
+     half is this package's to trust. The host arrives in a Bonjour record that
+     anything on the network can publish, and a path can arrive in the speaker's
+     own description, which is a third party's answer. A host carrying a slash or
+     an at sign, or a path carrying a scheme, written into a string sends the
+     request somewhere other than the speaker, and nothing about the result would
+     look wrong.
+
+     `URLComponents` knows the grammar and either escapes what it is given or
+     refuses to make a URL at all, so whatever comes back addresses this speaker
+     and this port or is nothing.
+
+     - Parameter path: What to ask for, beginning with a slash.
+     - Returns: The address, or nil where the host or the path cannot be part of
+       one.
+     */
+    func address(of path: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = host
+        components.port = port
+        components.path = path
+
+        guard let url = components.url else { return nil }
+
+        // Read back rather than trusted. Escaping is only half of the guarantee
+        // that matters here, and the half that matters is that the request goes
+        // to the speaker that was named. Anything else is refused outright.
+        guard url.host == host else { return nil }
+
+        return url
+    }
+}
+
 // MARK: - Speaking UPnP
 
 private extension SonosClient {
@@ -207,7 +249,7 @@ private extension SonosClient {
 
     /// Calls one action and hands back the answer as it arrived.
     func call(service: Service, action: String, arguments: String) async throws -> Data {
-        guard let url = URL(string: "http://\(host):\(port)\(service.path)") else {
+        guard let url = address(of: service.path) else {
             throw SonosError.unreachable
         }
 
@@ -231,7 +273,7 @@ private extension SonosClient {
 
     /// Fetches one document, with no SOAP around it.
     func get(path: String) async throws -> Data {
-        guard let url = URL(string: "http://\(host):\(port)\(path)") else {
+        guard let url = address(of: path) else {
             throw SonosError.unreachable
         }
 
