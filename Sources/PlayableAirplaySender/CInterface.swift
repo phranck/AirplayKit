@@ -123,6 +123,13 @@ public func pa_session_invented_seconds(_ session: UnsafeMutableRawPointer?) -> 
     return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.duration
 }
 
+@_cdecl("pa_session_fell_behind")
+public func pa_session_fell_behind(_ session: UnsafeMutableRawPointer?) -> Int {
+    guard let session else { return 0 }
+
+    return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.fellBehind
+}
+
 @_cdecl("pa_session_waited_seconds")
 public func pa_session_waited_seconds(_ session: UnsafeMutableRawPointer?) -> Double {
     guard let session else { return 0 }

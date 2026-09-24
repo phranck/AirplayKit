@@ -73,6 +73,18 @@ public final class BufferedAudioStream {
     }
 
     /**
+     Where the next block will sit on the stream's timeline.
+
+     What a fresh anchor names, because an anchor ties a position in the audio
+     to an instant on a clock and this is the position the next block will
+     carry.
+
+     Read on the thread that writes, which is the one that moves it, so there is
+     nothing here to synchronise.
+     */
+    public var nextTimestamp: UInt32 { timestamp }
+
+    /**
      Sends one packet's worth of samples.
 
      @param samples Interleaved 16-bit stereo, `ALACFrame.framesPerPacket * 2` of them.
