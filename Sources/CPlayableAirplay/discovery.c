@@ -12,12 +12,40 @@
 
 #include <arpa/inet.h>
 #include <dns_sd.h>
+#include <poll.h>
 #include <pthread.h>
 #include <strings.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/select.h>
 #include <unistd.h>
+
+/*
+ Why poll rather than select.
+
+ An `fd_set` is a fixed bitmap of FD_SETSIZE entries, which is 1024, and FD_SET
+ writes past the end of one for any descriptor at or above that. The numbers
+ here come from DNS-SD and are whatever the process happens to have open, so
+ nothing about them is bounded by anything in this file. In a long-running
+ application they go past the limit, and what that produces is stack corruption
+ on the discovery thread, with no crash at the point of the damage.
+
+ poll takes its descriptors by number and has no such limit. It is also what
+ PTPClock in the Swift sender already waits with.
+
+ The one thing that changes with it is error reporting. select marked a failed
+ descriptor readable and left the call after it to find out; poll says POLLERR,
+ POLLHUP or POLLNVAL in as many words, so those are handled here rather than
+ being polled again for ever.
+ */
+
+/**
+ How long a resolve is waited on before it is given up.
+
+ A service can be announced and not be resolvable, which is what a record left
+ behind by a receiver that went away without withdrawing it looks like, so this
+ wait has to end by itself.
+ */
+#define PA_RESOLVE_TIMEOUT_MILLISECONDS 2000
 
 /*
  Why dns_sd rather than each platform's own.
@@ -71,7 +99,9 @@ typedef struct PARecord {
 
  One of these lives inside the discovery per service, so its lifetime is the
  discovery's exactly. The callbacks have stopped by the time the discovery is
- freed, because stopping joins the thread first.
+ freed: a stop from elsewhere joins the thread before freeing anything, and a
+ stop from inside a callback leaves the freeing to that thread, once the
+ callback has returned and the loop behind it has left.
  */
 typedef struct PABrowseContext {
     struct PADiscovery *discovery;
@@ -88,14 +118,38 @@ struct PADiscovery {
     volatile bool stopping;
 
     /**
-     Wakes ::runDiscovery the moment stopping is requested, instead of leaving
-     it to notice on its next select() timeout.
+     Which thread ::runDiscovery is on, and whether it has said so yet.
 
-     ::pa_discovery_stop joins that thread before returning, so whatever the
-     timeout is becomes how long the caller blocks. The pipe turns that wait
-     from the length of the timeout into the length of a context switch,
-     which is worth having on its own terms: a caller has no reason to expect
-     stopping to take up to a second.
+     Recorded by that thread itself rather than taken from ::pthread_create,
+     because the new thread can be running before the parent has stored what
+     ::pthread_create returns, and this is read from inside the handler. Both
+     are written and read under ::PADiscovery::mutex for the same reason.
+     */
+    pthread_t owner;
+    bool ownerKnown;
+
+    /**
+     Whether the teardown is ::runDiscovery's to do rather than the caller's.
+
+     Set when ::pa_discovery_stop is called from the discovery's own thread,
+     which is where the handler runs. That call cannot join the thread it is on
+     and cannot free the structure the stack above it is still standing in, so
+     it asks instead, and the run loop finishes the job once that stack has
+     unwound.
+     */
+    bool releaseOnOwnThread;
+
+    /**
+     Wakes ::runDiscovery the moment stopping is requested, rather than leaving
+     it waiting in poll() until a browse socket says something.
+
+     ::pa_discovery_stop joins that thread before returning, so however long
+     that wait runs is how long the caller blocks. The pipe turns it into the
+     length of a context switch, which is worth having on its own terms: a
+     caller has no reason to expect stopping to take any time at all.
+
+     It is watched in the resolve wait as well, where it cuts a stop short
+     rather than leaving it to sit out ::PA_RESOLVE_TIMEOUT_MILLISECONDS.
      */
     int wakePipe[2];
 
@@ -341,6 +395,19 @@ static void DNSSD_API onResolved(DNSServiceRef service, DNSServiceFlags flags, u
     copyTextValue(txtLength, txt, isRaop ? "am" : "model", model, sizeof(model));
     if (model[0] != '\0') copyString(record->receiver.model, sizeof(record->receiver.model), model);
 
+    // The other half of the product name. Only the AirPlay service carries it,
+    // and Apple publishes none at all, which is what tells its receivers apart
+    // from everybody else's without a table of identifiers. Copied only when
+    // there is something, so a RAOP sighting does not clear what an AirPlay one
+    // established.
+    if (!isRaop) {
+        char manufacturer[PA_MAX_MODEL];
+        copyTextValue(txtLength, txt, "manufacturer", manufacturer, sizeof(manufacturer));
+        if (manufacturer[0] != '\0') {
+            copyString(record->receiver.manufacturer, sizeof(record->receiver.manufacturer), manufacturer);
+        }
+    }
+
     // What it is doing, out of the status field. The reading of it sits in
     // receiver_state.c, which is where it can be tested without a network.
     uint8_t stateLength = 0;
@@ -352,8 +419,14 @@ static void DNSSD_API onResolved(DNSServiceRef service, DNSServiceFlags flags, u
 
     // Published on the AirPlay service alone, so a RAOP sighting leaves whatever
     // an AirPlay one already established rather than clearing it.
+    //
+    // Seeing this sighting is also what makes the record whole: everything the
+    // RAOP service withholds is in this one, so until it has arrived an empty
+    // manufacturer and an empty group say that nobody has told us rather than
+    // that the device published none.
     if (!isRaop) {
         copyTextValue(txtLength, txt, "gid", record->receiver.groupID, sizeof(record->receiver.groupID));
+        record->receiver.isFullyDescribed = true;
     }
 
     pthread_mutex_unlock(&discovery->mutex);
@@ -403,22 +476,24 @@ static void DNSSD_API onBrowsed(DNSServiceRef service, DNSServiceFlags flags, ui
         // too. Without it a stop that arrives whilst a resolve is waiting has
         // to sit out the whole timeout, and the caller waits with it, which is
         // exactly what the pipe was added to prevent.
-        const int socket = DNSServiceRefSockFD(resolver);
+        const int resolveSocket = DNSServiceRefSockFD(resolver);
         const int wake = discovery->wakePipe[0];
-        if (socket >= 0) {
-            fd_set readable;
-            FD_ZERO(&readable);
-            FD_SET(socket, &readable);
-            if (wake >= 0) FD_SET(wake, &readable);
+        if (resolveSocket >= 0) {
+            struct pollfd watched[2];
+            nfds_t watchedCount = 0;
 
-            const int highest = (wake > socket ? wake : socket);
-            struct timeval timeout = { .tv_sec = 2, .tv_usec = 0 };
+            // The resolve is always first, so the answer to "did the resolve
+            // itself answer" is read from a fixed place.
+            watched[watchedCount++] = (struct pollfd){ .fd = resolveSocket, .events = POLLIN, .revents = 0 };
+            if (wake >= 0) {
+                watched[watchedCount++] = (struct pollfd){ .fd = wake, .events = POLLIN, .revents = 0 };
+            }
 
             // Only where the resolve itself answered. A wake means stopping,
             // and processing a result then would hand a record to a handler
             // that is going away.
-            if (select(highest + 1, &readable, NULL, NULL, &timeout) > 0
-                && FD_ISSET(socket, &readable)) {
+            if (poll(watched, watchedCount, PA_RESOLVE_TIMEOUT_MILLISECONDS) > 0
+                && (watched[0].revents & POLLIN)) {
                 DNSServiceProcessResult(resolver);
             }
         }
@@ -452,30 +527,61 @@ static void DNSSD_API onBrowsed(DNSServiceRef service, DNSServiceFlags flags, ui
     announce(discovery);
 }
 
+/**
+ Releases everything the discovery holds.
+
+ Called once, with nothing left inside it: either by ::pa_discovery_stop once it
+ has joined the thread, or by that thread itself where the stop came from a
+ handler and there is nobody to join it.
+ */
+static void releaseDiscovery(PADiscovery *discovery) {
+    close(discovery->wakePipe[0]);
+    close(discovery->wakePipe[1]);
+
+    for (size_t index = 0; index < 2; index++) {
+        if (discovery->browsers[index]) DNSServiceRefDeallocate(discovery->browsers[index]);
+    }
+
+    pthread_mutex_destroy(&discovery->mutex);
+    free(discovery);
+}
+
 /** Waits on both browse sockets and hands anything that arrives to the callbacks. */
 static void *runDiscovery(void *argument) {
     PADiscovery *discovery = (PADiscovery *)argument;
 
+    // Before the first callback can run, since callbacks only happen inside the
+    // loop below and this is what tells ::pa_discovery_stop that it is being
+    // called from one of them.
+    pthread_mutex_lock(&discovery->mutex);
+    discovery->owner = pthread_self();
+    discovery->ownerKnown = true;
+    pthread_mutex_unlock(&discovery->mutex);
+
     while (!discovery->stopping) {
-        fd_set readable;
-        FD_ZERO(&readable);
+        struct pollfd watched[3];
+        nfds_t watchedCount = 0;
 
-        const int wake = discovery->wakePipe[0];
-        FD_SET(wake, &readable);
-        int highest = wake;
+        // The wake pipe is always first, so the answer to "is this stopping"
+        // is read from a fixed place however many browsers are running.
+        watched[watchedCount++] =
+            (struct pollfd){ .fd = discovery->wakePipe[0], .events = POLLIN, .revents = 0 };
 
-        int sockets[2] = { -1, -1 };
+        // Where each browser ended up in the array, or -1 for one that is not
+        // running, since poll answers by position rather than by descriptor.
+        int watchedAt[2] = { -1, -1 };
         bool anyBrowsing = false;
 
         for (size_t index = 0; index < 2; index++) {
             if (!discovery->browsers[index]) continue;
 
-            sockets[index] = DNSServiceRefSockFD(discovery->browsers[index]);
-            if (sockets[index] < 0) continue;
+            const int browseSocket = DNSServiceRefSockFD(discovery->browsers[index]);
+            if (browseSocket < 0) continue;
 
             anyBrowsing = true;
-            FD_SET(sockets[index], &readable);
-            if (sockets[index] > highest) highest = sockets[index];
+            watchedAt[index] = (int)watchedCount;
+            watched[watchedCount++] =
+                (struct pollfd){ .fd = browseSocket, .events = POLLIN, .revents = 0 };
         }
 
         if (!anyBrowsing) break;
@@ -485,20 +591,40 @@ static void *runDiscovery(void *argument) {
         // caller joining the thread this runs on is waiting for exactly one
         // of those two, so a timeout here would only delay it without telling
         // it anything, and the wake pipe already answers "did stopping happen".
-        if (select(highest + 1, &readable, NULL, NULL, NULL) <= 0) continue;
+        if (poll(watched, watchedCount, -1) <= 0) continue;
 
-        if (FD_ISSET(wake, &readable)) break;
+        // Anything at all on the wake pipe, because a hang-up on it means the
+        // same as a byte written to it.
+        if (watched[0].revents != 0) break;
 
         for (size_t index = 0; index < 2; index++) {
-            if (sockets[index] < 0 || !FD_ISSET(sockets[index], &readable)) continue;
+            if (watchedAt[index] < 0) continue;
+
+            const short answered = watched[watchedAt[index]].revents;
+            if (answered == 0) continue;
 
             // One service failing takes only that service down. The other keeps
             // finding receivers, which is better than a list that empties.
-            if (DNSServiceProcessResult(discovery->browsers[index]) != kDNSServiceErr_NoError) {
+            // A descriptor that reports an error rather than something to read
+            // goes the same way, since polling it again would spin for ever.
+            if (!(answered & POLLIN)
+                || DNSServiceProcessResult(discovery->browsers[index]) != kDNSServiceErr_NoError) {
                 DNSServiceRefDeallocate(discovery->browsers[index]);
                 discovery->browsers[index] = NULL;
             }
         }
+    }
+
+    pthread_mutex_lock(&discovery->mutex);
+    const bool releaseHere = discovery->releaseOnOwnThread;
+    pthread_mutex_unlock(&discovery->mutex);
+
+    // Stopped from inside a handler, so the stack that asked for it was
+    // standing in this discovery and has only now unwound. Nobody is going to
+    // join this thread, so it detaches itself and frees what it was using.
+    if (releaseHere) {
+        pthread_detach(pthread_self());
+        releaseDiscovery(discovery);
     }
 
     return NULL;
@@ -555,21 +681,12 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
         if (problem) *problem = pa_discovery_problem_for_error(lastError);
         if (code) *code = lastError;
 
-        close(discovery->wakePipe[0]);
-        close(discovery->wakePipe[1]);
-        pthread_mutex_destroy(&discovery->mutex);
-        free(discovery);
+        releaseDiscovery(discovery);
         return NULL;
     }
 
     if (pthread_create(&discovery->thread, NULL, runDiscovery, discovery) != 0) {
-        for (size_t index = 0; index < 2; index++) {
-            if (discovery->browsers[index]) DNSServiceRefDeallocate(discovery->browsers[index]);
-        }
-        close(discovery->wakePipe[0]);
-        close(discovery->wakePipe[1]);
-        pthread_mutex_destroy(&discovery->mutex);
-        free(discovery);
+        releaseDiscovery(discovery);
 
         if (problem) *problem = PADiscoveryProblemFailed;
         return NULL;
@@ -593,22 +710,31 @@ PADiscoveryProblem pa_discovery_problem(PADiscovery *discovery, int32_t *code) {
 void pa_discovery_stop(PADiscovery *discovery) {
     if (!discovery) return;
 
+    // The handler runs on the discovery's own thread, so stopping from inside
+    // one arrives here on that thread. Joining it would return EDEADLK at once
+    // and freeing the discovery would pull the ground from under the stack that
+    // is still standing in it: the handler returns into a browse or resolve
+    // callback, which returns into the run loop, which reads `stopping`, the
+    // wake pipe and the browser list out of memory that is no longer there.
+    //
+    // So this asks and returns, and ::runDiscovery finishes the job once that
+    // stack has unwound. The handler is not called again either way, because
+    // the loop sees `stopping` before it processes anything further.
+    pthread_mutex_lock(&discovery->mutex);
+    const bool fromOwnThread = discovery->ownerKnown
+        && pthread_equal(discovery->owner, pthread_self()) != 0;
+    if (fromOwnThread) discovery->releaseOnOwnThread = true;
+    pthread_mutex_unlock(&discovery->mutex);
+
     discovery->stopping = true;
 
-    // Wakes the select() in runDiscovery at once. What is written does not
+    // Wakes the poll() in runDiscovery at once. What is written does not
     // matter, only that the read end becomes readable.
     const uint8_t wake = 0;
     (void)write(discovery->wakePipe[1], &wake, sizeof(wake));
 
+    if (fromOwnThread) return;
+
     pthread_join(discovery->thread, NULL);
-
-    close(discovery->wakePipe[0]);
-    close(discovery->wakePipe[1]);
-
-    for (size_t index = 0; index < 2; index++) {
-        if (discovery->browsers[index]) DNSServiceRefDeallocate(discovery->browsers[index]);
-    }
-
-    pthread_mutex_destroy(&discovery->mutex);
-    free(discovery);
+    releaseDiscovery(discovery);
 }

@@ -167,11 +167,20 @@ public final class PTPClock {
      @param ahead How far past now to report, which an anchor needs because it
      says when the first frame sounds and no frame can arrive before it is sent.
      @returns Its seconds and the fraction of a second, the latter as the 64-bit
-     binary fraction the anchor carries rather than as nanoseconds.
+     binary fraction the anchor carries rather than as nanoseconds. Nil where
+     the reading and the lead together do not land on a time an anchor can
+     carry, which a caller answers by not anchoring rather than by anchoring to
+     something else.
      */
-    public static func now(from reading: Reading, ahead: TimeInterval = 0) -> (seconds: Int64, fraction: Int64) {
+    public static func now(from reading: Reading, ahead: TimeInterval = 0) -> (seconds: Int64, fraction: Int64)? {
         let elapsed = ProcessInfo.processInfo.systemUptime - reading.heardAt
         let total = Double(reading.seconds) + Double(reading.nanoseconds) / 1_000_000_000 + elapsed + ahead
+
+        // Refused rather than converted. `Int64(...)` ends the process on a
+        // value outside its range and on one that is not a number at all, and
+        // both `reading` and `ahead` come from outside this call. A clock that
+        // says something impossible is a clock not to anchor to.
+        guard total.isFinite, total >= 0, total < Double(Int64.max) else { return nil }
 
         let seconds = Int64(total)
         let fraction = total - Double(seconds)
@@ -190,6 +199,29 @@ public final class PTPClock {
         let scaled = (fraction * Double(1 << 62)) * 4
 
         return (seconds, Int64(bitPattern: UInt64(scaled.rounded(.down))))
+    }
+
+    /**
+     How long is left before a deadline, in the milliseconds `poll` counts in.
+
+     Clamped rather than converted. ``read(from:timeout:)`` is public and its
+     timeout carries a default, so the number that arrives here is the caller's,
+     and `Int32(...)` on a wait of more than about twenty-five days, or on one
+     that is not a number at all, ends the process instead of waiting.
+
+     @param deadline When the wait is over.
+     @returns Nought where the deadline has passed or is not a time, and at most
+     what `poll` can be handed.
+     */
+    static func milliseconds(until deadline: Date) -> Int32 {
+        let remaining = deadline.timeIntervalSinceNow * 1000
+
+        // False for a value that is not a number, which is how a deadline built
+        // from an unusable timeout arrives here.
+        guard remaining > 0 else { return 0 }
+        guard remaining < Double(Int32.max) else { return Int32.max }
+
+        return Int32(remaining)
     }
 
     // MARK: - Private
@@ -249,9 +281,10 @@ public final class PTPClock {
      */
     private func receive(before deadline: Date) -> (message: Message, source: String)? {
         var descriptors = sockets.map { pollfd(fd: $0, events: Int16(POLLIN), revents: 0) }
-        let remaining = max(0, Int32(deadline.timeIntervalSinceNow * 1000))
 
-        guard poll(&descriptors, nfds_t(descriptors.count), remaining) > 0 else { return nil }
+        guard poll(&descriptors, nfds_t(descriptors.count), Self.milliseconds(until: deadline)) > 0 else {
+            return nil
+        }
 
         for (index, descriptor) in descriptors.enumerated() where descriptor.revents & Int16(POLLIN) != 0 {
             var buffer = [UInt8](repeating: 0, count: 256)

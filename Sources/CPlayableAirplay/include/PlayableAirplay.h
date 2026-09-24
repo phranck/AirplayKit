@@ -29,6 +29,20 @@ extern "C" {
  produced those frames is the caller's business.
  */
 
+/*
+ Who reads this header, and what proves a change to it.
+
+ podlive-macos takes the CPlayableAirplay product by a relative path rather than
+ by a version, so it compiles against whatever is checked out here and a changed
+ declaration reaches it the moment it is saved. It calls the session, the
+ discovery and the naming functions below.
+
+ Nothing in this repository builds it, so `Scripts/check-callers.sh` runs that
+ application's own gate, which is `Scripts/run-tests.sh` in its checkout. Run it
+ before pushing anything that touches this file. It cannot run in CI, because the
+ runner has no copy of that application.
+ */
+
 /** How large a name or address may be, including its terminator. */
 #define PA_MAX_NAME  128
 #define PA_MAX_HOST  256
@@ -44,7 +58,18 @@ extern "C" {
  */
 #define PA_MAX_GROUP 256
 
-/** The audio the sender takes. Fixed, because this is what AirPlay carries. */
+/**
+ The audio the sender takes. Fixed, because this is what AirPlay carries.
+
+ Written out here because a C header cannot read a Swift constant, and the one
+ that decides what goes on the wire is `ALACFrame` in the Swift sender. These
+ two are therefore one fact in two places, which is the shape that drifts: a
+ caller sizes its buffers from these and the stream is built from the others,
+ and nothing in either would report the difference.
+
+ What keeps them together is a test, `ProtocolConstantsTests`, which compares
+ them. Change one and it fails naming the other.
+ */
 #define PA_SAMPLE_RATE 44100
 #define PA_CHANNELS        2
 
@@ -93,11 +118,31 @@ typedef struct PAReceiver {
      */
     char model[PA_MAX_MODEL];
     /**
+     Who built it, from the `manufacturer` field, such as `Sonos`.
+
+     The other half of a product name: with `model` it reads as "Sonos One"
+     without asking the device anything.
+
+     Empty for Apple's receivers, which publish no such field, and that is what
+     tells the two cases apart. A record carrying a manufacturer is named by
+     joining the two; one carrying none is Apple's, and its `model` is an
+     identifier to be turned into a name.
+
+     That reading holds only where `isFullyDescribed` is true. Until then an
+     empty value means nobody has said yet, because the service that carries
+     this field has not been seen, and the two cases are not the same thing.
+
+     The brand on the box is not always this. A SYMFONISK Bookshelf says Sonos
+     here, because Sonos builds it, and only its UPnP description says SYMFONISK.
+     */
+    char manufacturer[PA_MAX_MODEL];
+    /**
      Which group of receivers it says it belongs to, from the `gid` field.
 
      Published on the AirPlay service and on no RAOP record, so this is empty
      for a receiver found only through the older service and for one that
-     announced nothing. Empty means unknown rather than alone.
+     announced nothing. Empty means unknown rather than alone, and
+     `isFullyDescribed` is what separates those two cases.
 
      Measured on one network of eight receivers. Every Sonos published its own
      `pi` value here. Apple's devices published a different value from their
@@ -113,6 +158,27 @@ typedef struct PAReceiver {
     uint16_t port;
     /** Whether it announced the AirPlay 2 pairing key. A receiver without one needs the older path. */
     bool supportsAirPlay2;
+    /**
+     Whether the service that carries the whole description has been seen.
+
+     A receiver is announced twice, and only the AirPlay service publishes
+     `manufacturer` and `gid`. A receiver reported from the RAOP service alone
+     therefore arrives with both empty, and false says that this is what
+     happened rather than that the device published nothing.
+
+     The difference matters because an empty `manufacturer` is what says a
+     receiver is Apple's. Whilst this is false it says nothing of the kind, and
+     a Sonos seen over the older service alone would otherwise be read as one of
+     Apple's, named `One` rather than `Sonos One`, and drawn accordingly.
+
+     It is not a promise that the rest is coming. Measured on one network on
+     2026-09-24: five Sonos published both services, and across thirty callbacks
+     in one run not a single AirPlay sighting arrived, whilst the next run of the
+     same binary had them all. So a caller that holds a receiver back until this
+     is true can hold it back for ever, and what this is for is to say which
+     answer it is being given rather than to promise a better one.
+     */
+    bool isFullyDescribed;
     /**
      Whether a sender currently holds a session with it.
 
@@ -219,8 +285,71 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
 /**
  Stops looking and releases the discovery. The handler is not called again, and
  the call returns once the thread carrying it has finished. Safe to call with NULL.
+
+ Also safe to call from inside the handler, which runs on that same thread. It
+ cannot wait for a thread it is on, so from there it asks for the stop and
+ returns at once, and the discovery is released when the handler has returned
+ and the loop behind it has finished. Either way the pointer is to be treated as
+ dead the moment this returns, and the handler is not called again.
  */
 void pa_discovery_stop(PADiscovery *discovery);
+
+/*
+ What to call a receiver and what to draw it as.
+
+ About a PAReceiver rather than about a session, and kept here beside the
+ discovery that produces one. They take the two fields rather than the whole
+ receiver, so they also answer for a machine that was never found by browsing.
+
+ All three write into a buffer the caller owns and all three return how many
+ bytes the whole answer needed, not counting the terminator. Where that is
+ `capacity` or more, what was written is cut short at a character boundary
+ rather than abandoned, so a short buffer gives a short name. A caller that
+ wants the whole of it makes room for the returned length plus one and asks
+ again, and one that does not mind a short one can ignore the result.
+
+ An empty buffer therefore means the device published nothing, and only that.
+ */
+
+/**
+ What to call a receiver on screen, under the name its owner gave it.
+
+ "Sonos One" for a receiver that publishes a manufacturer, which is the two
+ fields joined, and "HomePod mini" for one of Apple's, whose identifier is
+ turned into a name from a table the library carries.
+
+ Also answers for a machine that is not a receiver at all, such as the one this
+ is running on: pass an empty manufacturer and the identifier from
+ `sysctlbyname("hw.model", ...)`.
+
+ @param manufacturer  What the receiver published, or NULL or empty for Apple's.
+ @param model         The model or identifier.
+ @param out           Where to write the name, or NULL to ask only how long it
+                      is. Left empty where the device published none.
+ @param capacity      How many bytes `out` holds, including the terminator.
+ @return How many bytes the whole name needs, not counting the terminator.
+ */
+size_t pa_product_name(const char *manufacturer, const char *model, char *out, size_t capacity);
+
+/**
+ The SF Symbol that draws a receiver, such as `hifispeaker` or `homepod.mini`.
+
+ Apple's hardware is drawn as itself, because the symbol catalogue has one
+ shaped like each of them. Everybody else's is drawn as a speaker, because the
+ catalogue has nothing shaped like a Sonos and no soundbar at all.
+
+ Takes the same two fields as pa_product_name, answers for a machine that is not
+ a receiver in the same way, and reports its length the same way.
+ */
+size_t pa_symbol_name(const char *manufacturer, const char *model, char *out, size_t capacity);
+
+/**
+ The SF Symbol for two of these playing as one, such as a stereo set.
+
+ For a caller that knows two receivers are bonded. Nothing in a service record
+ says a pair is a pair, so this is offered rather than chosen by the library.
+ */
+size_t pa_pair_symbol_name(const char *manufacturer, const char *model, char *out, size_t capacity);
 
 /** A connection to one receiver, carrying audio. */
 typedef struct PASession PASession;
@@ -272,6 +401,96 @@ bool pa_session_write(PASession *session, const int16_t *frames, size_t frameCou
 bool pa_session_is_running(PASession *session);
 
 /**
+ Throws away the audio this session is holding and has not sent.
+
+ For a caller that changes source, such as one podcast to the next. Without this
+ the old source's tail goes on leaving at real time whilst the new one has not
+ started, and a source trickling to a stop leaves the buffer repeatedly almost
+ empty, so what is heard is crackle rather than an ending.
+
+ Afterwards the session sends silence, which is quiet, until the new source
+ produces. The session stays up, so nothing is paired again.
+
+ What it cannot do is take back what the receiver already has. A couple of
+ seconds of audio is already at the speaker, so the cut is heard about that much
+ later.
+
+ @param session  The open session, or NULL, which holds nothing.
+ @return How many frames were thrown away.
+ */
+size_t pa_session_discard_held_audio(PASession *session);
+
+/**
+ How many frames are waiting to be sent.
+
+ How far ahead of the speaker the source has run, which is the latency a
+ listener would notice on a change of source.
+
+ @param session  The open session, or NULL, which holds nothing.
+ @return The frame count.
+ */
+size_t pa_session_held_frames(PASession *session);
+
+/*
+ What a session is doing, and what it did.
+
+ The four functions below answer whilst the session is open. They read through
+ the pointer, so none of them may be called after pa_session_close, which
+ releases what that pointer names. Asking how a session went is something a
+ caller does once it has stopped, though, so pa_session_close hands the same
+ four figures back as a PASessionReport at the moment it ends the session.
+ */
+
+/**
+ How many packets the session has sent as silence because no audio arrived in
+ time.
+
+ A hole in the audio is heard as crackle rather than as a gap, so it gets blamed
+ on the speaker or the network. Nothing else reports it: a caller whose writes
+ are never refused concludes its audio arrived whole, and it did, just not in
+ time.
+
+ Counted from the start of the session and never reset, so two readings a few
+ seconds apart say what happened in between.
+
+ @param session  The open session, or NULL, which has invented nothing.
+ @return The packet count.
+ */
+size_t pa_session_invented_packets(PASession *session);
+
+/// The same, as a length of audio in seconds.
+double pa_session_invented_seconds(PASession *session);
+
+/**
+ How many times the sender fell further behind than the anchor's lead could
+ absorb, and told the receiver when the next block would sound.
+
+ Worse than an invented packet, and worth watching for separately. A padded
+ packet is a hole in the audio; this is the whole stream having slipped past the
+ moment the anchor promised, which a receiver answers by discarding audio that
+ is already late. Nothing else reports it, because the session stays connected
+ and keeps taking frames whilst the speaker is silent.
+
+ Any of these in a run is worth looking at, and several in a row mean the
+ machine is not keeping up with real time.
+
+ @param session  The open session, or NULL, which has not fallen behind.
+ @return How many times it happened.
+ */
+size_t pa_session_fell_behind(PASession *session);
+
+/**
+ How long the session has spent waiting for audio, in seconds.
+
+ Including the waits that ended in audio, because a sender that keeps almost
+ running out is about to, and that shows here before anything is audible.
+
+ @param session  The open session, or NULL, which has waited for nothing.
+ @return The total wait.
+ */
+double pa_session_waited_seconds(PASession *session);
+
+/**
  Sets the receiver's own volume.
 
  This is the device's volume rather than a gain applied to the samples, so it
@@ -282,8 +501,36 @@ bool pa_session_is_running(PASession *session);
  */
 void pa_session_set_volume(PASession *session, float volume);
 
-/** Ends the session and releases it. Safe to call with NULL. */
-void pa_session_close(PASession *session);
+/**
+ What a session did, for reading once it has ended.
+
+ The same four figures the functions above answer whilst a session is open, so
+ a caller that wants them afterwards does not have to keep polling for them
+ whilst it plays.
+ */
+typedef struct PASessionReport {
+    /** Packets sent as silence because the ring had nothing in time. */
+    size_t inventedPackets;
+    /** Those packets as a length of audio, in seconds. */
+    double inventedSeconds;
+    /** How long the sender waited for frames in total, including the waits that ended in frames. */
+    double waitedSeconds;
+    /** How many times the sender slipped past the anchor and placed a fresh one. */
+    size_t fellBehind;
+} PASessionReport;
+
+/**
+ Ends the session, says how it went, and releases it. Safe to call with NULL.
+
+ The figures come back here rather than being left to be fetched, because this
+ releases what `session` names: reading through that pointer afterwards is a
+ read of memory that has gone. This is the last moment they exist, and a caller
+ that asks how a session went asks once it has stopped.
+
+ @param session  The session, or NULL.
+ @param report   Where to write what the session did, or NULL to discard it.
+ */
+void pa_session_close(PASession *session, PASessionReport *report);
 
 /** A sentence describing a result, in English, for a log rather than a person. */
 const char *pa_result_description(PAResult result);

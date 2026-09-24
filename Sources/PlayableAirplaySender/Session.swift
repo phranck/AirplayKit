@@ -136,11 +136,11 @@ public struct Session {
                                                     body: try Self.encoded(body)))
 
         let answer = try Self.propertyList(reply.body)
-        guard let port = answer["eventPort"] as? Int else {
+        guard let port = answer["eventPort"] as? Int, let checked = Self.port(port) else {
             throw SessionFailure.replyIsMissing("eventPort")
         }
 
-        eventPort = UInt16(port)
+        eventPort = checked
 
         return eventPort
     }
@@ -199,12 +199,16 @@ public struct Session {
         guard let streams = answer["streams"] as? [[String: Any]], let first = streams.first else {
             throw SessionFailure.replyIsMissing("streams")
         }
-        guard let dataPort = first["dataPort"] as? Int else {
+        guard let dataPort = first["dataPort"] as? Int, let checked = Self.port(dataPort) else {
             throw SessionFailure.replyIsMissing("dataPort")
         }
 
-        return Stream(dataPort: UInt16(dataPort),
-                      controlPort: UInt16(first["controlPort"] as? Int ?? 0),
+        // Nought where it named none and nought where it named nonsense, which
+        // are the same thing to a caller: there is no control port to use.
+        let control = (first["controlPort"] as? Int).flatMap(Self.port) ?? 0
+
+        return Stream(dataPort: checked,
+                      controlPort: control,
                       audioBufferSize: first["audioBufferSize"] as? Int)
     }
 
@@ -274,6 +278,26 @@ public struct Session {
     }
 
     // MARK: - Private
+
+    /**
+     A port number from a receiver's reply, or nil where it is not one.
+
+     These arrive in a property list the other end wrote, and nothing about
+     that list is this sender's to decide. `UInt16(value)` traps on anything
+     outside the range, so a receiver answering 70000, or a negative number, or
+     anything at all that is listening on port 7000 before this sender has
+     authenticated it, ends the whole application.
+
+     `RTSPResponse.read` guards the same class of thing for a content length,
+     and this is the same guard for the same reason.
+
+     @param value What the reply carried.
+     */
+    static func port(_ value: Int) -> UInt16? {
+        guard value > 0, value <= Int(UInt16.max) else { return nil }
+
+        return UInt16(value)
+    }
 
     static let propertyListType = "application/x-apple-binary-plist"
 

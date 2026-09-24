@@ -57,11 +57,24 @@ func listReceivers(forSeconds seconds: Int) -> Int32 {
 
         for receiver in receivers {
             let generation = receiver.supportsAirPlay2 ? "AirPlay 2" : "AirPlay 1"
-            let name = receiver.name.padding(toLength: 24, withPad: " ", startingAt: 0)
-            let model = receiver.model.isEmpty ? "unknown model" : receiver.model
+            let name = receiver.name.padding(toLength: 22, withPad: " ", startingAt: 0)
             let state = receiver.isPlaying ? "playing" : (receiver.hasSender ? "in use" : "free")
             let group = shared[receiver.groupID].map { " same group as \($0.count - 1) other(s)" } ?? ""
-            print("  \(name) \(receiver.host):\(receiver.port)  \(generation)  \(model)  \(state)\(group)")
+
+            // What a list would put under the name, and the symbol it would draw
+            // beside it. Printed here so both can be read against real hardware.
+            let product = (receiver.productName.isEmpty ? "unknown" : receiver.productName)
+                .padding(toLength: 22, withPad: " ", startingAt: 0)
+            let symbol = receiver.symbolName.padding(toLength: 16, withPad: " ", startingAt: 0)
+
+            // A receiver the AirPlay record has not arrived for is described
+            // from half of what it publishes, so its name can still change. That
+            // is worth seeing here, because this is where the two answers for
+            // one speaker were first noticed.
+            let known = receiver.isFullyDescribed ? "" : "  half known"
+
+            print("  \(name) \(product) \(symbol) \(generation)  \(state)\(group)\(known)")
+            print("  \(String(repeating: " ", count: 22)) \(receiver.host):\(receiver.port)")
         }
     }
 
@@ -253,7 +266,11 @@ func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 
         // instant of sending, everything arrives after its own moment and a
         // receiver drops audio that is already late.
         let lead = 2.0
-        let time = PTPClock.now(from: reading, ahead: lead)
+        guard let time = PTPClock.now(from: reading, ahead: lead) else {
+            print("  its clock reads a time no anchor can carry, so there is nothing to anchor to")
+            return 1
+        }
+
         print(String(format: "  its clock is %016llx, reading %lld s", reading.identity, time.seconds))
 
         do {
@@ -490,7 +507,7 @@ func readWave(at path: String) throws -> WaveFile {
 }
 
 /// Plays a WAVE file to a speaker. Nothing here is Apple's, so it runs on Linux too.
-func streamWave(at path: String, to host: String, port: UInt16) throws {
+func streamWave(at path: String, to host: String, port: UInt16, volume: Float = 0.2) throws {
     let wave = try readWave(at: path)
 
     // No resampling here: what the file holds has to be what AirPlay carries.
@@ -503,7 +520,9 @@ func streamWave(at path: String, to host: String, port: UInt16) throws {
     }
 
     let session = try AirPlaySession(host: host, port: port, senderName: "My App")
-    session.volume = 0.2
+    session.volume = volume
+    print("  volume set to \(session.volume), told to the receiver as "
+          + String(format: "%.1f dB", volume <= 0 ? -144 : Double(volume) * 30 - 30))
 
     let samplesPerChunk = 4096 * AirPlaySession.channelCount
     let bytesPerChunk = samplesPerChunk * MemoryLayout<Int16>.size
@@ -544,7 +563,7 @@ struct Demo {
                                Demo pair <host> [port]          pair only, and say what came out
                                Demo swift <host> [port] [secs]  play through the Swift sender
                                Demo play <host> [port] [seconds]
-                               Demo wave <path> <host> [port]   16 bit stereo at 44100
+                               Demo wave <path> <host> [port] [volume]   16 bit stereo at 44100
                         """
 
             // Only where AVFoundation is, because it does the conversion.
@@ -579,9 +598,10 @@ struct Demo {
 
         case "wave" where arguments.count > 3:
             let port = UInt16(arguments.count > 4 ? arguments[4] : "7000") ?? 7000
+            let volume = Float(arguments.count > 5 ? arguments[5] : "0.2") ?? 0.2
             do {
                 print("playing \(arguments[2]) on \(arguments[3]):\(port)")
-                try streamWave(at: arguments[2], to: arguments[3], port: port)
+                try streamWave(at: arguments[2], to: arguments[3], port: port, volume: volume)
                 print("done")
             } catch {
                 FileHandle.standardError.write(Data("\(error)\n".utf8))

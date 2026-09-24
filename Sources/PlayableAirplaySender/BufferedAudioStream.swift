@@ -55,10 +55,34 @@ public final class BufferedAudioStream {
         close()
     }
 
-    /// Closes the connection.
+    /**
+     Wakes whoever is writing, without releasing the connection.
+
+     A receiver whose buffer is full stops reading and the write waits in the
+     socket, which is the designed behaviour rather than a fault, so a sender
+     that wants to stop has to bring that write back before it can wait for the
+     thread that is in it.
+     */
+    public func stop() {
+        connection.stop()
+    }
+
+    /// Closes the connection, once nothing is inside a call on it.
     public func close() {
         connection.close()
     }
+
+    /**
+     Where the next block will sit on the stream's timeline.
+
+     What a fresh anchor names, because an anchor ties a position in the audio
+     to an instant on a clock and this is the position the next block will
+     carry.
+
+     Read on the thread that writes, which is the one that moves it, so there is
+     nothing here to synchronise.
+     */
+    public var nextTimestamp: UInt32 { timestamp }
 
     /**
      Sends one packet's worth of samples.

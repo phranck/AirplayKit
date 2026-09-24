@@ -125,7 +125,13 @@ public enum HomeKitTLV {
 
             // A value that was split across several items is put back together,
             // which is what makes the split invisible to whoever reads this.
-            if let last = items.last, last.type == type, last.value.count % maximumItemLength == 0 {
+            //
+            // A split is recognised by the item before it having been filled to
+            // the length byte's limit, because that is the only reason a writer
+            // would have started another. An empty item satisfies the remainder
+            // as well and is not one: it is a whole item that says nothing, and
+            // joining it to what follows would lose it.
+            if let last = items.last, last.type == type, Self.continues(after: last.value) {
                 items[items.count - 1] = HomeKitTLVItem(type: type, value: last.value + value)
             }
             else {
@@ -136,6 +142,21 @@ public enum HomeKitTLV {
         }
 
         return items
+    }
+
+    /**
+     Whether an item of this size is one a writer would have carried on from.
+
+     A writer starts another item only because the length byte ran out, so a
+     value that filled it exactly is the one case where more of the same type
+     belongs to it. Everything shorter is a whole item, and that includes an
+     item of no length at all, which is what a separator or a repeated empty
+     field is in this encoding.
+
+     @param value What the item before this one held, after any earlier joining.
+     */
+    static func continues(after value: Data) -> Bool {
+        !value.isEmpty && value.count % maximumItemLength == 0
     }
 }
 

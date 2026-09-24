@@ -60,12 +60,28 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     /// worth ignoring where it is not, rather than something to branch on.
     public let model: String
 
+    /// Who built it, such as `Sonos`, or an empty string where it said nothing.
+    ///
+    /// The other half of a product name. With ``model`` it reads as "Sonos One"
+    /// without asking the device anything, which is what `productName` does.
+    ///
+    /// Empty for Apple's receivers, which publish no such field, and that is
+    /// what tells the two cases apart without a table of identifiers. That
+    /// reading holds once ``isFullyDescribed`` is true, and until then an empty
+    /// value means nobody has said yet.
+    ///
+    /// The brand on the box is not always this. A SYMFONISK Bookshelf says
+    /// `Sonos` here, because Sonos builds it, and only its own UPnP description
+    /// says SYMFONISK.
+    public let manufacturer: String
+
     /// Which group of receivers this one says it belongs to, or an empty string
     /// where it said nothing.
     ///
     /// Only the AirPlay service publishes this, and the audio service publishes
     /// nothing like it, so it is empty for a receiver found through the older
-    /// service alone. Empty means unknown rather than alone.
+    /// service alone. Empty means unknown rather than alone, and
+    /// ``isFullyDescribed`` says which of the two an empty value is.
     ///
     /// ```swift
     /// let sharing = receivers.filter {
@@ -96,6 +112,27 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     /// speaks the older protocol, which used an RSA challenge instead, and
     /// opening a session with it fails rather than falling back.
     public let supportsAirPlay2: Bool
+
+    /// Whether the service carrying the whole description has been seen.
+    ///
+    /// A receiver announces itself twice, and only the AirPlay service publishes
+    /// ``manufacturer`` and ``groupID``. One reported from the audio service
+    /// alone therefore arrives with both empty, and this says that is what
+    /// happened rather than that the receiver published nothing.
+    ///
+    /// The difference is the whole of it: an empty manufacturer is what says a
+    /// receiver is Apple's, so a Sonos seen over the audio service alone reads
+    /// as "One" whilst the same speaker a moment later reads as "Sonos One".
+    /// This says which of the two answers is in hand.
+    ///
+    /// **It does not promise the rest is coming.** Measured on one network on
+    /// 2026-09-24: five Sonos published both services, and one run of thirty
+    /// callbacks carried no AirPlay sighting at all whilst the next run of the
+    /// same binary carried them for every speaker. So a caller that holds a
+    /// receiver back until this is true can hold it back for ever. What it is
+    /// for is to show a name as provisional, or to ask the speaker itself
+    /// through `PlayableAirplayUPnP`, rather than to wait.
+    public let isFullyDescribed: Bool
 
     /// Whether a sender currently holds a session with it.
     ///
@@ -357,10 +394,14 @@ public final class AirPlaySession {
     }
 
     /// The audio a session takes. Fixed, because this is what AirPlay carries.
-    public static let sampleRate = Int(PA_SAMPLE_RATE)
+    ///
+    /// From the same place the wire format takes it. It used to come from the C
+    /// macro instead, so the number a caller was told and the number that went
+    /// into the stream were two declarations of one fact.
+    public static let sampleRate = ALACFrame.sampleRate
 
     /// How many channels a frame holds, interleaved.
-    public static let channelCount = Int(PA_CHANNELS)
+    public static let channelCount = ALACFrame.channelCount
 
     /// Whether the receiver is still taking audio.
     public var isRunning: Bool { heldSender()?.isRunning ?? false }
@@ -413,6 +454,16 @@ public final class AirPlaySession {
     private let state = NSLock()
     private var sender: AirPlaySender?
     private var sentVolume: Float = 1
+
+    /**
+     What the session had recorded when it was closed.
+
+     Kept because the figures exist to explain a session after the fact, and
+     after the fact is exactly when the sender that holds them has gone. Without
+     it a caller that stops playback and then asks how the session went is told
+     that nothing happened.
+     */
+    private var lastUnderruns = AirPlaySender.Underruns.none
 
     /// The sender, taken under the lock and used outside it.
     private func heldSender() -> AirPlaySender? {
@@ -495,11 +546,73 @@ public extension AirPlaySession {
         guard frameCount > 0 else { return .taken }
         guard let sender = heldSender() else { return .ended }
 
-        switch sender.write(Array(samples.prefix(frameCount * Self.channelCount))) {
+        // Rebased rather than copied, so what reaches the buffer underneath is
+        // the caller's own memory and nothing is allocated on a thread that
+        // cannot afford it.
+        let wholeFrames = UnsafeBufferPointer(rebasing: samples.prefix(frameCount * Self.channelCount))
+
+        switch sender.write(wholeFrames) {
         case .taken: return .taken
         case .bufferFull: return .bufferFull
         case .ended: return .ended
         }
+    }
+
+    /// Throws away the audio this session is holding and has not sent.
+    ///
+    /// For a caller that changes source, such as one podcast to the next. Without
+    /// this the old source's tail goes on leaving at real time whilst the new one
+    /// has not started, and a source trickling to a stop leaves the buffer
+    /// repeatedly almost empty, so what is heard is crackle rather than an ending.
+    ///
+    /// Afterwards the session sends silence, which is quiet, until the new source
+    /// produces. The session stays up, so nothing is paired again.
+    ///
+    /// What it cannot do is take back what the receiver already has. A couple of
+    /// seconds of audio is already at the speaker, so the cut is heard about that
+    /// much later.
+    ///
+    /// - Returns: How many frames were thrown away.
+    @discardableResult
+    func discardHeldAudio() -> Int {
+        heldSender()?.discardHeldAudio() ?? 0
+    }
+
+    /// How many frames are waiting to be sent.
+    ///
+    /// How far ahead of the speaker the source has run, which is the latency a
+    /// listener would notice on a change of source. Nought on a closed session.
+    var heldFrames: Int {
+        heldSender()?.heldFrames ?? 0
+    }
+
+    /// What the session has had to make up because the source did not keep up.
+    ///
+    /// A hole in the audio is heard as crackle rather than as a gap, so it gets
+    /// blamed on the speaker or the network. Nothing else reports it: a caller
+    /// whose writes are never refused concludes its audio arrived whole, and it
+    /// did, just not in time.
+    ///
+    /// Counted from the start of the session and never reset, so two readings a
+    /// few seconds apart say what happened in between. Closing the session does
+    /// not reset it either: the last reading stands afterwards, because asking
+    /// how a session went is something a caller does once it has stopped.
+    ///
+    /// `fellBehind` is the one to watch, and it means something worse than the
+    /// other two. A hole in the audio is a hole; that one says the whole stream
+    /// slipped past the moment the receiver was promised, which it answers by
+    /// discarding audio that is already late. The session stays connected and
+    /// keeps taking frames whilst the speaker is silent, so nothing else about
+    /// it looks wrong.
+    var underruns: AirPlaySender.Underruns {
+        guard let held = heldSender() else {
+            state.lock()
+            defer { state.unlock() }
+
+            return lastUnderruns
+        }
+
+        return held.underruns
     }
 
     /// Ends the session.
@@ -509,14 +622,33 @@ public extension AirPlaySession {
     /// It does not wait for what is still in the buffer, so a caller that has
     /// just written the end of a file and closes at once cuts off whatever had
     /// not gone out yet.
+    ///
+    /// ``underruns`` goes on answering afterwards, with what the session had
+    /// recorded when it stopped.
     func close() {
+        // Read before the reference is put down, and written in the same
+        // moment it is, so nothing reading this sees the session as having
+        // recorded nothing.
+        let held = heldSender()
+        let recorded = held?.underruns
+
         state.lock()
-        let held = sender
+        if let recorded { lastUnderruns = recorded }
         sender = nil
         state.unlock()
 
         // Outside the lock, because closing waits for the sending thread.
         held?.close()
+
+        // Again once it has stopped, because the pump can pad another packet
+        // or two whilst it is being waited for, and those belong in the total.
+        if let held {
+            let afterStopping = held.underruns
+
+            state.lock()
+            lastUnderruns = afterStopping
+            state.unlock()
+        }
     }
 }
 
@@ -549,8 +681,10 @@ private extension AirPlayReceiver {
                   host: Self.string(from: receiver.host, capacity: Int(PA_MAX_HOST)),
                   port: receiver.port,
                   model: Self.string(from: receiver.model, capacity: Int(PA_MAX_MODEL)),
+                  manufacturer: Self.string(from: receiver.manufacturer, capacity: Int(PA_MAX_MODEL)),
                   groupID: Self.string(from: receiver.groupID, capacity: Int(PA_MAX_GROUP)),
                   supportsAirPlay2: receiver.supportsAirPlay2,
+                  isFullyDescribed: receiver.isFullyDescribed,
                   hasSender: receiver.hasSender,
                   isPlaying: receiver.isPlaying)
     }

@@ -85,9 +85,56 @@ public func pa_session_write(_ session: UnsafeMutableRawPointer?,
     guard let session, let frames, frameCount > 0 else { return false }
 
     let held = Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue()
-    let samples = Array(UnsafeBufferPointer(start: frames, count: frameCount * ALACFrame.channelCount))
+
+    // The caller's own memory, handed on as it is. C hands audio over from
+    // whatever produced it, which is as likely to be a callback with a deadline
+    // as anything in Swift, and an array made here would be a heap allocation
+    // on that thread.
+    let samples = UnsafeBufferPointer(start: frames, count: frameCount * ALACFrame.channelCount)
 
     return held.sender.write(samples) == .taken
+}
+
+@_cdecl("pa_session_discard_held_audio")
+public func pa_session_discard_held_audio(_ session: UnsafeMutableRawPointer?) -> Int {
+    guard let session else { return 0 }
+
+    return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.discardHeldAudio()
+}
+
+@_cdecl("pa_session_held_frames")
+public func pa_session_held_frames(_ session: UnsafeMutableRawPointer?) -> Int {
+    guard let session else { return 0 }
+
+    return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.heldFrames
+}
+
+@_cdecl("pa_session_invented_packets")
+public func pa_session_invented_packets(_ session: UnsafeMutableRawPointer?) -> Int {
+    guard let session else { return 0 }
+
+    return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.packets
+}
+
+@_cdecl("pa_session_invented_seconds")
+public func pa_session_invented_seconds(_ session: UnsafeMutableRawPointer?) -> Double {
+    guard let session else { return 0 }
+
+    return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.duration
+}
+
+@_cdecl("pa_session_fell_behind")
+public func pa_session_fell_behind(_ session: UnsafeMutableRawPointer?) -> Int {
+    guard let session else { return 0 }
+
+    return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.fellBehind
+}
+
+@_cdecl("pa_session_waited_seconds")
+public func pa_session_waited_seconds(_ session: UnsafeMutableRawPointer?) -> Double {
+    guard let session else { return 0 }
+
+    return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.waited
 }
 
 @_cdecl("pa_session_is_running")
@@ -106,12 +153,41 @@ public func pa_session_set_volume(_ session: UnsafeMutableRawPointer?, _ volume:
     try? Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.setVolume(volume)
 }
 
+/**
+ What a session did, laid out as `PASessionReport` in the header.
+
+ The order and the types are the header's, because C reads these by offset. The
+ layout is checked against the header by `SessionReportTests`, since a field
+ added to one and not the other is read as the wrong bytes rather than reported.
+ */
+private struct CSessionReport {
+    var inventedPackets: Int
+    var inventedSeconds: Double
+    var waitedSeconds: Double
+    var fellBehind: Int
+}
+
 @_cdecl("pa_session_close")
-public func pa_session_close(_ session: UnsafeMutableRawPointer?) {
+public func pa_session_close(_ session: UnsafeMutableRawPointer?,
+                             _ report: UnsafeMutableRawPointer?) {
     guard let session else { return }
 
     let held = Unmanaged<CSession>.fromOpaque(session).takeRetainedValue()
     held.sender.close()
+
+    // Written after closing, so it carries whatever the pump padded whilst it
+    // was being waited for, and written here because this is the last moment
+    // the figures exist. The pointer C holds is released as this returns, so
+    // asking afterwards is a read of memory that has gone, which is why the
+    // answer is handed over rather than left to be fetched.
+    guard let report else { return }
+
+    let tally = held.sender.underruns
+    report.assumingMemoryBound(to: CSessionReport.self).pointee =
+        CSessionReport(inventedPackets: tally.packets,
+                       inventedSeconds: tally.duration,
+                       waitedSeconds: tally.waited,
+                       fellBehind: tally.fellBehind)
 }
 
 @_cdecl("pa_result_description")

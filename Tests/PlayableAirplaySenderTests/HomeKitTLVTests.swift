@@ -72,6 +72,49 @@ final class HomeKitTLVTests: XCTestCase {
         XCTAssertEqual(decoded?.value(for: .proof), second)
     }
 
+    // MARK: - An item of no length stands on its own
+
+    func testAnEmptyItemIsNotSwallowedByTheOneAfterIt() {
+        // Nought satisfies the remainder that says "carry on from here" as
+        // readily as 255 does, and it means the opposite. An item of no length
+        // is a whole item, and joining it to the next one of the same type
+        // loses it entirely.
+        let encoded = Data([0x13, 0x00, 0x13, 0x02, 0xAA, 0xBB])
+
+        XCTAssertEqual(HomeKitTLV.decode(encoded), [
+            HomeKitTLVItem(.flags, Data()),
+            HomeKitTLVItem(.flags, Data([0xAA, 0xBB])),
+        ])
+    }
+
+    func testTwoEmptyItemsOfOneTypeStayTwoItems() {
+        // What a separator looks like, and the reason an empty item exists in
+        // this encoding at all.
+        let encoded = Data([0x13, 0x00, 0x13, 0x00])
+
+        XCTAssertEqual(HomeKitTLV.decode(encoded)?.count, 2)
+    }
+
+    func testAnEmptyItemDoesNotTakeTheValueOfADifferentTypeEither() {
+        let encoded = Data([0x13, 0x00, 0x06, 0x01, 0x01])
+
+        XCTAssertEqual(HomeKitTLV.decode(encoded), [
+            HomeKitTLVItem(.flags, Data()),
+            HomeKitTLVItem(.state, Data([0x01])),
+        ])
+    }
+
+    func testAFilledItemIsStillCarriedOnFrom() {
+        // The other half of the same decision, which the guard must not break:
+        // an item filled to the limit is exactly the one that continues.
+        XCTAssertTrue(HomeKitTLV.continues(after: Data(repeating: 0x01, count: 255)))
+        XCTAssertTrue(HomeKitTLV.continues(after: Data(repeating: 0x01, count: 510)))
+
+        XCTAssertFalse(HomeKitTLV.continues(after: Data()))
+        XCTAssertFalse(HomeKitTLV.continues(after: Data(repeating: 0x01, count: 254)))
+        XCTAssertFalse(HomeKitTLV.continues(after: Data(repeating: 0x01, count: 256)))
+    }
+
     // MARK: - Several items
 
     func testItemsKeepTheOrderTheyWereGivenIn() {

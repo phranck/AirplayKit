@@ -44,7 +44,7 @@ public struct SonosClient: Sendable {
     /// this long means it is asleep or gone rather than busy.
     public let timeout: TimeInterval
 
-    private let session: URLSession
+    private let connection: SonosConnection
 
     /// Points at one speaker. Nothing is asked until something is asked for.
     ///
@@ -62,7 +62,70 @@ public struct SonosClient: Sendable {
         // These answers describe this instant, so one that was cached is worse
         // than no answer at all.
         configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        self.session = URLSession(configuration: configuration)
+        self.connection = SonosConnection(configuration: configuration, host: host)
+    }
+}
+
+// MARK: - Where a request may end up
+
+/**
+ Refuses a redirect that would take a request off the speaker it was addressed
+ to.
+
+ `SonosClient.address(of:)` settles where a request goes before it is made, and
+ `URLSession` follows a redirect by default, so a speaker answering `302` with a
+ `Location` elsewhere moves the destination after that check has passed. The host
+ arrives in a Bonjour record that anything on the network can publish and the
+ answer comes from whatever is at that address, so neither is this package's to
+ trust.
+
+ A hop to the same host is allowed, because a speaker that redirects within
+ itself goes on working and nothing measured says none does. Anything else is
+ answered with nil, which hands the caller the redirect itself rather than what
+ it pointed at, and `send` reports that as `SonosError.refused(status:)`.
+
+ The host is the whole of the comparison. A speaker moving a request to another
+ port of its own is still that speaker answering for itself, and what this exists
+ to stop is a request leaving it.
+ */
+private final class SonosDestination: NSObject, URLSessionTaskDelegate {
+    /// The only host a request from this client may reach.
+    private let host: String
+
+    init(host: String) {
+        self.host = host
+        super.init()
+    }
+
+    func urlSession(_ session: URLSession,
+                    task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(request.url?.host == host ? request : nil)
+    }
+}
+
+/**
+ One speaker's session, together with the policy that decides where it may send.
+
+ A class because a session holding a delegate keeps that delegate until the
+ session is invalidated, and a struct has no moment at which to do it. The last
+ copy of a client to go releases this, and letting the session finish what it is
+ carrying is what releases the policy with it.
+ */
+private final class SonosConnection: Sendable {
+    /// What every request of this client goes through.
+    let session: URLSession
+
+    init(configuration: URLSessionConfiguration, host: String) {
+        session = URLSession(configuration: configuration,
+                             delegate: SonosDestination(host: host),
+                             delegateQueue: nil)
+    }
+
+    deinit {
+        session.finishTasksAndInvalidate()
     }
 }
 
@@ -100,9 +163,15 @@ public extension SonosClient {
     ///
     /// The picture is a plain HTTP request to the same host, so it needs nothing
     /// shipped with an application and stays right when a model is replaced.
+    ///
+    /// This hands back an address and fetches nothing, so the request is the
+    /// caller's and so is what happens when the speaker answers it with a
+    /// redirect. A caller that will not leave this host for a picture says so on
+    /// its own session, the way this client does on its.
     func iconURL(for device: SonosDevice) -> URL? {
         guard let path = device.iconPath else { return nil }
-        return URL(string: "http://\(host):\(port)\(path)")
+
+        return address(of: path)
     }
 }
 
@@ -177,6 +246,51 @@ public extension SonosClient {
     }
 }
 
+// MARK: - Where a request goes
+
+extension SonosClient {
+    /**
+     The address of one path on this speaker, or nil where the two do not make
+     one.
+
+     Built out of components rather than written into a string, because neither
+     half is this package's to trust. The host arrives in a Bonjour record that
+     anything on the network can publish, and a path can arrive in the speaker's
+     own description, which is a third party's answer. A host carrying a slash or
+     an at sign, or a path carrying a scheme, written into a string sends the
+     request somewhere other than the speaker, and nothing about the result would
+     look wrong.
+
+     `URLComponents` knows the grammar and either escapes what it is given or
+     refuses to make a URL at all, so whatever comes back addresses this speaker
+     and this port or is nothing.
+
+     This settles the first destination and only the first. A speaker answering
+     with a redirect names the next one itself, which is why the session carries
+     `SonosDestination` and reads every hop against the same host.
+
+     - Parameter path: What to ask for, beginning with a slash.
+     - Returns: The address, or nil where the host or the path cannot be part of
+       one.
+     */
+    func address(of path: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = host
+        components.port = port
+        components.path = path
+
+        guard let url = components.url else { return nil }
+
+        // Read back rather than trusted. Escaping is only half of the guarantee
+        // that matters here, and the half that matters is that the request goes
+        // to the speaker that was named. Anything else is refused outright.
+        guard url.host == host else { return nil }
+
+        return url
+    }
+}
+
 // MARK: - Speaking UPnP
 
 private extension SonosClient {
@@ -207,7 +321,7 @@ private extension SonosClient {
 
     /// Calls one action and hands back the answer as it arrived.
     func call(service: Service, action: String, arguments: String) async throws -> Data {
-        guard let url = URL(string: "http://\(host):\(port)\(service.path)") else {
+        guard let url = address(of: service.path) else {
             throw SonosError.unreachable
         }
 
@@ -231,7 +345,7 @@ private extension SonosClient {
 
     /// Fetches one document, with no SOAP around it.
     func get(path: String) async throws -> Data {
-        guard let url = URL(string: "http://\(host):\(port)\(path)") else {
+        guard let url = address(of: path) else {
             throw SonosError.unreachable
         }
 
@@ -248,7 +362,7 @@ private extension SonosClient {
     /// package builds against and a continuation is offered by all of them.
     func send(_ request: URLRequest) async throws -> Data {
         try await withCheckedThrowingContinuation { continuation in
-            let task = session.dataTask(with: request) { data, response, error in
+            let task = connection.session.dataTask(with: request) { data, response, error in
                 if error != nil {
                     continuation.resume(throwing: SonosError.unreachable)
                     return

@@ -107,7 +107,7 @@ case .ended:
 
 Writing never waits, because the thread producing live audio must not. `.bufferFull` is therefore back pressure rather than a failure, and it says the four seconds the sender holds are not yet spent. `.ended` is the receiver having hung up, and the answer to it is to close the session.
 
-In an audio callback the samples usually arrive as a pointer already, and there is a `write` for that which copies nothing on the way in.
+In an audio callback the samples usually arrive as a pointer already, and there is a `write` for that. It copies them once, from where they are into the session's buffer, and allocates nothing on the way.
 
 ## The example
 
@@ -122,6 +122,14 @@ swift run Demo file ~/Music/track.m4a speaker.local
 
 `list` browses for five seconds and prints what it found. `play` opens a session and sends a quiet 440 Hz tone. `wave` plays a WAVE file that is already 16 bit stereo at 44100, using nothing but Foundation, so it runs wherever the library does. `file` takes any format the system can read and converts it, which is AVFoundation's work and therefore Apple's platforms only.
 
+## The toolchain
+
+The package is built and tested with Swift 6.2.4, and `.swift-version` is where that version is written down. Both CI runners are pinned to it: the macOS one builds with Xcode 26.3, whose compiler reports 6.2.4 on that runner, and the Linux one runs in the `swift:6.2.4` image, which `Scripts/check-linux.sh` builds from as well.
+
+The pin is there because the compilers disagree about what they accept. Swift 6.1.2 aborts on a call into an `@_cdecl` function from a test target that also imports the C header, and later versions compile it without a word, so a gate run on another compiler promises less than it looks like it promises.
+
+A local run means what a CI run means when it uses the same compiler, which is the toolchain of that version from [swift.org](https://www.swift.org/install/) or an Xcode carrying it. [swiftly](https://github.com/swiftlang/swiftly) picks it from `.swift-version` without being told. Where the two differ, `Scripts/build-and-test.sh` says which compiler it ran on and which one CI will use.
+
 ## Tests
 
 ```bash
@@ -130,7 +138,9 @@ swift test
 
 They cover what can be checked without a receiver on the network: the parsing of a Bonjour instance name into an address and a name, what the session and the discovery do when they are handed nothing usable, and that every failure says what it means. Whether a particular speaker accepts a pairing is not something a test can settle, and the example is how that gets answered.
 
-`Scripts/build-and-test.sh` is the whole gate, and `Scripts/check-linux.sh` runs that same script inside the Swift image CI uses, so Linux is checked here before anything is pushed.
+`Scripts/build-and-test.sh` is the whole gate, and `Scripts/check-linux.sh` compiles the package inside the same Swift image CI uses, so Linux is checked here before anything is pushed. That check compiles rather than tests, because the test process deadlocks inside the container on this machine, which is #25. CI runs the tests on Linux.
+
+`Scripts/check-callers.sh` builds the application that takes this package by a local path, which is how a change to `PlayableAirplay.h` reaches a caller before any release does. Run it before pushing anything that touches that header. On a machine without that application it says so and passes, and it cannot run in CI, because the runner has no copy of it.
 
 ## What it rests on
 
