@@ -4,9 +4,14 @@
 # Built once and reused, because `apt-get update` in every run costs most of a
 # minute and answers the same thing every time.
 #
+# The version comes from .swift-version, which Scripts/check-linux.sh reads and
+# passes in, so the file at the root of the repository is the only place the
+# pinned toolchain is named on this side.
+#
 # Copyright © 2026 LAYERED. All rights reserved.
 
-FROM swift:6.2
+ARG SWIFT_VERSION
+FROM swift:${SWIFT_VERSION}
 
 # dns_sd.h ships with macOS. On Linux it comes from Avahi's compatibility
 # package, which is the same header and the same calls.
