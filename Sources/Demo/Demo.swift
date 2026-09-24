@@ -260,7 +260,11 @@ func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 
         // instant of sending, everything arrives after its own moment and a
         // receiver drops audio that is already late.
         let lead = 2.0
-        let time = PTPClock.now(from: reading, ahead: lead)
+        guard let time = PTPClock.now(from: reading, ahead: lead) else {
+            print("  its clock reads a time no anchor can carry, so there is nothing to anchor to")
+            return 1
+        }
+
         print(String(format: "  its clock is %016llx, reading %lld s", reading.identity, time.seconds))
 
         do {
