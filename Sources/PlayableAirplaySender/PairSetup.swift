@@ -90,8 +90,39 @@ public struct PairSetup {
         HomeKitTLV.encode([
             HomeKitTLVItem(.state, Data([0x01])),
             HomeKitTLVItem(.method, Data([Self.pairSetupMethod])),
-            HomeKitTLVItem(.flags, Data([UInt8(Self.transientFlag)])),
+            HomeKitTLVItem(.flags, Self.flagsValue(Self.transientFlag)),
         ])
+    }
+
+    /**
+     A flags value as the field carries it, little-endian and no longer than it
+     needs to be.
+
+     Apple's own parser takes any length up to four bytes and refuses only what
+     is longer, and it reads what it takes little-endian. So the shortest form
+     that holds the value is a legal one, and for the transient flag that is the
+     single byte this has always sent.
+
+     Written out rather than converted. `UInt8(_:)` on a `UInt32` ends the
+     process for anything above 0xFF, so the next flag this ever needs would
+     have taken the application down rather than failing, and it would have gone
+     on the wire as the wrong number in any case.
+
+     @param flags The value to carry.
+     @returns One to four bytes, least significant first.
+     */
+    static func flagsValue(_ flags: UInt32) -> Data {
+        var bytes = Data()
+        var remaining = flags
+
+        // At least one byte. A field of no length is not the same thing as a
+        // field carrying nought, and this has to be able to say the second.
+        repeat {
+            bytes.append(UInt8(remaining & 0xFF))
+            remaining >>= 8
+        } while remaining != 0
+
+        return bytes
     }
 
     /**

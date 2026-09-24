@@ -48,6 +48,50 @@ final class PairSetupTests: XCTestCase {
         XCTAssertEqual(items?.value(for: .flags), Data([0x10]))
     }
 
+    func testTheFirstMessageIsTheSameBytesItHasAlwaysBeen() {
+        // Byte for byte, because this is what a receiver reads and it is
+        // measured to work. Anything that changes it changes the protocol.
+        XCTAssertEqual(PairSetup().start(),
+                       Data([0x06, 0x01, 0x01,
+                             0x00, 0x01, 0x00,
+                             0x13, 0x01, 0x10]))
+    }
+
+    // MARK: - The flags field
+
+    func testTheTransientFlagIsOneByteAndStaysOne() {
+        // Apple's parser refuses a flags value longer than four bytes and takes
+        // anything shorter, so the shortest form that holds the value is legal.
+        // One byte is also what a working sender was read sending.
+        XCTAssertEqual(PairSetup.flagsValue(PairSetup.transientFlag), Data([0x10]))
+    }
+
+    func testAFlagTooLargeForAByteIsCarriedRatherThanTrapped() {
+        // The hazard: converting a UInt32 to a UInt8 ends the process above
+        // 0xFF, so the next flag this ever needs would have taken the
+        // application down instead of failing.
+        XCTAssertEqual(PairSetup.flagsValue(0x100), Data([0x00, 0x01]))
+        XCTAssertEqual(PairSetup.flagsValue(0x1234_5678), Data([0x78, 0x56, 0x34, 0x12]))
+        XCTAssertEqual(PairSetup.flagsValue(UInt32.max), Data([0xFF, 0xFF, 0xFF, 0xFF]))
+    }
+
+    func testAFlagsValueOfNoughtIsStillAByte() {
+        // A field of no length is not the same thing as a field carrying
+        // nought, and the encoding has to be able to say the second.
+        XCTAssertEqual(PairSetup.flagsValue(0), Data([0x00]))
+    }
+
+    func testEveryFlagsValueFitsWhatTheFieldAccepts() {
+        // Four bytes is the most Apple's parser takes, so nothing this produces
+        // may be longer than that.
+        for flags in [UInt32(0), 1, 0x10, 0xFF, 0x100, 0xFFFF, 0x1_0000, UInt32.max] {
+            let value = PairSetup.flagsValue(flags)
+
+            XCTAssertGreaterThanOrEqual(value.count, 1, "\(flags)")
+            XCTAssertLessThanOrEqual(value.count, 4, "\(flags)")
+        }
+    }
+
     // MARK: - The whole exchange, against a recorded receiver
 
     func testTheThirdMessageCarriesThePublicValueAndTheProof() throws {
