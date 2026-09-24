@@ -70,7 +70,12 @@ public final class ReceiverConnection {
         connection.close()
     }
 
-    /// Closes the connection.
+    /// Wakes whatever is blocked on the connection, without releasing it.
+    public func stop() {
+        connection.stop()
+    }
+
+    /// Closes the connection, once nothing is inside a call on it.
     public func close() {
         connection.close()
     }

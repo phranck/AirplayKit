@@ -55,7 +55,19 @@ public final class BufferedAudioStream {
         close()
     }
 
-    /// Closes the connection.
+    /**
+     Wakes whoever is writing, without releasing the connection.
+
+     A receiver whose buffer is full stops reading and the write waits in the
+     socket, which is the designed behaviour rather than a fault, so a sender
+     that wants to stop has to bring that write back before it can wait for the
+     thread that is in it.
+     */
+    public func stop() {
+        connection.stop()
+    }
+
+    /// Closes the connection, once nothing is inside a call on it.
     public func close() {
         connection.close()
     }

@@ -237,11 +237,24 @@ public final class AirPlaySender {
     /**
      Ends the session and closes everything it opened.
 
-     Waits for the sending thread to stop before closing anything. Closing a
-     socket whilst another thread is inside a call on it is a use after free in
-     slow motion: the descriptor number is reused by whatever opens next, and
-     the write lands in somebody else's connection. So the flag goes down, the
-     thread is joined, and only then do the sockets close.
+     Closing a socket whilst another thread is inside a call on it is a use
+     after free in slow motion: the descriptor number is handed to whatever
+     opens next, and the write the thread was part way through lands in
+     somebody else's file. It is silent, and it is not a crash.
+
+     Clearing the flag is not enough to prevent it. The pump's ordinary
+     blocking point is the write itself, and a receiver whose buffer is full
+     simply stops reading, so sitting in `send` for tens of seconds is the
+     designed behaviour rather than a fault. The flag is only looked at between
+     packets.
+
+     So the socket is shut down first, which brings that write back at once
+     with a failure, and only then is the thread waited for and the descriptor
+     released.
+
+     The wait is bounded by ``pumpExitTimeout``. Where it runs out the sockets
+     are left open and leak rather than being reused underneath a thread still
+     inside them, which is the lesser of the two.
 
      Calling it twice is allowed, and releasing the session does it anyway.
      */
@@ -251,18 +264,30 @@ public final class AirPlaySender {
         open = false
         lock.unlock()
 
+        // Before the wait rather than after it, because the wait is for a
+        // thread that is in the socket and this is what gets it out.
+        audio.stop()
+
         // Not from the pump itself, which would wait for its own exit. The pump
         // clears the flag and returns when the connection fails under it.
+        var pumpLeft = true
         if let pump, !pump.isFinished, Thread.current !== pump {
             let deadline = Date().addingTimeInterval(Self.pumpExitTimeout)
             while !pump.isFinished, Date() < deadline {
                 Thread.sleep(forTimeInterval: 0.002)
             }
+
+            pumpLeft = pump.isFinished
         }
         pump = nil
 
-        audio.close()
+        // Leaked on purpose where the pump is still in there. A descriptor
+        // nobody reuses costs one entry in a table; one reused underneath a
+        // live write costs somebody else's data.
+        if pumpLeft { audio.close() }
+
         events.close()
+        connection.stop()
         connection.close()
         ring.clear()
     }
