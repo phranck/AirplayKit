@@ -47,6 +47,9 @@ public enum DeviceAppearance {
     /**
      What kind of thing this is.
 
+     The one place the question is answered. Naming and drawing both come
+     through here, so a device cannot be called one thing and drawn as another.
+
      - Parameters:
        - manufacturer: What it published, or empty for Apple's.
        - model: Its model or identifier.
@@ -54,16 +57,16 @@ public enum DeviceAppearance {
     public static func kind(manufacturer: String, model: String) -> DeviceKind {
         guard manufacturer.isEmpty else { return .speaker }
 
-        // Apple's own families. The part before the comma is the family and the
-        // part after it is the generation, and only the family is needed here.
-        if model.hasPrefix("AudioAccessory") {
-            return isMini(model) ? .homePodMini : .homePod
+        // The name first, where the package carries one. A name says the family
+        // outright, and an identifier says it only where Apple happened to write
+        // it in. Plenty do not: `ADP3,2` is a Mac, `B520AP` is a HomePod mini,
+        // `J305AP` is an Apple TV and `PowerMac6,1` is an iMac, and not one of
+        // those four spells any of it.
+        if let known = DeviceModelNames.name(for: model), let family = kind(named: known) {
+            return family
         }
 
-        if model.hasPrefix("AppleTV") { return .appleTV }
-        if model.hasPrefix("Mac") || model.hasPrefix("iMac") { return .mac }
-
-        return .unknown
+        return kind(identifiedBy: model)
     }
 
     /**
@@ -129,6 +132,40 @@ public enum DeviceAppearance {
 
     // MARK: - Working it out
 
+    /**
+     The family a product name says, or nil where it says nothing.
+
+     What a person would read off the name, which is the better evidence of the
+     two: Apple's names carry the family and its identifiers frequently do not.
+
+     - Parameter name: A product name, such as "Apple TV 4K" or "iMac G5".
+     */
+    static func kind(named name: String) -> DeviceKind? {
+        // A remote is not the thing it works, and it is the only name beginning
+        // with "Apple TV" that is not one. There are two of them in the table.
+        if name.hasPrefix("Apple TV") { return name.contains("Remote") ? nil : .appleTV }
+        if name.hasPrefix("HomePod") { return name.contains("mini") ? .homePodMini : .homePod }
+        if name.hasPrefix("Mac") || name.hasPrefix("iMac") { return .mac }
+
+        return nil
+    }
+
+    /**
+     The family an identifier says, for a model the table carries no name for.
+
+     The part before the comma is the family and the part after it is the
+     generation, and only the family is needed here.
+
+     - Parameter model: A model identifier, such as `AudioAccessory5,1`.
+     */
+    static func kind(identifiedBy model: String) -> DeviceKind {
+        if model.hasPrefix("AudioAccessory") { return isMini(model) ? .homePodMini : .homePod }
+        if model.hasPrefix("AppleTV") { return .appleTV }
+        if model.hasPrefix("Mac") || model.hasPrefix("iMac") { return .mac }
+
+        return .unknown
+    }
+
     /// Whether an `AudioAccessory` identifier names the mini.
     ///
     /// `AudioAccessory5,x` is the mini and the others are full sized, which was
@@ -146,11 +183,17 @@ public enum DeviceAppearance {
     /// after the comma is the only thing that separates a MacBook Air from a
     /// Mac mini.
     static func familyName(for model: String) -> String {
-        if model.hasPrefix("AudioAccessory") { return isMini(model) ? "HomePod mini" : "HomePod" }
-        if model.hasPrefix("AppleTV") { return "Apple TV" }
-        if model.hasPrefix("Mac") || model.hasPrefix("iMac") { return "Mac" }
+        switch kind(identifiedBy: model) {
+        case .homePod: return "HomePod"
+        case .homePodMini: return "HomePod mini"
+        case .appleTV: return "Apple TV"
+        case .mac: return "Mac"
 
-        return model
+        // Nothing in the identifier says what it is, so the identifier is all
+        // there is to show. A speaker never reaches here, because anything that
+        // published a manufacturer is named from that instead.
+        case .speaker, .unknown: return model
+        }
     }
 
     /// Which Mac symbol to draw, from the name rather than from the identifier.
@@ -163,9 +206,17 @@ public enum DeviceAppearance {
     /// Filled wherever a filled one exists. The two computers are the
     /// exception: the catalogue carries no `laptopcomputer.fill` and no
     /// `desktopcomputer.fill`, which was read out of it rather than assumed.
+    ///
+    /// The order of the tests is the whole of the correctness, because the
+    /// names overlap. An iMac Pro is an iMac rather than a Mac Pro and a
+    /// MacBook Pro is a MacBook, so both are answered before "Pro" is looked
+    /// for at all. The table spells the small one both ways, as "Mac mini" for
+    /// `Macmini9,1` and as "Mac Mini" for `Mac17,16`, so the case is not
+    /// relied on either.
     static func macSymbolName(for name: String) -> String {
         if name.contains("MacBook") { return "laptopcomputer" }
-        if name.contains("mini") { return "macmini.gen3.fill" }
+        if name.hasPrefix("iMac") { return "desktopcomputer" }
+        if name.lowercased().contains("mini") { return "macmini.gen3.fill" }
         if name.contains("Studio") { return "macstudio.fill" }
         if name.contains("Pro") { return "macpro.gen3.fill" }
 
