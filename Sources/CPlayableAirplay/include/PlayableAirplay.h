@@ -128,6 +128,10 @@ typedef struct PAReceiver {
      joining the two; one carrying none is Apple's, and its `model` is an
      identifier to be turned into a name.
 
+     That reading holds only where `isFullyDescribed` is true. Until then an
+     empty value means nobody has said yet, because the service that carries
+     this field has not been seen, and the two cases are not the same thing.
+
      The brand on the box is not always this. A SYMFONISK Bookshelf says Sonos
      here, because Sonos builds it, and only its UPnP description says SYMFONISK.
      */
@@ -137,7 +141,8 @@ typedef struct PAReceiver {
 
      Published on the AirPlay service and on no RAOP record, so this is empty
      for a receiver found only through the older service and for one that
-     announced nothing. Empty means unknown rather than alone.
+     announced nothing. Empty means unknown rather than alone, and
+     `isFullyDescribed` is what separates those two cases.
 
      Measured on one network of eight receivers. Every Sonos published its own
      `pi` value here. Apple's devices published a different value from their
@@ -153,6 +158,27 @@ typedef struct PAReceiver {
     uint16_t port;
     /** Whether it announced the AirPlay 2 pairing key. A receiver without one needs the older path. */
     bool supportsAirPlay2;
+    /**
+     Whether the service that carries the whole description has been seen.
+
+     A receiver is announced twice, and only the AirPlay service publishes
+     `manufacturer` and `gid`. A receiver reported from the RAOP service alone
+     therefore arrives with both empty, and false says that this is what
+     happened rather than that the device published nothing.
+
+     The difference matters because an empty `manufacturer` is what says a
+     receiver is Apple's. Whilst this is false it says nothing of the kind, and
+     a Sonos seen over the older service alone would otherwise be read as one of
+     Apple's, named `One` rather than `Sonos One`, and drawn accordingly.
+
+     It is not a promise that the rest is coming. Measured on one network on
+     2026-09-24: five Sonos published both services, and across thirty callbacks
+     in one run not a single AirPlay sighting arrived, whilst the next run of the
+     same binary had them all. So a caller that holds a receiver back until this
+     is true can hold it back for ever, and what this is for is to say which
+     answer it is being given rather than to promise a better one.
+     */
+    bool isFullyDescribed;
     /**
      Whether a sender currently holds a session with it.
 

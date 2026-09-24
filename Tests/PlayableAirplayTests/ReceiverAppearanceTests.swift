@@ -18,7 +18,9 @@ import XCTest
  */
 final class ReceiverAppearanceTests: XCTestCase {
 
-    private func receiver(model: String, manufacturer: String = "") -> AirPlayReceiver {
+    private func receiver(model: String,
+                          manufacturer: String = "",
+                          isFullyDescribed: Bool = true) -> AirPlayReceiver {
         AirPlayReceiver(id: "test",
                         name: "Room",
                         host: "test.local.",
@@ -27,8 +29,39 @@ final class ReceiverAppearanceTests: XCTestCase {
                         manufacturer: manufacturer,
                         groupID: "",
                         supportsAirPlay2: true,
+                        isFullyDescribed: isFullyDescribed,
                         hasSender: false,
                         isPlaying: false)
+    }
+
+    // MARK: - A receiver that is only half known
+
+    func testASpeakerSeenOverTheAudioServiceAloneIsNotTakenForApples() {
+        // What the RAOP record carries and nothing else: a product label, and no
+        // manufacturer, because that service publishes none. An empty
+        // manufacturer is what says a receiver is Apple's, so this is the case
+        // where that reading would be wrong.
+        let halfKnown = receiver(model: "One", isFullyDescribed: false)
+
+        XCTAssertFalse(halfKnown.isFullyDescribed)
+        XCTAssertEqual(halfKnown.kind, .unknown)
+        XCTAssertEqual(halfKnown.productName, "One")
+
+        // The same speaker once the AirPlay record has arrived.
+        let whole = receiver(model: "One", manufacturer: "Sonos")
+
+        XCTAssertEqual(whole.kind, .speaker)
+        XCTAssertEqual(whole.productName, "Sonos One")
+    }
+
+    func testApplesHardwareIsStillRecognisedWhilstOnlyHalfKnown() {
+        // Its identifier says what it is without any help from the other record,
+        // so holding the family back until that record arrives would give up a
+        // right answer to guard against one nobody has seen.
+        let halfKnown = receiver(model: "AudioAccessory5,1", isFullyDescribed: false)
+
+        XCTAssertEqual(halfKnown.kind, .homePodMini)
+        XCTAssertEqual(halfKnown.productName, "HomePod mini")
     }
 
     // MARK: - Telling the two cases apart
@@ -179,7 +212,8 @@ final class AppleDeviceTests: XCTestCase {
         for identifier in ["AudioAccessory5,1", "AudioAccessory1,1", "AppleTV11,1", "Mac16,12", "Macmini9,1"] {
             let receiver = AirPlayReceiver(id: "test", name: "Room", host: "test.local.", port: 7000,
                                            model: identifier, manufacturer: "", groupID: "",
-                                           supportsAirPlay2: true, hasSender: false, isPlaying: false)
+                                           supportsAirPlay2: true, isFullyDescribed: true,
+                                           hasSender: false, isPlaying: false)
 
             XCTAssertEqual(AppleDevice.symbolName(for: identifier), receiver.symbolName, identifier)
             XCTAssertEqual(AppleDevice.productName(for: identifier), receiver.productName, identifier)

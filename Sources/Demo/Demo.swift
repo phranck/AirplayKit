@@ -67,7 +67,13 @@ func listReceivers(forSeconds seconds: Int) -> Int32 {
                 .padding(toLength: 22, withPad: " ", startingAt: 0)
             let symbol = receiver.symbolName.padding(toLength: 16, withPad: " ", startingAt: 0)
 
-            print("  \(name) \(product) \(symbol) \(generation)  \(state)\(group)")
+            // A receiver the AirPlay record has not arrived for is described
+            // from half of what it publishes, so its name can still change. That
+            // is worth seeing here, because this is where the two answers for
+            // one speaker were first noticed.
+            let known = receiver.isFullyDescribed ? "" : "  half known"
+
+            print("  \(name) \(product) \(symbol) \(generation)  \(state)\(group)\(known)")
             print("  \(String(repeating: " ", count: 22)) \(receiver.host):\(receiver.port)")
         }
     }

@@ -66,7 +66,9 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     /// without asking the device anything, which is what `productName` does.
     ///
     /// Empty for Apple's receivers, which publish no such field, and that is
-    /// what tells the two cases apart without a table of identifiers.
+    /// what tells the two cases apart without a table of identifiers. That
+    /// reading holds once ``isFullyDescribed`` is true, and until then an empty
+    /// value means nobody has said yet.
     ///
     /// The brand on the box is not always this. A SYMFONISK Bookshelf says
     /// `Sonos` here, because Sonos builds it, and only its own UPnP description
@@ -78,7 +80,8 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     ///
     /// Only the AirPlay service publishes this, and the audio service publishes
     /// nothing like it, so it is empty for a receiver found through the older
-    /// service alone. Empty means unknown rather than alone.
+    /// service alone. Empty means unknown rather than alone, and
+    /// ``isFullyDescribed`` says which of the two an empty value is.
     ///
     /// ```swift
     /// let sharing = receivers.filter {
@@ -109,6 +112,27 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     /// speaks the older protocol, which used an RSA challenge instead, and
     /// opening a session with it fails rather than falling back.
     public let supportsAirPlay2: Bool
+
+    /// Whether the service carrying the whole description has been seen.
+    ///
+    /// A receiver announces itself twice, and only the AirPlay service publishes
+    /// ``manufacturer`` and ``groupID``. One reported from the audio service
+    /// alone therefore arrives with both empty, and this says that is what
+    /// happened rather than that the receiver published nothing.
+    ///
+    /// The difference is the whole of it: an empty manufacturer is what says a
+    /// receiver is Apple's, so a Sonos seen over the audio service alone reads
+    /// as "One" whilst the same speaker a moment later reads as "Sonos One".
+    /// This says which of the two answers is in hand.
+    ///
+    /// **It does not promise the rest is coming.** Measured on one network on
+    /// 2026-09-24: five Sonos published both services, and one run of thirty
+    /// callbacks carried no AirPlay sighting at all whilst the next run of the
+    /// same binary carried them for every speaker. So a caller that holds a
+    /// receiver back until this is true can hold it back for ever. What it is
+    /// for is to show a name as provisional, or to ask the speaker itself
+    /// through `PlayableAirplayUPnP`, rather than to wait.
+    public let isFullyDescribed: Bool
 
     /// Whether a sender currently holds a session with it.
     ///
@@ -660,6 +684,7 @@ private extension AirPlayReceiver {
                   manufacturer: Self.string(from: receiver.manufacturer, capacity: Int(PA_MAX_MODEL)),
                   groupID: Self.string(from: receiver.groupID, capacity: Int(PA_MAX_GROUP)),
                   supportsAirPlay2: receiver.supportsAirPlay2,
+                  isFullyDescribed: receiver.isFullyDescribed,
                   hasSender: receiver.hasSender,
                   isPlaying: receiver.isPlaying)
     }

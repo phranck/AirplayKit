@@ -419,8 +419,14 @@ static void DNSSD_API onResolved(DNSServiceRef service, DNSServiceFlags flags, u
 
     // Published on the AirPlay service alone, so a RAOP sighting leaves whatever
     // an AirPlay one already established rather than clearing it.
+    //
+    // Seeing this sighting is also what makes the record whole: everything the
+    // RAOP service withholds is in this one, so until it has arrived an empty
+    // manufacturer and an empty group say that nobody has told us rather than
+    // that the device published none.
     if (!isRaop) {
         copyTextValue(txtLength, txt, "gid", record->receiver.groupID, sizeof(record->receiver.groupID));
+        record->receiver.isFullyDescribed = true;
     }
 
     pthread_mutex_unlock(&discovery->mutex);
