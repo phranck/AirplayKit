@@ -25,14 +25,6 @@ let package = Package(
          */
         .library(name: "CPlayableAirplay", targets: ["CPlayableAirplay"]),
 
-        /*
-         What a speaker will say about itself when AirPlay will not.
-
-         Kept apart on purpose. The library above is about AirPlay and says so,
-         and one manufacturer's own services do not belong inside it. A caller
-         that wants both takes both.
-         */
-        .library(name: "PlayableAirplayUPnP", targets: ["PlayableAirplayUPnP"]),
     ],
     dependencies: [
         /*
@@ -72,15 +64,6 @@ let package = Package(
                 .product(name: "BigInt", package: "BigInt"),
             ]
         ),
-
-        /*
-         Reading a speaker through its own services.
-
-         Depends on nothing, not even on the library above, because the two
-         answer the same questions by different means and neither needs the
-         other to do it.
-         */
-        .target(name: "PlayableAirplayUPnP"),
 
         /*
          What a device is called and what to draw it as.
@@ -125,12 +108,12 @@ let package = Package(
         // Finds receivers, plays a tone, and plays a file, from a terminal.
         .executableTarget(
             name: "Demo",
-            dependencies: ["PlayableAirplay", "PlayableAirplayUPnP", "PlayableAirplaySender"]
+            dependencies: ["PlayableAirplay", "PlayableAirplaySender"]
         ),
 
         .testTarget(
             name: "PlayableAirplayTests",
-            dependencies: ["PlayableAirplay", "CPlayableAirplay", "PlayableAirplayUPnP",
+            dependencies: ["PlayableAirplay", "CPlayableAirplay",
                            "PlayableAirplayDevices", "PlayableAirplaySender"]
         ),
 
