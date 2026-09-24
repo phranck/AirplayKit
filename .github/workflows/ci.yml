@@ -9,6 +9,17 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# Xcode 26.3 on this runner reports Swift 6.2.4, which is the version
+# .swift-version names and the version the Linux container below runs. Read from
+# the runner rather than from Apple's release notes, which say 6.2.3 for this
+# Xcode. Without this the macOS runner uses whichever Xcode it happens to default
+# to, and that compiler has already rejected code every local gate had passed.
+#
+# Set for the whole workflow rather than per job, so the version stands in one
+# place. Linux ignores it, because only Apple's tools read it.
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -28,7 +39,7 @@ jobs:
             container: ""
           - name: Linux
             runner: ubuntu-latest
-            container: swift:6.2
+            container: swift:6.2.4
 
     steps:
       - uses: actions/checkout@v7
