@@ -92,8 +92,9 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     /// **What sharing a value means is not established, and for a Sonos it is
     /// known not to mean grouping.** Three Sonos playing together as one group,
     /// measured at that moment, each published a different value, and each was
-    /// the speaker's own. Their own services answer that question properly, and
-    /// `PlayableAirplayUPnP` in this package is where that lives.
+    /// the speaker's own. A manufacturer's own services answer that question
+    /// properly, and this library does not speak any, because a feature that
+    /// works on one make of speaker and nowhere else is not one of its.
     ///
     /// On the same network, eight receivers published eight different values.
     /// Apple's devices published something other than their own identifier, and
@@ -130,8 +131,8 @@ public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
     /// callbacks carried no AirPlay sighting at all whilst the next run of the
     /// same binary carried them for every speaker. So a caller that holds a
     /// receiver back until this is true can hold it back for ever. What it is
-    /// for is to show a name as provisional, or to ask the speaker itself
-    /// through `PlayableAirplayUPnP`, rather than to wait.
+    /// for is to show a name as provisional rather than to wait for one that
+    /// may not be coming.
     public let isFullyDescribed: Bool
 
     /// Whether a sender currently holds a session with it.

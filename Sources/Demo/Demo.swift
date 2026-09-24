@@ -10,7 +10,6 @@ import Dispatch
 import Foundation
 import PlayableAirplay
 import PlayableAirplaySender
-import PlayableAirplayUPnP
 
 // The library runs on Linux as well, and AVFoundation does not. Everything that
 // reads any format and resamples it is Apple's framework doing the work, so
@@ -87,40 +86,6 @@ func listReceivers(forSeconds seconds: Int) -> Int32 {
     print("looking for receivers, \(seconds) seconds")
     Thread.sleep(forTimeInterval: TimeInterval(seconds))
     discovery.stop()
-
-    return 0
-}
-
-// MARK: - Asking a Sonos directly
-
-/// Asks one speaker what AirPlay will not tell, and prints it.
-func describeSonos(at host: String) async -> Int32 {
-    let speaker = SonosClient(host: host)
-
-    do {
-        let device = try await speaker.device()
-        let playing = try await speaker.playback()
-
-        print("\(device.roomName): \(device.modelName) (\(device.modelNumber)), \(device.identifier)")
-        if let icon = speaker.iconURL(for: device) { print("  picture   \(icon)") }
-
-        let following = playing.followingIdentifier.map { ", following \($0)" } ?? ""
-        print("  playing   \(playing.state.rawValue)\(following)")
-        print("  volume    \(playing.volume) of 100\(playing.isMuted ? ", muted" : "")")
-
-        print("groups on this network:")
-        for group in try await speaker.zoneGroups() {
-            let rooms = group.members.map { member in
-                member.isBonded ? "\(member.roomName) with \(member.satellites.count) bonded"
-                                : member.roomName
-            }
-            let together = group.joinsSeveralMembers ? "" : " (on its own)"
-            print("  \(group.coordinatorIdentifier) leads \(rooms.joined(separator: ", "))\(together)")
-        }
-    } catch {
-        FileHandle.standardError.write(Data("could not ask \(host): \(error)\n".utf8))
-        return 1
-    }
 
     return 0
 }
@@ -551,7 +516,7 @@ func streamWave(at path: String, to host: String, port: UInt16, volume: Float = 
 
 @main
 struct Demo {
-    // Asynchronous because asking a Sonos is, and because holding the process
+    // Asynchronous because the work below is, and because holding the process
     // open with a semaphore whilst waiting for it deadlocked instead.
     static func main() async {
         let arguments = CommandLine.arguments
@@ -559,7 +524,6 @@ struct Demo {
         guard arguments.count > 1 else {
             var usage = """
                         usage: Demo list
-                               Demo sonos <host>                what AirPlay will not say
                                Demo pair <host> [port]          pair only, and say what came out
                                Demo swift <host> [port] [secs]  play through the Swift sender
                                Demo play <host> [port] [seconds]
@@ -578,9 +542,6 @@ struct Demo {
         switch arguments[1] {
         case "list":
             exit(listReceivers(forSeconds: 5))
-
-        case "sonos" where arguments.count > 2:
-            exit(await describeSonos(at: arguments[2]))
 
         case "pair" where arguments.count > 2:
             let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000
