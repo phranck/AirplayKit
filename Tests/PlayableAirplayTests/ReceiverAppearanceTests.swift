@@ -105,24 +105,24 @@ final class ReceiverAppearanceTests: XCTestCase {
     // MARK: - What it is drawn as
 
     func testApplesHardwareIsDrawnAsItself() {
-        XCTAssertEqual(receiver(model: "AudioAccessory5,1").symbolName, "homepod.mini")
-        XCTAssertEqual(receiver(model: "AudioAccessory1,1").symbolName, "homepod")
-        XCTAssertEqual(receiver(model: "AppleTV11,1").symbolName, "appletv")
+        XCTAssertEqual(receiver(model: "AudioAccessory5,1").symbolName, "homepod.mini.fill")
+        XCTAssertEqual(receiver(model: "AudioAccessory1,1").symbolName, "homepod.fill")
+        XCTAssertEqual(receiver(model: "AppleTV11,1").symbolName, "appletv.fill")
     }
 
     func testEverybodyElseIsDrawnAsASpeaker() {
         // The catalogue has nothing shaped like a Sonos, and no soundbar at all,
         // so an Arc and a One are the same picture. At the size a list uses they
         // would be anyway.
-        XCTAssertEqual(receiver(model: "One", manufacturer: "Sonos").symbolName, "hifispeaker")
-        XCTAssertEqual(receiver(model: "Arc", manufacturer: "Sonos").symbolName, "hifispeaker")
-        XCTAssertEqual(receiver(model: "").symbolName, "hifispeaker")
+        XCTAssertEqual(receiver(model: "One", manufacturer: "Sonos").symbolName, "hifispeaker.fill")
+        XCTAssertEqual(receiver(model: "Arc", manufacturer: "Sonos").symbolName, "hifispeaker.fill")
+        XCTAssertEqual(receiver(model: "").symbolName, "hifispeaker.fill")
     }
 
     func testAPairIsDrawnAsAPair() {
-        XCTAssertEqual(receiver(model: "One", manufacturer: "Sonos").pairSymbolName, "hifispeaker.2")
-        XCTAssertEqual(receiver(model: "AudioAccessory5,1").pairSymbolName, "homepod.mini.2")
-        XCTAssertEqual(receiver(model: "AudioAccessory1,1").pairSymbolName, "homepod.2")
+        XCTAssertEqual(receiver(model: "One", manufacturer: "Sonos").pairSymbolName, "hifispeaker.2.fill")
+        XCTAssertEqual(receiver(model: "AudioAccessory5,1").pairSymbolName, "homepod.mini.2.fill")
+        XCTAssertEqual(receiver(model: "AudioAccessory1,1").pairSymbolName, "homepod.2.fill")
     }
 
     func testAThingThatDoesNotPairIsDrawnAsItself() {
@@ -137,9 +137,9 @@ final class ReceiverAppearanceTests: XCTestCase {
         // The identifier stopped saying what the machine is when it became
         // Mac16,x. The name still says it.
         XCTAssertEqual(DeviceAppearance.macSymbolName(for: "MacBook Air"), "laptopcomputer")
-        XCTAssertEqual(DeviceAppearance.macSymbolName(for: "Mac mini"), "macmini.gen3")
-        XCTAssertEqual(DeviceAppearance.macSymbolName(for: "Mac Studio"), "macstudio")
-        XCTAssertEqual(DeviceAppearance.macSymbolName(for: "Mac Pro"), "macpro.gen3")
+        XCTAssertEqual(DeviceAppearance.macSymbolName(for: "Mac mini"), "macmini.gen3.fill")
+        XCTAssertEqual(DeviceAppearance.macSymbolName(for: "Mac Studio"), "macstudio.fill")
+        XCTAssertEqual(DeviceAppearance.macSymbolName(for: "Mac Pro"), "macpro.gen3.fill")
         XCTAssertEqual(DeviceAppearance.macSymbolName(for: "iMac"), "desktopcomputer")
     }
 }
@@ -170,7 +170,7 @@ final class AppleDeviceTests: XCTestCase {
 
     func testAModelNewerThanTheTableIsStillPlacedByItsFamily() {
         XCTAssertEqual(AppleDevice.productName(for: "AudioAccessory99,9"), "HomePod")
-        XCTAssertEqual(AppleDevice.symbolName(for: "AppleTV99,9"), "appletv")
+        XCTAssertEqual(AppleDevice.symbolName(for: "AppleTV99,9"), "appletv.fill")
     }
 
     func testTheSymbolAgreesWithWhatAReceiverWouldBeDrawnAs() {

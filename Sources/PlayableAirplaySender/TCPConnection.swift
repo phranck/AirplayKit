@@ -105,7 +105,34 @@ public final class TCPConnection {
         close()
     }
 
-    /// Closes the socket, and does nothing where it is already closed.
+    /**
+     Wakes whatever is blocked on this socket, without releasing the descriptor.
+
+     The step before ``close()``, and the reason there are two. A thread parked
+     in `send` or `recv` does not come out when the descriptor is closed: on
+     neither platform does closing wake a blocked call. It comes out when the
+     socket is shut down, with a read of nought or a write that fails.
+
+     So the order is: shut down, wait for the thread to leave, then close.
+     Closing first leaves another thread inside a syscall on a descriptor number
+     that the next `open` in the process can be handed, and the write it was
+     part way through then lands in somebody else's file. That is silent, and it
+     is not a crash, so nothing reports it.
+
+     Calling it twice is allowed, and it does nothing on a closed socket.
+     */
+    public func stop() {
+        guard handle >= 0 else { return }
+
+        shutdown(handle, Int32(SHUT_RDWR))
+    }
+
+    /**
+     Closes the socket, and does nothing where it is already closed.
+
+     Only once nothing is inside a call on it. ``stop()`` is what makes that
+     true, and says why.
+     */
     public func close() {
         guard handle >= 0 else { return }
 

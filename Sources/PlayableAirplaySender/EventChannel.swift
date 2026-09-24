@@ -77,21 +77,64 @@ public final class EventChannel {
         self.read = EncryptedChannel(key: keys.eventsWrite)
         self.write = EncryptedChannel(key: keys.eventsRead)
 
-        queue.async { [weak self] in self?.answerWhatArrives() }
+        queue.setSpecific(key: Self.readingThread, value: true)
+        queue.async { [weak self] in
+            self?.answerWhatArrives()
+
+            // Signalled however the loop ended, including by throwing, so a
+            // caller waiting on it is never waiting on something that has
+            // already gone.
+            self?.finished.signal()
+        }
     }
 
     deinit {
         close()
     }
 
-    /// Stops answering and closes the connection.
+    /**
+     Stops answering and closes the connection.
+
+     In three steps, because the reading thread is parked in `recv` with a
+     timeout of half a minute and closing a descriptor does not wake it. It is
+     shut down first, which brings the read back at once; then this waits for
+     the thread to leave; and only then is the descriptor released. Closing
+     first would leave that thread inside a call on a number the next `open` in
+     the process can be handed.
+
+     The wait is bounded, because a thread that has not left is a worse thing to
+     block a caller on for ever than to leave running. Where it runs out, the
+     descriptor is left open and leaks rather than being reused underneath
+     somebody, which is the lesser of the two.
+
+     Calling it twice is allowed, and releasing the channel does it anyway.
+     */
     public func close() {
         lock.lock()
+        let wasOpen = isOpen
         isOpen = false
         lock.unlock()
 
+        guard wasOpen else { return }
+
+        connection.stop()
+
+        // Not from the reading thread itself, which would wait for its own exit.
+        if DispatchQueue.getSpecific(key: Self.readingThread) == nil {
+            guard finished.wait(timeout: .now() + Self.exitTimeout) == .success else { return }
+        }
+
         connection.close()
     }
+
+    /// How long closing waits for the reading thread before leaving it to itself.
+    static let exitTimeout: TimeInterval = 2
+
+    /// Marks the queue the reading runs on, so closing from it does not wait for itself.
+    static let readingThread = DispatchSpecificKey<Bool>()
+
+    /// Signalled once the reading thread is out of the socket for good.
+    private let finished = DispatchSemaphore(value: 0)
 
     // MARK: - Private
 

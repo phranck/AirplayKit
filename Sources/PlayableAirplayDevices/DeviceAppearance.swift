@@ -104,11 +104,11 @@ public enum DeviceAppearance {
      */
     public static func symbolName(manufacturer: String, model: String) -> String {
         switch kind(manufacturer: manufacturer, model: model) {
-        case .homePod: return "homepod"
-        case .homePodMini: return "homepod.mini"
-        case .appleTV: return "appletv"
+        case .homePod: return "homepod.fill"
+        case .homePodMini: return "homepod.mini.fill"
+        case .appleTV: return "appletv.fill"
         case .mac: return macSymbolName(for: productName(manufacturer: manufacturer, model: model))
-        case .speaker, .unknown: return "hifispeaker"
+        case .speaker, .unknown: return "hifispeaker.fill"
         }
     }
 
@@ -120,10 +120,10 @@ public enum DeviceAppearance {
      */
     public static func pairSymbolName(manufacturer: String, model: String) -> String {
         switch kind(manufacturer: manufacturer, model: model) {
-        case .homePod: return "homepod.2"
-        case .homePodMini: return "homepod.mini.2"
+        case .homePod: return "homepod.2.fill"
+        case .homePodMini: return "homepod.mini.2.fill"
         case .appleTV, .mac: return symbolName(manufacturer: manufacturer, model: model)
-        case .speaker, .unknown: return "hifispeaker.2"
+        case .speaker, .unknown: return "hifispeaker.2.fill"
         }
     }
 
@@ -159,11 +159,15 @@ public enum DeviceAppearance {
     /// the machine is when they became `Mac16,x`, whilst the name it is sold
     /// under still says MacBook or mini, and that is what the catalogue has
     /// symbols for.
+    ///
+    /// Filled wherever a filled one exists. The two computers are the
+    /// exception: the catalogue carries no `laptopcomputer.fill` and no
+    /// `desktopcomputer.fill`, which was read out of it rather than assumed.
     static func macSymbolName(for name: String) -> String {
         if name.contains("MacBook") { return "laptopcomputer" }
-        if name.contains("mini") { return "macmini.gen3" }
-        if name.contains("Studio") { return "macstudio" }
-        if name.contains("Pro") { return "macpro.gen3" }
+        if name.contains("mini") { return "macmini.gen3.fill" }
+        if name.contains("Studio") { return "macstudio.fill" }
+        if name.contains("Pro") { return "macpro.gen3.fill" }
 
         return "desktopcomputer"
     }
