@@ -245,6 +245,12 @@ PADiscovery *pa_discovery_start(PADiscoveryHandler handler, void *context,
 /**
  Stops looking and releases the discovery. The handler is not called again, and
  the call returns once the thread carrying it has finished. Safe to call with NULL.
+
+ Also safe to call from inside the handler, which runs on that same thread. It
+ cannot wait for a thread it is on, so from there it asks for the stop and
+ returns at once, and the discovery is released when the handler has returned
+ and the loop behind it has finished. Either way the pointer is to be treated as
+ dead the moment this returns, and the handler is not called again.
  */
 void pa_discovery_stop(PADiscovery *discovery);
 
