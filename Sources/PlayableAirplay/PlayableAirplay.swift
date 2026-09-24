@@ -561,6 +561,13 @@ public extension AirPlaySession {
     ///
     /// Counted from the start of the session and never reset, so two readings a
     /// few seconds apart say what happened in between.
+    ///
+    /// `fellBehind` is the one to watch, and it means something worse than the
+    /// other two. A hole in the audio is a hole; that one says the whole stream
+    /// slipped past the moment the receiver was promised, which it answers by
+    /// discarding audio that is already late. The session stays connected and
+    /// keeps taking frames whilst the speaker is silent, so nothing else about
+    /// it looks wrong.
     var underruns: AirPlaySender.Underruns {
         heldSender()?.underruns ?? .none
     }

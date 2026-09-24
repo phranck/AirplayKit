@@ -96,6 +96,16 @@ public final class AirPlaySender {
     private let events: EventChannel
     private let audio: BufferedAudioStream
 
+    /**
+     What the receiver's clock said when the session was brought up.
+
+     Kept because a fresh anchor needs a time on that same clock, and this is
+     what can still say one. The clock itself is closed once the session is up,
+     so there is nothing left listening to correct it with, and a reading
+     carried forward by this machine's own uptime is what remains.
+     */
+    private let clockReading: PTPClock.Reading
+
     private let lock = NSLock()
     private let ring: SampleRing
     private var open = true
@@ -163,6 +173,7 @@ public final class AirPlaySender {
                               fraction: time.fraction,
                               timelineIdentifier: Int64(bitPattern: reading.identity))
 
+        clockReading = reading
         audio = try BufferedAudioStream(host: host, port: stream.dataPort, audioKey: keys.audio)
 
         // Set once everything is in place, because a closure over self cannot
@@ -340,22 +351,40 @@ public final class AirPlaySender {
         /// How long the pump waited for frames in total, including the waits that ended in frames.
         public var waited: TimeInterval
 
-        /// Nothing invented and nothing waited for, which is what a closed session reports.
-        public static let none = Underruns(packets: 0, waited: 0)
+        /**
+         How many times the sender fell further behind than the anchor's lead
+         could absorb, and placed a fresh one.
 
-        public init(packets: Int, waited: TimeInterval) {
+         Different from the other two, and worse. A padded packet is a hole in
+         the audio; this is the whole stream having slipped past the moment the
+         anchor promised, which the receiver answers by discarding audio that is
+         already late. Nothing else reports it: the session stays connected, the
+         writes keep being taken, and what comes out of the speaker is silence.
+
+         Any of these in a run is worth looking at. Several in a row means the
+         machine is not keeping up with real time at all.
+         */
+        public var fellBehind: Int
+
+        /// Nothing invented, nothing waited for and nothing slipped, which is what a closed session reports.
+        public static let none = Underruns(packets: 0, waited: 0, fellBehind: 0)
+
+        public init(packets: Int, waited: TimeInterval, fellBehind: Int = 0) {
             self.packets = packets
             self.waited = waited
+            self.fellBehind = fellBehind
         }
     }
 
     /**
-     How much silence has been invented, and how long the sender has waited.
+     How much silence has been invented, how long the sender has waited, and
+     how often it slipped past the anchor it gave.
 
      Counted from the start of the session and never reset, so two readings a
      few seconds apart say what happened in between. A run with none of this is
      a run where the audio arrived in time; a run with any of it has an
-     explanation for what was heard.
+     explanation for what was heard, and ``Underruns/fellBehind`` explains the
+     case where nothing was heard at all.
      */
     public var underruns: Underruns {
         lock.lock()
@@ -410,6 +439,59 @@ public final class AirPlaySender {
         tally.waited += waited
         if silence { tally.packets += 1 }
         lock.unlock()
+    }
+
+    /**
+     Whether the pump has slipped further behind than the anchor's lead can
+     absorb.
+
+     Apart, and named, because the comparison is the whole of the decision and
+     the two sides of it are easy to put the wrong way round. `due` is where the
+     schedule says the pump should be, `now` is where it is, and being behind
+     means `now` has gone past.
+
+     @param due Where the pump's own schedule stands, on the monotonic clock it
+     paces by.
+     @param now That same clock, read at this moment.
+     */
+    static func hasFallenBehindTheAnchor(due: TimeInterval, now: TimeInterval) -> Bool {
+        now - due > anchorLead
+    }
+
+    /**
+     Tells the receiver when the next block it is sent will sound.
+
+     The answer to having fallen behind. The stream's timestamps advance by a
+     packet per block whatever happens, and the first anchor turned those
+     timestamps into a promise about when each one sounds. Once the pump is
+     later than that promise by more than the lead it was given, every block
+     after it arrives after its own moment and the receiver discards it, so the
+     session plays silence whilst looking healthy. Starting the schedule again
+     without saying so leaves that state for the rest of the session, because
+     only a fresh anchor gets out of it.
+
+     So this places the next block ``anchorLead`` into the future and says so,
+     which is exactly what brought the session up in the first place.
+
+     The reading is the one taken then, carried forward by this machine's
+     uptime, because the clock stopped listening once the session was up.
+
+     @param nextBlock The timestamp the next block will carry.
+     */
+    private func placeAFreshAnchor(for nextBlock: UInt32) {
+        lock.lock()
+        tally.fellBehind += 1
+        lock.unlock()
+
+        guard let time = PTPClock.now(from: clockReading, ahead: Self.anchorLead) else { return }
+
+        // Swallowed, because this runs on the pump and a refused anchor leaves
+        // the session exactly where it already was. The count above is what
+        // says it happened either way.
+        try? session.setAnchor(rtpTime: nextBlock,
+                               seconds: time.seconds,
+                               fraction: time.fraction,
+                               timelineIdentifier: Int64(bitPattern: clockReading.identity))
     }
 
     /// Ends the session because the channel that keeps it alive has stopped.
@@ -509,11 +591,20 @@ public final class AirPlaySender {
                 if wait > 0 {
                     Thread.sleep(forTimeInterval: wait)
                 }
-                else if now - due > Self.anchorLead {
+                else if Self.hasFallenBehindTheAnchor(due: due, now: now) {
                     // Further behind than the lead can absorb, so catching up
-                    // would send a burst that arrives late anyway. Start again
-                    // from here and say so by the only means this thread has.
-                    due = now
+                    // would send a burst that arrives late anyway. The schedule
+                    // starts again from here, and the receiver is told when the
+                    // next block sounds, because nothing else gets the session
+                    // out of playing silence.
+                    self.placeAFreshAnchor(for: self.audio.nextTimestamp)
+
+                    // Read again rather than reusing the value above, because
+                    // placing an anchor sends a request and waits for its
+                    // answer. A schedule starting from before that wait is
+                    // already behind by the length of it, and would ask for
+                    // another anchor on the very next packet.
+                    due = ProcessInfo.processInfo.systemUptime
                 }
             }
         }

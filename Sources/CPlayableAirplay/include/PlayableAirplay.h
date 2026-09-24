@@ -393,6 +393,24 @@ size_t pa_session_invented_packets(PASession *session);
 double pa_session_invented_seconds(PASession *session);
 
 /**
+ How many times the sender fell further behind than the anchor's lead could
+ absorb, and told the receiver when the next block would sound.
+
+ Worse than an invented packet, and worth watching for separately. A padded
+ packet is a hole in the audio; this is the whole stream having slipped past the
+ moment the anchor promised, which a receiver answers by discarding audio that
+ is already late. Nothing else reports it, because the session stays connected
+ and keeps taking frames whilst the speaker is silent.
+
+ Any of these in a run is worth looking at, and several in a row mean the
+ machine is not keeping up with real time.
+
+ @param session  The open session, or NULL, which has not fallen behind.
+ @return How many times it happened.
+ */
+size_t pa_session_fell_behind(PASession *session);
+
+/**
  How long the session has spent waiting for audio, in seconds.
 
  Including the waits that ended in audio, because a sender that keeps almost
