@@ -9,12 +9,16 @@
 #  cross-platform package is written on one platform, and it breaks at compile
 #  time, which is why compiling is enough to find it.
 #
-#  What this does not do is run the tests. They run in CI, on Linux, in about
-#  twenty seconds, and they are green there. Running them here hangs: the test
-#  process deadlocks inside XCTest before the first test body, having used a
-#  sixth of a second of processor time in a quarter of an hour. That is #25, and
-#  it is reproducible on this machine and on nobody else's. Architecture, the
-#  bind mount, swift-testing and the scratch volume have each been ruled out.
+#  The tests are compiled here and not run. Running them hangs: the test process
+#  deadlocks inside XCTest before the first test body, having used a sixth of a
+#  second of processor time in a quarter of an hour. That is #25, and it is
+#  reproducible on this machine and on nobody else's. Architecture, the bind
+#  mount, swift-testing and the scratch volume have each been ruled out. They run
+#  in CI, on Linux, in about twenty seconds, and they are green there.
+#
+#  Compiling them costs half a minute and is the half of the gate that was
+#  missing: a test using a constant Glibc spells differently from Darwin builds
+#  on a Mac, passes this check, and stops the Linux job after the push.
 #
 #  So this gate checks what it can check quickly and certainly, and says so,
 #  rather than waiting a quarter of an hour to tell you nothing.
@@ -82,8 +86,8 @@ docker run --rm --name "$container" \
         set -euo pipefail
         echo "== the toolchain"
         swift --version
-        echo "== debug"
-        swift build --scratch-path /build
+        echo "== debug, with the tests"
+        swift build --build-tests --scratch-path /build
         echo "== release"
         swift build -c release --scratch-path /build
         echo "== it compiles on Linux"
