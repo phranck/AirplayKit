@@ -26,16 +26,26 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
+# The compiler this package is pinned to. It is named at the root of the
+# repository and read here, so the image this builds in and the container CI
+# runs in cannot be two different toolchains.
+swift_version="$(cat .swift-version)"
+
 # Built from Scripts/linux.Dockerfile, which is the image CI uses with the one
 # package this needs already in it. Building it once takes a minute; not having
-# it costs most of a minute in every single run.
-image="playable-airplay-linux:6.2"
+# it costs most of a minute in every single run. The tag carries the version, so
+# raising the pin builds a new image rather than reusing the old one.
+image="playable-airplay-linux:${swift_version}"
 
 # Where the Linux build lives between runs. Named, so it survives, and so a
 # person can find it with `docker volume ls` and remove it when it is in the way.
 # It has to stay off the macOS build, which shares nothing with it, and off the
 # bind mount, where SwiftPM's build database does not work at all.
-volume="playable-airplay-linux-build"
+#
+# The version is in the name because objects compiled by one toolchain have no
+# business being linked by another. Raising the pin therefore starts from
+# nothing and leaves the old volume behind, which `docker volume rm` clears.
+volume="playable-airplay-linux-build-${swift_version}"
 
 # A name of its own per run, so the container can be found and removed even
 # where this script is killed before it can tidy up.
@@ -52,7 +62,8 @@ fi
 
 if ! docker image inspect "$image" > /dev/null 2>&1; then
     echo "== building the Linux image, once"
-    docker build -q -f Scripts/linux.Dockerfile -t "$image" . > /dev/null
+    docker build -q -f Scripts/linux.Dockerfile \
+        --build-arg "SWIFT_VERSION=${swift_version}" -t "$image" . > /dev/null
 fi
 
 # On every path out, including an interrupt and including the bound below. A
