@@ -27,6 +27,16 @@ If the receiver refuses pairing, ``AirPlayError/pairingRefused`` provides an Eng
 
 Once the pairing is through, the sender announces the format, the receiver allocates its buffers, and the two agree where the timeline starts. From there the sender paces packets onto the network against its own clock, and the receiver plays them a fixed distance behind.
 
+### Linux PTP port permission
+
+The sender binds UDP ports 319 and 320 for PTP timing. Ubuntu reserves these ports for privileged processes. Give the final executable `CAP_NET_BIND_SERVICE` after building it, for example:
+
+```bash
+sudo setcap cap_net_bind_service=+ep "$(swift build --show-bin-path)/Demo"
+```
+
+`setcap` is supplied by `libcap2-bin`. A rebuild may remove the capability, so apply it to the executable that will actually run. The receiver also has to be able to send PTP packets back to the sender; successful pairing over TCP does not verify this return path.
+
 ### The audio it takes
 
 Interleaved, signed 16 bit, two channels, at ``AirPlaySession/sampleRate`` samples a second. Anything else has to be converted before it gets here.
