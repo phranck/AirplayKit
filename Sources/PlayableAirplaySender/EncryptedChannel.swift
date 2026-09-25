@@ -9,7 +9,7 @@ import Crypto
 import Foundation
 
 /// What can go wrong reading the other side's frames.
-public enum EncryptedChannelFailure: Error, Equatable {
+package enum EncryptedChannelFailure: Error, Equatable {
     /// The bytes decrypted to nothing usable, which means the wrong key, a reordered frame, or tampering.
     case frameCouldNotBeOpened
 }
@@ -30,7 +30,7 @@ public enum EncryptedChannelFailure: Error, Equatable {
  whilst the key stays the same: ChaCha20-Poly1305 loses every guarantee it makes
  if a counter value is used twice under one key.
  */
-public struct EncryptedChannel {
+package struct EncryptedChannel {
     /// The most plaintext one frame carries, which is what a longer message is split at.
     public static let maximumFrameLength = 0x400
 

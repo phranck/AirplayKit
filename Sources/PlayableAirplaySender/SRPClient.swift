@@ -10,7 +10,7 @@ import Crypto
 import Foundation
 
 /// What can go wrong on the sender's side of the exchange.
-public enum SRPError: Error, Equatable {
+package enum SRPError: Error, Equatable {
     /// The receiver's public value is zero modulo the group, which RFC 5054 says to refuse.
     case receiverPublicValueIsZero
 
@@ -30,7 +30,7 @@ public enum SRPError: Error, Equatable {
  round produces a receiver that refuses the proof and looks exactly like a wrong
  password.
  */
-public struct SRPClient {
+package struct SRPClient {
     /// The name HomeKit pairing runs under, which is fixed and not a user's name.
     public static let userName = "Pair-Setup"
 

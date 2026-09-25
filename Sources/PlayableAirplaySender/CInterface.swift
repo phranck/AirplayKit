@@ -23,7 +23,7 @@ private final class CSession {
 }
 
 /// The numbers `PAResult` gives, repeated here because C sees the enumeration and Swift does not.
-private enum CResult: Int32 {
+enum CResult: Int32 {
     case ok = 0
     case unreachable = 1
     case pairingRefused = 2
@@ -33,7 +33,7 @@ private enum CResult: Int32 {
 }
 
 /// Which of those an error from the Swift side is. Named apart from the out parameter it fills.
-private func outcome(for error: Error) -> CResult {
+func outcome(for error: Error) -> CResult {
     switch SenderFailureKind(error) {
     case .unreachable: return .unreachable
     case .sessionEnded: return .sessionEnded
@@ -44,10 +44,34 @@ private func outcome(for error: Error) -> CResult {
 }
 
 @_cdecl("pa_session_open")
-public func pa_session_open(_ host: UnsafePointer<CChar>?,
+package func pa_session_open(_ host: UnsafePointer<CChar>?,
                             _ port: UInt16,
                             _ senderName: UnsafePointer<CChar>?,
                             _ result: UnsafeMutablePointer<Int32>?) -> UnsafeMutableRawPointer? {
+    openSession(host, port, senderName, nil, nil, result)
+}
+
+@_cdecl("pa_session_open_with_volume_memory")
+package func pa_session_open_with_volume_memory(_ identifier: UnsafePointer<CChar>?,
+                                                _ host: UnsafePointer<CChar>?,
+                                                _ port: UInt16,
+                                                _ senderName: UnsafePointer<CChar>?,
+                                                _ memory: UnsafeMutableRawPointer?,
+                                                _ result: UnsafeMutablePointer<Int32>?) -> UnsafeMutableRawPointer? {
+    guard let identifier, !String(cString: identifier).isEmpty, memory != nil else {
+        result?.pointee = CResult.invalidArgument.rawValue
+        return nil
+    }
+    return openSession(host, port, senderName, String(cString: identifier),
+                       heldVolumeMemory(memory), result)
+}
+
+private func openSession(_ host: UnsafePointer<CChar>?,
+                         _ port: UInt16,
+                         _ senderName: UnsafePointer<CChar>?,
+                         _ receiverID: String?,
+                         _ volumeMemory: ReceiverVolumeMemory?,
+                         _ result: UnsafeMutablePointer<Int32>?) -> UnsafeMutableRawPointer? {
     func report(_ value: CResult) { result?.pointee = value.rawValue }
 
     guard let host, port != 0 else {
@@ -66,7 +90,8 @@ public func pa_session_open(_ host: UnsafePointer<CChar>?,
     do {
         let sender = try AirPlaySender(host: address,
                                        port: port,
-                                       senderName: name.isEmpty ? "Playable" : name)
+                                       senderName: name.isEmpty ? "Playable" : name,
+                                       receiverID: receiverID, volumeMemory: volumeMemory)
         report(.ok)
 
         // Handed to C, which now owns it. The matching release is in close.
@@ -79,7 +104,7 @@ public func pa_session_open(_ host: UnsafePointer<CChar>?,
 }
 
 @_cdecl("pa_session_write")
-public func pa_session_write(_ session: UnsafeMutableRawPointer?,
+package func pa_session_write(_ session: UnsafeMutableRawPointer?,
                              _ frames: UnsafePointer<Int16>?,
                              _ frameCount: Int) -> Bool {
     guard let session, let frames, frameCount > 0 else { return false }
@@ -96,61 +121,114 @@ public func pa_session_write(_ session: UnsafeMutableRawPointer?,
 }
 
 @_cdecl("pa_session_discard_held_audio")
-public func pa_session_discard_held_audio(_ session: UnsafeMutableRawPointer?) -> Int {
+package func pa_session_discard_held_audio(_ session: UnsafeMutableRawPointer?) -> Int {
     guard let session else { return 0 }
 
     return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.discardHeldAudio()
 }
 
 @_cdecl("pa_session_held_frames")
-public func pa_session_held_frames(_ session: UnsafeMutableRawPointer?) -> Int {
+package func pa_session_held_frames(_ session: UnsafeMutableRawPointer?) -> Int {
     guard let session else { return 0 }
 
     return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.heldFrames
 }
 
 @_cdecl("pa_session_invented_packets")
-public func pa_session_invented_packets(_ session: UnsafeMutableRawPointer?) -> Int {
+package func pa_session_invented_packets(_ session: UnsafeMutableRawPointer?) -> Int {
     guard let session else { return 0 }
 
     return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.packets
 }
 
 @_cdecl("pa_session_invented_seconds")
-public func pa_session_invented_seconds(_ session: UnsafeMutableRawPointer?) -> Double {
+package func pa_session_invented_seconds(_ session: UnsafeMutableRawPointer?) -> Double {
     guard let session else { return 0 }
 
     return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.duration
 }
 
 @_cdecl("pa_session_fell_behind")
-public func pa_session_fell_behind(_ session: UnsafeMutableRawPointer?) -> Int {
+package func pa_session_fell_behind(_ session: UnsafeMutableRawPointer?) -> Int {
     guard let session else { return 0 }
 
     return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.fellBehind
 }
 
 @_cdecl("pa_session_waited_seconds")
-public func pa_session_waited_seconds(_ session: UnsafeMutableRawPointer?) -> Double {
+package func pa_session_waited_seconds(_ session: UnsafeMutableRawPointer?) -> Double {
     guard let session else { return 0 }
 
     return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.underruns.waited
 }
 
 @_cdecl("pa_session_is_running")
-public func pa_session_is_running(_ session: UnsafeMutableRawPointer?) -> Bool {
+package func pa_session_is_running(_ session: UnsafeMutableRawPointer?) -> Bool {
     guard let session else { return false }
 
     return Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.isRunning
 }
 
 @_cdecl("pa_session_set_volume")
-public func pa_session_set_volume(_ session: UnsafeMutableRawPointer?, _ volume: Float) {
+package func pa_session_set_volume(_ session: UnsafeMutableRawPointer?, _ volume: Float) {
     guard let session else { return }
 
     // Swallowed rather than reported, because the C interface has no way to say
     // so and a volume that did not arrive is not worth ending a session over.
     try? Unmanaged<CSession>.fromOpaque(session).takeUnretainedValue().sender.setVolume(volume)
+}
+
+@_cdecl("pa_session_get_volume")
+package func pa_session_get_volume(_ session: OpaquePointer?,
+                                  _ volume: UnsafeMutablePointer<Float>?) -> Bool {
+    guard let session, let volume,
+          let known = Unmanaged<CSession>.fromOpaque(UnsafeMutableRawPointer(session))
+              .takeUnretainedValue().sender.volume
+    else { return false }
+
+    volume.pointee = known
+    return true
+}
+
+@_cdecl("pa_session_set_volume_handler")
+package func pa_session_set_volume_handler(
+    _ session: OpaquePointer?,
+    _ handler: (@convention(c) (UnsafeMutableRawPointer?, Float) -> Void)?,
+    _ context: UnsafeMutableRawPointer?
+) {
+    guard let session else { return }
+    let sender = Unmanaged<CSession>.fromOpaque(UnsafeMutableRawPointer(session))
+        .takeUnretainedValue().sender
+    sender.volumeHandler = handler.map { callback in
+        { level in callback(context, level) }
+    }
+}
+
+@_cdecl("pa_session_set_event_handler")
+package func pa_session_set_event_handler(
+    _ session: OpaquePointer?,
+    _ handler: (@convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?,
+                               UnsafePointer<CChar>?, UnsafePointer<UInt8>?, Int) -> Void)?,
+    _ context: UnsafeMutableRawPointer?
+) {
+    guard let session else { return }
+    let sender = Unmanaged<CSession>.fromOpaque(UnsafeMutableRawPointer(session))
+        .takeUnretainedValue().sender
+    guard let handler else {
+        sender.eventHandler = nil
+        return
+    }
+
+    sender.eventHandler = { request in
+        request.method.withCString { method in
+            request.path.withCString { path in
+                request.body.withUnsafeBytes { bytes in
+                    handler(context, method, path,
+                            bytes.baseAddress?.assumingMemoryBound(to: UInt8.self), bytes.count)
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -168,7 +246,7 @@ private struct CSessionReport {
 }
 
 @_cdecl("pa_session_close")
-public func pa_session_close(_ session: UnsafeMutableRawPointer?,
+package func pa_session_close(_ session: UnsafeMutableRawPointer?,
                              _ report: UnsafeMutableRawPointer?) {
     guard let session else { return }
 
@@ -191,7 +269,7 @@ public func pa_session_close(_ session: UnsafeMutableRawPointer?,
 }
 
 @_cdecl("pa_result_description")
-public func pa_result_description(_ value: Int32) -> UnsafePointer<CChar>? {
+package func pa_result_description(_ value: Int32) -> UnsafePointer<CChar>? {
     // Static storage, because C is handed the pointer and reads it afterwards.
     // One sentence per value, so nothing has to be freed.
     switch CResult(rawValue: value) {
@@ -206,7 +284,8 @@ public func pa_result_description(_ value: Int32) -> UnsafePointer<CChar>? {
 
 private let descriptionOfAccepted = literal("the receiver accepted")
 private let descriptionOfUnreachable = literal("the receiver could not be reached")
-private let descriptionOfRefused = literal("the receiver refused the pairing")
+private let descriptionOfRefused = literal("the receiver refused the pairing. If this is a HomePod, "
+                                         + "check Home Settings > Speakers & TV in the Home app.")
 private let descriptionOfEnded = literal("the receiver ended the session")
 private let descriptionOfUnusable = literal("the caller passed something unusable")
 private let descriptionOfFailed = literal("the sender failed for a reason the caller cannot act on")

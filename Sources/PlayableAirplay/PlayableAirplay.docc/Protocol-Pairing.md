@@ -84,9 +84,9 @@ Every pairing request carries an `X-Apple-HKP` header saying which pairing mode 
 
 A working sender sends `4` for transient pairing and `3` for pairing with a PIN (reported likely, [airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp)). owntone picks between `3` and `4` on the same split, normal against transient (reported confirmed, [owntone, `src/outputs/airplay.c`](https://github.com/owntone/owntone-server/blob/master/src/outputs/airplay.c)). pyatv labels `3` as HAP and `4` as transient, and answers a `/pair-verify` carrying no such header with a 501 (reported confirmed as a description of pyatv, [pyatv, `pyatv/protocols/airplay/server_auth.py`](https://github.com/postlund/pyatv/blob/master/pyatv/protocols/airplay/server_auth.py)).
 
-Apple's own senders use both a documented value and one that appears in none of those lists, and which one turns up depends on the request rather than on the platform. A macOS 27.2 sender pairing with a receiver it had never met sent `POST /pair-setup` with `X-Apple-HKP: 4`, which is transient pairing exactly as the table has it (measured 2026-09-22, read off a receiver, F-073). Four pair-verify requests from an iPhone XR on iOS 18.7 all carried `X-Apple-HKP: 8` (measured 2026-09-22, captured, F-021). The published record names only 3 and 4 as things a sender sends, and the receiver's own table stops at 7.
+Apple's own senders use several values. A macOS 27.2 sender pairing with a receiver it had never met sent `POST /pair-setup` with `X-Apple-HKP: 4` (measured 2026-09-22, read off a receiver, F-073). In an earlier successful group to the HomePod mini and Apple TV, the same Mac instead sent `POST /pair-verify` with `X-Apple-HKP: 6` to each receiver and received 200 responses; those receivers already had stored pairing credentials (measured 2026-09-22, captured, F-022 and F-134). Eter Radio on that Mac also sent two `pair-verify` requests with `X-Apple-HKP: 6` and received 200 responses from the HomePod, without a visible pair-setup request (measured 2026-09-24, captured, F-136). Four pair-verify requests from an iPhone XR on iOS 18.7 carried `X-Apple-HKP: 8` (measured 2026-09-22, captured, F-021). The receiver's published table stops at 7, so it does not name the iPhone's 8.
 
-So 8 has only ever been seen on pair-verify and 4 only on pair-setup, which is consistent with the value naming the mode of that request rather than a property of the sender. What 8 stands for is still open, and a receiver that logs the value and accepts each of 3, 4 and 8 in turn shows whether it changes anything.
+In these captures, 8 and 6 appeared on pair-verify and 4 on pair-setup. That is consistent with a mode-dependent value, but the different pair-verify values also depend on a difference these captures have not isolated. What 8 stands for is still open, and a receiver that logs and accepts the variants under otherwise identical conditions would show whether they change its behaviour.
 
 Which value the PIN path wants is also open. Three senders send `3` there and are answered, whilst the receiver's own list reserves `3` for system pairing and puts HomeKit at `6` (open: pairing with a PIN against an Apple TV whilst sending 6 settles it).
 
@@ -105,10 +105,12 @@ Active-Remote: 1734829163
 Client-Instance: 8A4F2C19B7E03D56
 X-Apple-Client-Name: Playable
 Content-Type: application/octet-stream
-Content-Length: 6
+Content-Length: 9
 ```
 
 `Client-Instance` carries the same value as `DACP-ID`. Both are random per session. `DACP-ID` is a 64-bit value written as uppercase hexadecimal without leading zeros, and `Active-Remote` is a random 32-bit decimal number (reported likely, [airplay2-sender-cpp, `raop_sender.cpp`](https://github.com/akustikrausch/airplay2-sender-cpp)).
+
+This sender's first transient `POST /pair-setup` was answered `403 Forbidden` by one HomePod mini on 2026-09-24, both for a single receiver and before a mixed group could form. Sending an accepted `GET /info` first and matching a captured Mac request's headers did not change the answer (F-130). With the Home app's speaker access temporarily opened, the unchanged sender paired and played to that HomePod in a mixed group for 30 seconds. The operator heard both speakers and judged them simultaneous. After the original home-members-only rule was restored, the HomePod again answered 403 to the unchanged first request (F-135, F-137 and F-138). This establishes the receiver's access rule as the gate for fresh transient pairing in this test; it does not establish how a third-party sender obtains an authorized stored pairing under that rule. See <doc:Protocol-Open-Questions>.
 
 ## Making the PIN appear
 

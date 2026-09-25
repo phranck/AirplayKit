@@ -66,30 +66,57 @@ private func string(_ pointer: UnsafePointer<CChar>?) -> String {
 }
 
 @_cdecl("pa_product_name")
-public func pa_product_name(_ manufacturer: UnsafePointer<CChar>?,
-                            _ model: UnsafePointer<CChar>?,
-                            _ out: UnsafeMutablePointer<CChar>?,
-                            _ capacity: Int) -> Int {
+package func pa_product_name(
+    _ manufacturer: UnsafePointer<CChar>?,
+    _ model: UnsafePointer<CChar>?,
+    _ out: UnsafeMutablePointer<CChar>?,
+    _ capacity: Int
+) -> Int {
     let name = DeviceAppearance.productName(manufacturer: string(manufacturer), model: string(model))
 
     return writeCString(name, into: out, capacity: capacity)
 }
 
+/// The callback's name pointer is borrowed for the duration of the call.
+@_cdecl("pa_resolve_product_name")
+package func pa_resolve_product_name(
+    _ host: UnsafePointer<CChar>?,
+    _ manufacturer: UnsafePointer<CChar>?,
+    _ model: UnsafePointer<CChar>?,
+    _ handler: (@convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?) -> Void)?,
+    _ context: UnsafeMutableRawPointer?
+) {
+    guard let handler else { return }
+    let host = string(host)
+    let manufacturer = string(manufacturer)
+    let model = string(model)
+    Task.detached(priority: .utility) {
+        let name = await ReceiverMetadataResolver.shared.productName(host: host,
+                                                                      manufacturer: manufacturer,
+                                                                      model: model)
+        name.withCString { handler(context, $0) }
+    }
+}
+
 @_cdecl("pa_symbol_name")
-public func pa_symbol_name(_ manufacturer: UnsafePointer<CChar>?,
-                           _ model: UnsafePointer<CChar>?,
-                           _ out: UnsafeMutablePointer<CChar>?,
-                           _ capacity: Int) -> Int {
+package func pa_symbol_name(
+    _ manufacturer: UnsafePointer<CChar>?,
+    _ model: UnsafePointer<CChar>?,
+    _ out: UnsafeMutablePointer<CChar>?,
+    _ capacity: Int
+) -> Int {
     let name = DeviceAppearance.symbolName(manufacturer: string(manufacturer), model: string(model))
 
     return writeCString(name, into: out, capacity: capacity)
 }
 
 @_cdecl("pa_pair_symbol_name")
-public func pa_pair_symbol_name(_ manufacturer: UnsafePointer<CChar>?,
-                                _ model: UnsafePointer<CChar>?,
-                                _ out: UnsafeMutablePointer<CChar>?,
-                                _ capacity: Int) -> Int {
+package func pa_pair_symbol_name(
+    _ manufacturer: UnsafePointer<CChar>?,
+    _ model: UnsafePointer<CChar>?,
+    _ out: UnsafeMutablePointer<CChar>?,
+    _ capacity: Int
+) -> Int {
     let name = DeviceAppearance.pairSymbolName(manufacturer: string(manufacturer), model: string(model))
 
     return writeCString(name, into: out, capacity: capacity)

@@ -7,6 +7,10 @@
 
 import Foundation
 
+enum EventChannelFailure: Error {
+    case malformedRequest
+}
+
 /**
  The connection the receiver pushes requests down.
 
@@ -25,7 +29,14 @@ import Foundation
  connected and renders silence. That is the single most expensive detail in this
  protocol to get wrong, and it is why nothing is added to it here.
  */
-public final class EventChannel {
+package final class EventChannel {
+    package struct Request: Equatable {
+        package let method: String
+        package let path: String
+        package let body: Data
+    }
+
+    private static let maximumRequestBytes = 1024 * 1024
     private let connection: TCPConnection
     private var read: EncryptedChannel
     private var write: EncryptedChannel
@@ -66,6 +77,20 @@ public final class EventChannel {
     }
 
     private var handlerForStopping: ((String) -> Void)?
+    private var handlerForRequests: ((Request) -> Void)?
+
+    package var requestHandler: ((Request) -> Void)? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return handlerForRequests
+        }
+        set {
+            lock.lock()
+            handlerForRequests = newValue
+            lock.unlock()
+        }
+    }
 
     private var running: Bool {
         lock.lock()
@@ -205,7 +230,13 @@ public final class EventChannel {
             do {
                 try Self.answerRequests(in: &plaintext,
                                         sealedWith: &write,
-                                        sendingThrough: connection.write)
+                                        sendingThrough: connection.write) { [weak self] request in
+                    self?.requestHandler?(request)
+                }
+            }
+            catch EventChannelFailure.malformedRequest {
+                stopped(because: "a malformed request arrived on the event channel")
+                return
             }
             catch {
                 stopped(because: "a reply on the event channel could not be written")
@@ -214,7 +245,7 @@ public final class EventChannel {
         }
     }
 
-    /// Where a pushed request's headers end, since only the headers are read here.
+    /// Where a pushed request's headers end, before its optional body.
     private static func requestEnd(in bytes: Data) -> Int? {
         guard let range = bytes.range(of: Data("\r\n\r\n".utf8)) else { return nil }
 
@@ -256,13 +287,44 @@ public final class EventChannel {
      */
     static func answerRequests(in plaintext: inout Data,
                                sealedWith channel: inout EncryptedChannel,
-                               sendingThrough send: (Data) throws -> Void) throws {
-        while let request = requestEnd(in: plaintext) {
-            let head = String(data: Data(plaintext.prefix(request)), encoding: .utf8) ?? ""
-            plaintext = Data(plaintext.dropFirst(request))
+                               sendingThrough send: (Data) throws -> Void,
+                               onRequest: ((Request) -> Void)? = nil) throws {
+        while let headerEnd = requestEnd(in: plaintext) {
+            guard let head = String(data: Data(plaintext.prefix(headerEnd)), encoding: .utf8) else {
+                throw EventChannelFailure.malformedRequest
+            }
+            let lines = head.components(separatedBy: "\r\n")
+            let start = lines[0].split(separator: " ", omittingEmptySubsequences: true)
+            guard start.count >= 3, start[2] == "RTSP/1.0" else {
+                throw EventChannelFailure.malformedRequest
+            }
+
+            var bodyLength: Int?
+            for line in lines.dropFirst() where line.lowercased().hasPrefix("content-length:") {
+                let value = line.dropFirst("content-length:".count).trimmingCharacters(in: .whitespaces)
+                guard bodyLength == nil, let length = Int(value), length >= 0,
+                      length <= maximumRequestBytes else {
+                    throw EventChannelFailure.malformedRequest
+                }
+                bodyLength = length
+            }
+
+            let length = bodyLength ?? 0
+            guard headerEnd <= maximumRequestBytes - length else {
+                throw EventChannelFailure.malformedRequest
+            }
+            guard plaintext.count >= headerEnd + length else { return }
+
+            let request = Request(method: String(start[0]),
+                                  path: String(start[1]),
+                                  body: Data(plaintext[headerEnd..<(headerEnd + length)]))
+            plaintext = Data(plaintext.dropFirst(headerEnd + length))
 
             try send(try channel.seal(reply(echoing: sequence(in: head))))
+            onRequest?(request)
         }
+
+        if plaintext.count > maximumRequestBytes { throw EventChannelFailure.malformedRequest }
     }
 
     /**

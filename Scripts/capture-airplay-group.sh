@@ -3,11 +3,10 @@
 #  capture-airplay-group.sh
 #  Records what a Mac sends when it plays to two AirPlay speakers at once.
 #
-#  Documentation/Research/airplay2-sender-protocol.md ends with nine questions
-#  that reading cannot answer, and one recording answers four of them: which PTP
-#  domain and profile a group uses, whether the receivers contest the master
-#  election, whether the sender opens one session per speaker or addresses a
-#  leader, and how the volume of one speaker in a group is set.
+#  The protocol reference under Sources/PlayableAirplay/PlayableAirplay.docc
+#  records the questions this measurement serves. Issue #18 names the two
+#  remaining ones: what each member's anchor says and what a leaving member
+#  receives. The encrypted RTSP bodies need receiver-side logs as well.
 #
 #  Two ways round, and the second is the one that sees everything.
 #

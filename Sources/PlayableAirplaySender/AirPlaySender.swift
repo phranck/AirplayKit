@@ -8,7 +8,7 @@
 import Foundation
 
 /// What can go wrong opening a session, beyond what each step reports for itself.
-public enum SenderFailure: Error, Equatable {
+package enum SenderFailure: Error, Equatable {
     /**
      There is no timeline to place audio on.
 
@@ -20,7 +20,7 @@ public enum SenderFailure: Error, Equatable {
 }
 
 /// What became of frames handed over.
-public enum WriteOutcome: Equatable {
+package enum WriteOutcome: Equatable {
     /// Taken, and they will be sent.
     case taken
 
@@ -43,7 +43,7 @@ public enum WriteOutcome: Equatable {
  miss is the last of them: the anchor points into the future, because it says
  when the first frame sounds and no frame can arrive before it is sent.
  */
-public final class AirPlaySender {
+package final class AirPlaySender {
     /// How much audio the ring holds, which is four seconds.
     static let ringFrames = ALACFrame.sampleRate * 4
 
@@ -92,6 +92,8 @@ public final class AirPlaySender {
     public static let anchorLead: TimeInterval = 2
 
     private let connection: ReceiverConnection
+    private let volumeMemory: ReceiverVolumeMemory?
+    private let volumeMemoryID: String?
     private var session: Session
     private let events: EventChannel
     private let audio: BufferedAudioStream
@@ -107,9 +109,13 @@ public final class AirPlaySender {
     private let clockReading: PTPClock.Reading
 
     private let lock = NSLock()
+    private let volumeChange = NSLock()
     private let ring: SampleRing
     private var open = true
+    private var currentVolume: Float?
     private var pump: Thread?
+    private var volumePoller: Thread?
+    private var handlerForVolume: ((Float) -> Void)?
 
     /// Whether the ring is still filling to ``primeFrames`` before anything is sent.
     private var priming = true
@@ -130,8 +136,11 @@ public final class AirPlaySender {
      @param senderName What the receiver shows as the source.
      @throws Whatever the step that failed reports.
      */
-    public init(host: String, port: UInt16, senderName: String) throws {
+    public init(host: String, port: UInt16, senderName: String,
+                receiverID: String? = nil, volumeMemory: ReceiverVolumeMemory? = nil) throws {
         ring = SampleRing(capacity: Self.ringFrames * ALACFrame.channelCount)
+        self.volumeMemory = volumeMemory
+        volumeMemoryID = receiverID
         connection = try ReceiverConnection(host: host, port: port, senderName: senderName)
         try connection.pair()
 
@@ -142,6 +151,24 @@ public final class AirPlaySender {
         // Asked before the session SETUP, which a receiver rejects without it.
         _ = try session.askWhatItIs()
         let eventPort = try session.open(senderName: senderName)
+
+        // A receiver keeps its own level. Asking before RECORD adopts that
+        // level without changing what the listener set on the speaker.
+        do {
+            currentVolume = try session.readVolume()
+        } catch is SessionFailure {
+            // A complete reply without a usable volume leaves the level unknown.
+        } catch RTSPFailure.receiverAnswered {
+            // A receiver may not support this parameter. It has still answered
+            // the request, so the control channel remains in step.
+        }
+        if let receiverID {
+            if let remembered = volumeMemory?.storedVolume(for: receiverID) {
+                try session.setVolume(remembered)
+                currentVolume = remembered
+            }
+            if let currentVolume { volumeMemory?.remember(currentVolume, for: receiverID) }
+        }
 
         // Opened before RECORD. A receiver answers RECORD with 500 until this
         // connection exists, and then never renders anything.
@@ -187,6 +214,7 @@ public final class AirPlaySender {
         }
 
         startPump()
+        startVolumePoller()
     }
 
     deinit {
@@ -271,7 +299,46 @@ public final class AirPlaySender {
      @param volume From 0 for silent to 1 for full.
      */
     public func setVolume(_ volume: Float) throws {
-        try session.setVolume(min(max(volume, 0), 1))
+        let level = min(max(volume, 0), 1)
+        volumeChange.lock()
+        defer { volumeChange.unlock() }
+
+        try session.setVolume(level)
+
+        lock.lock()
+        currentVolume = level
+        let handler = handlerForVolume
+        lock.unlock()
+        if let volumeMemoryID { volumeMemory?.remember(level, for: volumeMemoryID) }
+        handler?(level)
+    }
+
+    /// Called when a later read finds a changed level, including device-side changes.
+    package var volumeHandler: ((Float) -> Void)? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return handlerForVolume
+        }
+        set {
+            lock.lock()
+            handlerForVolume = newValue
+            lock.unlock()
+        }
+    }
+
+    /// The level read on opening or last set through this session, if known.
+    public var volume: Float? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        return currentVolume
+    }
+
+    /// Requests pushed by this receiver, after their RTSP replies were sent.
+    package var eventHandler: ((EventChannel.Request) -> Void)? {
+        get { events.requestHandler }
+        set { events.requestHandler = newValue }
     }
 
     /**
@@ -328,6 +395,12 @@ public final class AirPlaySender {
 
         events.close()
         connection.stop()
+        if let volumePoller, Thread.current !== volumePoller {
+            let deadline = Date().addingTimeInterval(Self.pumpExitTimeout)
+            while !volumePoller.isFinished, Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.002)
+            }
+        }
         connection.close()
         ring.drain()
     }
@@ -629,5 +702,29 @@ public final class AirPlaySender {
         thread.name = "PlayableAirplay.audio"
         thread.start()
         pump = thread
+    }
+
+    private func startVolumePoller() {
+        let worker = Thread { [weak self] in
+            while let self, self.isRunning {
+                self.volumeChange.lock()
+                let level = try? self.session.readVolume()
+                self.volumeChange.unlock()
+                if let level {
+                    self.lock.lock()
+                    let changed = self.currentVolume == nil
+                        || abs(self.currentVolume! - level) > 0.001
+                    self.currentVolume = level
+                    let handler = self.handlerForVolume
+                    self.lock.unlock()
+                    if changed { handler?(level) }
+                    if let id = self.volumeMemoryID { self.volumeMemory?.remember(level, for: id) }
+                }
+                Thread.sleep(forTimeInterval: 1)
+            }
+        }
+        worker.name = "PlayableAirplay.volume"
+        volumePoller = worker
+        worker.start()
     }
 }

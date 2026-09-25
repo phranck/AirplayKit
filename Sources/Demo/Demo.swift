@@ -10,7 +10,6 @@ import Dispatch
 import Foundation
 import PlayableAirplay
 import PlayableAirplaySender
-import PlayableAirplayUPnP
 
 // The library runs on Linux as well, and AVFoundation does not. Everything that
 // reads any format and resamples it is Apple's framework doing the work, so
@@ -50,8 +49,8 @@ func listReceivers(forSeconds seconds: Int) -> Int32 {
 
         print("\(receivers.count) receiver(s):")
 
-        // Receivers that name the same group as each other. Nothing measured
-        // says what that means, so this prints what was seen and claims nothing.
+        // A matching advertised identifier is not proof of playback grouping:
+        // two copies of one test receiver publish the same pi before selection.
         let shared = Dictionary(grouping: receivers.filter { !$0.groupID.isEmpty }, by: \.groupID)
             .filter { $0.value.count > 1 }
 
@@ -59,7 +58,7 @@ func listReceivers(forSeconds seconds: Int) -> Int32 {
             let generation = receiver.supportsAirPlay2 ? "AirPlay 2" : "AirPlay 1"
             let name = receiver.name.padding(toLength: 22, withPad: " ", startingAt: 0)
             let state = receiver.isPlaying ? "playing" : (receiver.hasSender ? "in use" : "free")
-            let group = shared[receiver.groupID].map { " same group as \($0.count - 1) other(s)" } ?? ""
+            let group = shared[receiver.groupID].map { " same advertised gid as \($0.count - 1) other(s)" } ?? ""
 
             // What a list would put under the name, and the symbol it would draw
             // beside it. Printed here so both can be read against real hardware.
@@ -91,38 +90,92 @@ func listReceivers(forSeconds seconds: Int) -> Int32 {
     return 0
 }
 
-// MARK: - Asking a Sonos directly
-
-/// Asks one speaker what AirPlay will not tell, and prints it.
-func describeSonos(at host: String) async -> Int32 {
-    let speaker = SonosClient(host: host)
-
-    do {
-        let device = try await speaker.device()
-        let playing = try await speaker.playback()
-
-        print("\(device.roomName): \(device.modelName) (\(device.modelNumber)), \(device.identifier)")
-        if let icon = speaker.iconURL(for: device) { print("  picture   \(icon)") }
-
-        let following = playing.followingIdentifier.map { ", following \($0)" } ?? ""
-        print("  playing   \(playing.state.rawValue)\(following)")
-        print("  volume    \(playing.volume) of 100\(playing.isMuted ? ", muted" : "")")
-
-        print("groups on this network:")
-        for group in try await speaker.zoneGroups() {
-            let rooms = group.members.map { member in
-                member.isBonded ? "\(member.roomName) with \(member.satellites.count) bonded"
-                                : member.roomName
-            }
-            let together = group.joinsSeveralMembers ? "" : " (on its own)"
-            print("  \(group.coordinatorIdentifier) leads \(rooms.joined(separator: ", "))\(together)")
-        }
-    } catch {
-        FileHandle.standardError.write(Data("could not ask \(host): \(error)\n".utf8))
+/// Exercises the public group API with one live join and one live departure.
+func testGroupAPI(names: [String], seconds: Int) -> Int32 {
+    let queue = DispatchQueue(label: "at.playable.airplay.demo.groupDiscovery")
+    var latest: [AirPlayReceiver] = []
+    let discovery = AirPlayDiscovery(deliveringOn: queue) { latest = $0 }
+    Thread.sleep(forTimeInterval: 6)
+    discovery.stop()
+    let found = queue.sync { latest }
+    let receivers = names.compactMap { name in found.first { $0.name == name } }
+    guard receivers.count == 3 else {
+        print("found \(receivers.map(\.name)); wanted \(names)")
         return 1
     }
 
-    return 0
+    var opened: AirPlayGroup?
+    do {
+        let group = try AirPlayGroup(receivers: Array(receivers.prefix(1)),
+                                     senderName: "PlayableAirplay group test")
+        opened = group
+        defer { group.dissolve() }
+        print("group opened: \(group.memberIDs)")
+
+        let finished = DispatchSemaphore(value: 0)
+        let producer = Thread {
+            defer { finished.signal() }
+            let packets = seconds * AirPlaySession.sampleRate / ALACFrame.framesPerPacket
+            var frame = 0
+            var due = ProcessInfo.processInfo.systemUptime
+            for _ in 0..<packets {
+                var samples = [Int16](repeating: 0,
+                                      count: ALACFrame.framesPerPacket * AirPlaySession.channelCount)
+                for index in 0..<ALACFrame.framesPerPacket {
+                    let angle = 2 * Double.pi * 440 * Double(frame) / Double(AirPlaySession.sampleRate)
+                    let value = Int16(3000 * sin(angle))
+                    samples[index * 2] = value
+                    samples[index * 2 + 1] = value
+                    frame += 1
+                }
+                if case .ended = group.write(samples) { return }
+                due += ALACFrame.packetDuration
+                let wait = due - ProcessInfo.processInfo.systemUptime
+                if wait > 0 { Thread.sleep(forTimeInterval: wait) }
+            }
+        }
+        producer.start()
+
+        Thread.sleep(forTimeInterval: 5)
+        try group.add(receivers[1])
+        print("joined \(names[1]): \(group.memberIDs)")
+        Thread.sleep(forTimeInterval: 5)
+        try group.add(receivers[2])
+        print("joined \(names[2]): \(group.memberIDs)")
+        Thread.sleep(forTimeInterval: 5)
+        try group.remove(receivers[1].id)
+        print("removed \(names[1]): \(group.memberIDs)")
+        finished.wait()
+        Thread.sleep(forTimeInterval: 2.5)
+        print("group test complete")
+        if !group.isRunning { print("group ended: \(group.endedBecause ?? "no reason recorded")") }
+        return group.isRunning ? 0 : 1
+    } catch {
+        let detail = opened?.endedBecause ?? "no group failure recorded"
+        FileHandle.standardError.write(Data("group API failed: \(error); \(detail)\n".utf8))
+        return 1
+    }
+}
+
+/// Keeps one AirPlay session open while device-side volume changes arrive.
+func watchVolume(on host: String, seconds: Int) -> Int32 {
+    do {
+        let session = try AirPlaySession(host: host, senderName: "PlayableAirplay volume watch")
+        defer { session.close() }
+        print("initial volume: \(session.volume.map(String.init(describing:)) ?? "unknown")")
+        let queue = DispatchQueue(label: "at.playable.airplay.demo.volume")
+        session.observeChanges(deliveringOn: queue) { event in
+            if case .volumeChanged(let id, let level) = event {
+                print("volumeChanged \(id): \(level)")
+            }
+        }
+        Thread.sleep(forTimeInterval: TimeInterval(seconds))
+        print("final volume: \(session.volume.map(String.init(describing:)) ?? "unknown")")
+        return 0
+    } catch {
+        FileHandle.standardError.write(Data("volume watch failed: \(error)\n".utf8))
+        return 1
+    }
 }
 
 // MARK: - The Swift sender
@@ -130,8 +183,7 @@ func describeSonos(at host: String) async -> Int32 {
 /**
  Pairs with a receiver using the Swift sender, and says what came out.
 
- This exercises the path being built beside the C++ one. It stops at the keys,
- because that is as far as that path goes so far.
+ This exercises the Swift buffered sender through a complete audio session.
 
  @param host The receiver's host name or address.
  @param port Its RTSP port.
@@ -238,10 +290,6 @@ func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 
 
         try session.setVolume(0.3)
 
-        // An anchor on a timeline of our own, which is the open question here:
-        // the session declared no timing protocol, so there is no shared clock,
-        // and whether a receiver plays against one it was simply handed is what
-        // this finds out.
         // Opened before SETPEERS, because the receiver starts announcing as
         // soon as it is told where to announce to.
         let clock = try PTPClock()
@@ -521,7 +569,8 @@ func streamWave(at path: String, to host: String, port: UInt16, volume: Float = 
 
     let session = try AirPlaySession(host: host, port: port, senderName: "My App")
     session.volume = volume
-    print("  volume set to \(session.volume), told to the receiver as "
+    let reportedLevel = session.volume.map { String(describing: $0) } ?? "unknown"
+    print("  volume set to \(reportedLevel), told to the receiver as "
           + String(format: "%.1f dB", volume <= 0 ? -144 : Double(volume) * 30 - 30))
 
     let samplesPerChunk = 4096 * AirPlaySession.channelCount
@@ -551,7 +600,7 @@ func streamWave(at path: String, to host: String, port: UInt16, volume: Float = 
 
 @main
 struct Demo {
-    // Asynchronous because asking a Sonos is, and because holding the process
+    // Asynchronous because the work below is, and because holding the process
     // open with a semaphore whilst waiting for it deadlocked instead.
     static func main() async {
         let arguments = CommandLine.arguments
@@ -559,8 +608,12 @@ struct Demo {
         guard arguments.count > 1 else {
             var usage = """
                         usage: Demo list
-                               Demo sonos <host>                what AirPlay will not say
                                Demo pair <host> [port]          pair only, and say what came out
+                               Demo group-clock <host1> <host2> [port]
+                               Demo group-tone <host1> <host2> [seconds]
+                               Demo group-tone3 <host1> <host2> <host3> [seconds]
+                               Demo group-api <name1> <name2> <name3> [seconds]
+                               Demo volume-watch <host> [seconds]
                                Demo swift <host> [port] [secs]  play through the Swift sender
                                Demo play <host> [port] [seconds]
                                Demo wave <path> <host> [port] [volume]   16 bit stereo at 44100
@@ -579,12 +632,67 @@ struct Demo {
         case "list":
             exit(listReceivers(forSeconds: 5))
 
-        case "sonos" where arguments.count > 2:
-            exit(await describeSonos(at: arguments[2]))
-
         case "pair" where arguments.count > 2:
             let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000
             exit(pairWithReceiver(at: arguments[2], port: port))
+
+        case "group-clock" where arguments.count > 3:
+            let port = UInt16(arguments.count > 4 ? arguments[4] : "7000") ?? 7000
+            do {
+                let results = try GroupClockProbe.run(first: arguments[2], second: arguments[3], port: port)
+                for result in results {
+                    let clock = result.announcedClock.map { String(format: "%016llx", $0) } ?? "none"
+                    print("\(result.address): announced=\(clock), count=\(result.announcements), "
+                          + "delay=\(result.delayRequests), peer-delay=\(result.peerDelayRequests), "
+                          + "anchor=\(result.anchorAccepted)")
+                }
+                exit(results.allSatisfy(\.anchorAccepted) ? 0 : 1)
+            } catch {
+                FileHandle.standardError.write(Data("group clock failed: \(error)\n".utf8))
+                exit(1)
+            }
+
+        case "group-tone" where arguments.count > 3:
+            let seconds = Int(arguments.count > 4 ? arguments[4] : "4") ?? 4
+            guard seconds > 0, seconds <= 30 else { exit(2) }
+            do {
+                let results = try GroupClockProbe.run(first: arguments[2], second: arguments[3],
+                                                       toneSeconds: seconds)
+                for result in results {
+                    print("\(result.address): delay=\(result.delayRequests), "
+                          + "peer-delay=\(result.peerDelayRequests), anchor=\(result.anchorAccepted)")
+                }
+                exit(results.allSatisfy(\.anchorAccepted) ? 0 : 1)
+            } catch {
+                FileHandle.standardError.write(Data("group tone failed: \(error)\n".utf8))
+                exit(1)
+            }
+
+        case "group-tone3" where arguments.count > 4:
+            let seconds = Int(arguments.count > 5 ? arguments[5] : "10") ?? 10
+            guard seconds > 0, seconds <= 30 else { exit(2) }
+            do {
+                let results = try GroupClockProbe.run(hosts: Array(arguments[2...4]),
+                                                       toneSeconds: seconds)
+                for result in results {
+                    print("\(result.address): delay=\(result.delayRequests), "
+                          + "anchor=\(result.anchorAccepted)")
+                }
+                exit(results.allSatisfy(\.anchorAccepted) ? 0 : 1)
+            } catch {
+                FileHandle.standardError.write(Data("group tone failed: \(error)\n".utf8))
+                exit(1)
+            }
+
+        case "group-api" where arguments.count > 4:
+            let seconds = Int(arguments.count > 5 ? arguments[5] : "20") ?? 20
+            guard seconds > 0, seconds <= 30 else { exit(2) }
+            exit(testGroupAPI(names: Array(arguments[2...4]), seconds: seconds))
+
+        case "volume-watch" where arguments.count > 2:
+            let seconds = Int(arguments.count > 3 ? arguments[3] : "30") ?? 30
+            guard seconds > 0, seconds <= 60 else { exit(2) }
+            exit(watchVolume(on: arguments[2], seconds: seconds))
 
         case "swift" where arguments.count > 2:
             let port = UInt16(arguments.count > 3 ? arguments[3] : "7000") ?? 7000

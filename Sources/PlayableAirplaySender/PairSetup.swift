@@ -8,7 +8,7 @@
 import Foundation
 
 /// What a receiver can say went wrong, as HomeKit numbers it.
-public enum PairingError: UInt8, Error, Equatable {
+package enum PairingError: UInt8, Error, Equatable {
     case unknown = 0x01
     case authentication = 0x02
     case backoff = 0x03
@@ -19,7 +19,7 @@ public enum PairingError: UInt8, Error, Equatable {
 }
 
 /// What can go wrong reading a receiver's answer, beyond the receiver saying so itself.
-public enum PairSetupFailure: Error, Equatable {
+package enum PairSetupFailure: Error, Equatable {
     /// The body was not a TLV8 sequence, or ended in the middle of an item.
     case answerIsNotReadable
 
@@ -55,7 +55,7 @@ public enum PairSetupFailure: Error, Equatable {
  let keys = try pairing.finish(with: receiverProofAnswer)
  ```
  */
-public struct PairSetup {
+package struct PairSetup {
     /// The flag that asks for the transient path rather than the one ending in a stored identity.
     static let transientFlag: UInt32 = 0x10
 

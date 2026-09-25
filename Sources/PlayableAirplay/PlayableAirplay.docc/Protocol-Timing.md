@@ -20,7 +20,7 @@ No source states the rule for choosing between them as a sentence. Three indepen
 
 ## PTP, as measured
 
-The traffic is unicast over IPv6 link-local, on UDP ports 319 and 320, in domain 0. It is PTPv2 with the version 1 compatibility flag set, and the flags field carries `timescale` and `unicast`. Not one multicast PTP packet appeared in any run (measured 2026-09-22, captured, F-009).
+In the 2026-09-22 Apple group capture, the traffic was unicast over IPv6 link-local, on UDP ports 319 and 320, in domain 0. It was PTPv2 with the version 1 compatibility flag set, and the flags field carried `timescale` and `unicast`. No multicast PTP packet appeared in that capture (F-009). Later single-Sonos sessions also sent unicast PTP to this sender over IPv4 (F-100 and F-124), so IPv6 link-local is not the only observed transport.
 
 That agrees with the published record and sharpens it. nqptp requires exclusive use of both ports, and shairport-sync's author states that an AirPlay source will only send and respond on those two (reported confirmed, [shairport-sync, `AIRPLAY2.md`](https://github.com/mikebrady/shairport-sync/blob/master/AIRPLAY2.md), [nqptp, README](https://github.com/mikebrady/nqptp/blob/main/README.md) and [shairport-sync discussion 1712](https://github.com/mikebrady/shairport-sync/discussions/1712)). nqptp binds both ports and never joins a PTP multicast group, which is why unicast was already the reading before it was measured (reported likely, [nqptp, `nqptp.c`](https://github.com/mikebrady/nqptp/blob/main/nqptp.c) and [`nqptp-utilities.c`](https://github.com/mikebrady/nqptp/blob/main/nqptp-utilities.c)).
 
@@ -30,7 +30,7 @@ port 320   general messages   Announce, Follow_Up, Delay_Resp,
                               Pdelay_Resp_Follow_Up, Management, Signaling
 ```
 
-Every Announce message carried these values (measured 2026-09-22, captured, F-010).
+Every Announce message in the 2026-09-22 capture carried these values (F-010).
 
 | Field | Value |
 |---|---|
@@ -44,14 +44,14 @@ Every Announce message carried these values (measured 2026-09-22, captured, F-01
 
 ### What a clock identity is made of
 
-A clock identity is the device's six-byte hardware address with the two bytes `00 08` after it. That is not the standard EUI-64 expansion, which inserts `fffe` in the middle, which is why every identity on the wire ends in `0008` and none of them ends in `fffe` (measured 2026-09-22, captured and decrypted, F-013 and F-076).
+In the 2026-09-22 Apple capture, each clock identity was the device's six-byte hardware address with `00 08` appended. Those identities did not use the standard EUI-64 expansion, which inserts `fffe` in the middle (F-013 and F-076). A later Sonos Bookshelf announced `542a1bfffe58d1f8`, which does use that EUI-64 pattern (F-101). A sender must use the identity the active clock announces, rather than derive one pattern for every receiver.
 
 ```text
 02:00:00:00:00:01      a hardware address
 0x0200000000010008     the clock identity built from it
 ```
 
-The derivation was read off one device, from the other end. A macOS sender's session SETUP carries both its `macAddress` and, inside `timingPeerInfo`, a `ClockID` as a signed 64-bit integer, and reading that integer as unsigned gives exactly the address followed by `0008` (measured 2026-09-22, decrypted, F-076). Every other identity seen has the same shape, which is consistent with the rule and is not a second measurement of it.
+The `0008` construction was read off one Apple sender from the other end. Its session SETUP carries both its `macAddress` and, inside `timingPeerInfo`, a `ClockID` as a signed 64-bit integer. Reading that integer as unsigned gives exactly the address followed by `0008` (measured 2026-09-22, decrypted, F-076). The Sonos identity above is a counterexample to extending that construction to all devices.
 
 A device has several hardware addresses, and the one in the identity is not necessarily the one on the interface carrying the session. Matching an identity back to a device is therefore a matter of the manufacturer prefix and of trying each interface, not of reading the address off the socket.
 
@@ -69,7 +69,7 @@ That reading is supported by what nqptp handles. It handles exactly three messag
 
 ### What one receiver did
 
-With a single receiver, the sender is the only clock source and behaves as the master. An iPhone playing to one Mac sent all 794 PTP packets in the recording, and the Mac's side of the exchange carried Sync, Follow_Up, Delay_Resp and Announce arriving from the iPhone (measured 2026-09-22, captured, F-017). A Delay_Resp cannot arrive without a Delay_Req having gone out, so the receiver is asking and the sender is answering.
+In one iPhone-to-Mac session, the sender was the only observed clock source and behaved as the master. The iPhone sent all 794 PTP packets in the recording, and the Mac's side of the exchange carried Sync, Follow_Up, Delay_Resp and Announce arriving from the iPhone (measured 2026-09-22, captured, F-017). A Delay_Resp cannot arrive without a Delay_Req having gone out, so the receiver was asking and the sender was answering. A later single-Sonos session instead had the receiver announce its own clock and the sender follow it (F-100 to F-103).
 
 The anchor in the control channel names the sender's own clock. `networkTimeTimelineID` read `-2267142311769604088` in every anchor of every session recorded that hour, which as an unsigned value is `0xE0897E144BB70008`, a hardware address with `0008` after it exactly like the identities on the wire (measured 2026-09-22, decrypted, F-057). It is the same in sessions to differently named receivers, so it identifies a clock rather than a session. That is the join between the two halves of the protocol: the traffic on ports 319 and 320 and the anchor inside the encryption refer to the same identity.
 
@@ -90,7 +90,9 @@ The receivers do announce and do contest, and the published reading did not have
 
 What the measurement does not show is the sender's own transmissions in that run. The capture never holds them. PTP is timestamped in the network hardware, and that transmit path does not pass the packet filter, so the capturing machine's own PTP is absent in every run and in both roles, whilst its RTSP appears in both directions in the same file (measured 2026-09-22, captured, F-018). So whether the sender also announced in that two-receiver run, and lost, cannot be read out of it.
 
-Both facts stand. A sender is the only clock source when it is alone with one receiver, and receivers announce with full Best Master Clock fields and settle a grandmaster between themselves when there are two of them. What decides the case where all three announce is open: a recording taken off the sending machine, such as the packet capture built into a router, shows whether the sender announces at all and what happens when it does.
+Both observations stand for their respective captures. In the iPhone-to-Mac run, the sender was the only observed source. In the Apple TV and HomePod run, the receivers announced with full Best Master Clock fields and settled a grandmaster between themselves. The Sonos single-receiver run shows that sender leadership is not universal. What decides a group where sender and receivers all announce is open: a recording taken off the sending machine, such as a packet capture built into a router, would show whether the sender announces and what happens when it does.
+
+The local Swift sender was tested separately on 24 September. Advertising one clock identity without transmitting PTP left two Sonos receivers on their own clocks (F-124). After it transmitted Sync, Follow_Up and Announce and answered Delay_Req, both receivers queried that sender clock and returned usable anchors (F-125). Two receivers then played a ten-second tone, and three played a twenty-second tone; the listener judged the outputs simultaneous (F-126). These findings establish that this active-clock path works on those Sonos receivers. They do not identify Apple's PTP profile or measure acoustic offset.
 
 What was already open stays open. Which PTP profile applies is unsettled, and shairport-sync's author hedges it with a "possibly" towards 802.1AS (reported confirmed as a statement of what is unknown, [shairport-sync discussion 1712](https://github.com/mikebrady/shairport-sync/discussions/1712)). The domain number is settled at 0 by the measurement above.
 
@@ -144,7 +146,7 @@ rtpTime                2004038641
 
 `networkTimeFlags` was 0 in every anchor observed, so what it does is open: a value other than 0 has to turn up before it can be read at all. The integers are printed signed because the receiver reads them as signed values, and `networkTimeTimelineID` is a 64-bit clock identity.
 
-One `SETRATEANCHORTIME` arrives in a whole session, so the anchor is set at the start and is not repeated as the group changes (measured 2026-09-22, decrypted, F-035 and F-034).
+In one observed join, the existing stream kept its first anchor and received only an updated `SETPEERS` list (measured 2026-09-22, decrypted, F-034). In another, the sender tore down the existing stream, opened one at a different sample rate and sent a fresh anchor under a different clock identity (measured 2026-09-24, decrypted, F-121). A sender must therefore handle a group change that reanchors a stream.
 
 Given that pair, and the sample rate, a receiver computes the network time at which any other RTP timestamp should sound, by linear extrapolation from the anchor. Nothing else is needed to place a frame in time.
 
@@ -196,10 +198,14 @@ Putting the pieces together gives the following. Each piece is sourced or measur
 
 1. Every receiver in the group locks its clock to one master clock, over PTP on ports 319 and 320, unicast to each peer.
 2. The sender tells each receiver who else is in the group with `SETPEERS`, so every receiver watches the same addresses for clock traffic. A receiver hands that list straight to its PTP component.
-3. The sender sends each receiver the same anchor with `SETRATEANCHORTIME`: the same `networkTimeTimelineID`, the same `networkTimeSecs` and `networkTimeFrac`, and the same `rtpTime`. That is one sentence saying that this audio frame sounds at this instant on that clock, and it is identical for every member.
-4. Each receiver places every other frame by extrapolating from that anchor at the sample rate, and subtracts its own output latency locally.
+3. The sender gives each receiver an anchor with `SETRATEANCHORTIME`. In a measured two-receiver group the anchors named the same clock identity but different clock times and RTP positions. Their differences matched at the stream's 48 kHz sample rate to about 2.7 microseconds, so they expressed equivalent mappings of the media timeline rather than identical field values (measured 2026-09-24, decrypted, F-119).
+4. Each receiver places later frames by extrapolating from its anchor at the sample rate. How its output latency enters the audible result remains to be measured.
 
-The consequence worth holding onto is that the sender never has to know any receiver's latency, and never has to reconcile one receiver's latency against another's. The differences cancel inside each device. What the sender owes every receiver is one clock and one anchor, identical for all of them.
+The control messages establish a common media-to-clock mapping. They do not by themselves prove that receiver output latency is compensated locally, or that two real speakers sound in step. Those still need an acoustic measurement. A group sender must preserve the equivalent mapping for every member, including after a stream rebuild.
+
+The current sender's minimal two-Sonos probe did not establish that common clock. With a shared group UUID and timing peer identity, and with each receiver's `SETPEERS` naming the sender and the other receiver over IPv4, both still announced their own clock on successive reads (measured 2026-09-24, F-124). That probe sent no audio or anchor and did not include IPv6 peer addresses, so it does not isolate whether active sender PTP, the complete peer list, stream state or another step makes the difference.
+
+A separate sender implementation reports that it runs an active gPTP-dialect grandmaster with one clock shared by its group sessions. It says its packets use `majorSdoId=1`, an announcing priority that outranks the receivers, unicast Sync and Follow_Up, and replies to delay and unicast-negotiation requests ([Music Assistant, `airplay-cli` design](https://github.com/music-assistant/airplay-cli/blob/main/DESIGN.md), reported as implementation behaviour). This provides a concrete design to verify against the wire. It does not settle whether all receiver models follow that clock; the same implementation reports a standalone HomePod case that instead requires following the receiver's clock.
 
 `rate` is what starts and stops the group together. Its low bit means play when odd and pause when even, so a pause is one anchor message to each member rather than a separate stop protocol. <doc:Protocol-Control> covers what that looks like in a running session.
 
@@ -280,4 +286,4 @@ What a receiver typically wants is documented in round terms. An AirPlay 1 sourc
 
 `audioLatencies` and `outputLatencyMicros` are real and they come from the receiver, in the reply to the qualified `GET /info` that <doc:Protocol-Finding-Receivers> describes. Neither open sender reads them.
 
-How a sender reconciles different latencies across several receivers in a group is open, and nothing in the reachable record addresses it. The mechanism that makes reconciliation unnecessary is the anchor: the sender tells every receiver the same network time for the same RTP timestamp, and each receiver subtracts its own output latency locally.
+How a sender reconciles different latencies across several receivers in a group is open. Two controlled receiver channels received different anchors that express an equivalent media-to-clock mapping (measured 2026-09-24, decrypted, F-119). The experiment did not measure either receiver's output latency or audible synchronisation, so it does not establish whether the receiver subtracts that latency locally or the sender compensates elsewhere.

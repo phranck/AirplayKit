@@ -22,7 +22,7 @@ private let streamSocket = SOCK_STREAM
 #endif
 
 /// What can go wrong on a socket, in words rather than in an error number.
-public enum TCPFailure: Error, Equatable {
+package enum TCPFailure: Error, Equatable {
     /// The host name could not be turned into an address.
     case hostCouldNotBeResolved(String)
 
@@ -72,7 +72,7 @@ public enum TCPFailure: Error, Equatable {
  every byte. The platform difference is two imports and nothing else: everything
  here is POSIX, which is what makes one implementation serve macOS and Linux.
  */
-public final class TCPConnection {
+package final class TCPConnection {
     private var handle: Int32 = -1
 
     /**

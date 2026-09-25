@@ -3,9 +3,8 @@
 #  build-site.sh
 #  Builds the site: the page at the root, the DocC reference under /docs.
 #
-#  The symbol graph comes from the compiler and docc turns it, together with the
-#  catalogue, into a site of its own. It does not go through the docc plugin,
-#  because one swiftc call over one file is less machinery than a plugin is.
+#  The symbol graph comes from the built module, so extensions in every source
+#  file appear in the reference. DocC turns it and the catalogue into the site.
 #
 #  The reference is served from /docs wherever the site stands, so it is always
 #  built to say so. Serve build/site and both halves work.
@@ -25,15 +24,7 @@ siteDirectory="build/site"
 rm -rf "$symbolDirectory" "$siteDirectory"
 mkdir -p "$symbolDirectory" "$siteDirectory"
 
-# The module is compiled only to get its symbols, so the object file goes away
-# with the temporary directory it was written into.
-scratch="$(mktemp -d)"
-trap 'rm -rf "$scratch"' EXIT
-
-# The library imports the sender, which is a Swift module rather than a header,
-# so it has to exist before the compiler can be asked about anything. Building
-# the package is how it comes to exist, and where it lands is what the bin path
-# names.
+# The library and its dependencies must exist before symbols can be extracted.
 swift build > /dev/null
 binPath="$(swift build --show-bin-path)"
 
@@ -45,12 +36,17 @@ if [[ -d "$binPath/Modules" ]]; then
     moduleSearch+=(-I "$binPath/Modules")
 fi
 
-swiftc -emit-symbol-graph -emit-symbol-graph-dir "$symbolDirectory" \
-    -emit-module -module-name "$moduleName" \
-    -I Sources/CPlayableAirplay/include \
-    "${moduleSearch[@]}" \
-    Sources/"$moduleName"/"$moduleName".swift \
-    -o "$scratch/$moduleName.o"
+# Xcode 26.3 requires an explicit target for symbol extraction. Take it from
+# the same Swift toolchain that built the module, so the runner and a local Mac
+# do not silently extract for different platform versions.
+targetTriple="$(swift -print-target-info | python3 -c 'import json,sys; print(json.load(sys.stdin)["target"]["triple"])')"
+symbolArguments=(-module-name "$moduleName" -output-dir "$symbolDirectory" -target "$targetTriple"
+    -minimum-access-level public -I Sources/CPlayableAirplay/include
+    "${moduleSearch[@]}")
+if command -v xcrun > /dev/null 2>&1; then
+    symbolArguments+=(-sdk "$(xcrun --sdk macosx --show-sdk-path)")
+fi
+swift symbolgraph-extract "${symbolArguments[@]}"
 
 # docc lives in the toolchain, which is reached through xcrun on macOS and is
 # on the path everywhere else.
