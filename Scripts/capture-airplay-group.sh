@@ -3,7 +3,7 @@
 #  capture-airplay-group.sh
 #  Records what a Mac sends when it plays to two AirPlay speakers at once.
 #
-#  The protocol reference under Sources/PlayableAirplay/PlayableAirplay.docc
+#  The protocol reference under Sources/AirplayKit/AirplayKit.docc
 #  records the questions this measurement serves. Issue #18 names the two
 #  remaining ones: what each member's anchor says and what a leaving member
 #  receives. The encrypted RTSP bodies need receiver-side logs as well.

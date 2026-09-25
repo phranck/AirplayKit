@@ -1,15 +1,15 @@
 <div align="center">
 
-[![CI](https://img.shields.io/github/actions/workflow/status/phranck/PlayableAirplay/ci.yml?branch=main&style=flat&label=CI&labelColor=1c1c1c&color=e53935)](https://github.com/phranck/PlayableAirplay/actions/workflows/ci.yml)
-[![Last commit](https://img.shields.io/github/last-commit/phranck/PlayableAirplay?style=flat&label=Commit&labelColor=1c1c1c&color=fb8c00)](https://github.com/phranck/PlayableAirplay/commits/main)
-[![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux-fdd835?style=flat&labelColor=1c1c1c)](https://github.com/phranck/PlayableAirplay/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/phranck/AirplayKit/ci.yml?branch=main&style=flat&label=CI&labelColor=1c1c1c&color=e53935)](https://github.com/phranck/AirplayKit/actions/workflows/ci.yml)
+[![Last commit](https://img.shields.io/github/last-commit/phranck/AirplayKit?style=flat&label=Commit&labelColor=1c1c1c&color=fb8c00)](https://github.com/phranck/AirplayKit/commits/main)
+[![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux-fdd835?style=flat&labelColor=1c1c1c)](https://github.com/phranck/AirplayKit/actions/workflows/ci.yml)
 [![Language](https://img.shields.io/badge/Written%20in-Swift-43a047?style=flat&labelColor=1c1c1c)](https://swift.org)
 [![Documentation](https://img.shields.io/badge/Reference-DocC-1e88e5?style=flat&labelColor=1c1c1c)](https://playable-airplay.layered.work/docs/)
-[![License](https://img.shields.io/github/license/phranck/PlayableAirplay?style=flat&label=License&labelColor=1c1c1c&color=8e24aa)](https://layered.mit-license.org)
+[![License](https://img.shields.io/github/license/phranck/AirplayKit?style=flat&label=License&labelColor=1c1c1c&color=8e24aa)](https://layered.mit-license.org)
 
 </div>
 
-# PlayableAirplay
+# AirplayKit
 
 Targets AirPlay 2 audio output from macOS and Linux through Swift. Playback against receivers is recorded for macOS. Linux builds in CI; receiver playback on Linux has not yet been recorded.
 
@@ -33,26 +33,26 @@ To read them locally, run `./Scripts/build-site.sh` and serve `build/site`, whic
 
 The sender, public Swift interface and device metadata are Swift. Bonjour discovery and its name and state parsing are C, using the same DNS-SD interface on both platforms.
 
-`Sources/PlayableAirplay` is the Swift library: `AirPlayDiscovery`, `AirPlayReceiver`, `AirPlaySession`, `AirPlayGroup`, `AirPlayEvent` and `AirPlayError`. Protocol types remain underneath; no opaque pointer, C buffer or `pa_` function reaches this interface.
+`Sources/AirplayKit` is the Swift library: `AirPlayDiscovery`, `AirPlayReceiver`, `AirPlaySession`, `AirPlayGroup`, `AirPlayEvent` and `AirPlayError`. Protocol types remain underneath; no opaque pointer, C buffer or `pa_` function reaches this interface.
 
-`Sources/PlayableAirplaySender` is the sender itself: the pairing, the encrypted channels, the session and the audio. It takes its cryptography from swift-crypto and its arbitrary-precision arithmetic from BigInt, and implements nothing either of them offers. The library does not depend on AVFoundation, CoreAudio or AppKit. The macOS Demo uses AVFoundation to convert file formats before handing PCM to the library.
+`Sources/AirplayKitSender` is the sender itself: the pairing, the encrypted channels, the session and the audio. It takes its cryptography from swift-crypto and its arbitrary-precision arithmetic from BigInt, and implements nothing either of them offers. The library does not depend on AVFoundation, CoreAudio or AppKit. The macOS Demo uses AVFoundation to convert file formats before handing PCM to the library.
 
-`CPlayableAirplay` is offered as a product of its own for one case: an Objective-C application, which has no Swift to import the library from. Calling a C header is what Objective-C does with a C library, so it takes `CPlayableAirplay`, imports `PlayableAirplay.h`, and gets the same thing a step lower down. The discovery entry points are implemented in C; session, group and device-naming entry points are implemented in Swift and exported with C linkage.
+`CAirplayKit` is offered as a product of its own for one case: an Objective-C application, which has no Swift to import the library from. Calling a C header is what Objective-C does with a C library, so it takes `CAirplayKit`, imports `AirplayKit.h`, and gets the same thing a step lower down. The discovery entry points are implemented in C; session, group and device-naming entry points are implemented in Swift and exported with C linkage.
 
 ## Using it in a project
 
 ### macOS
 
-Add the package to your project. In Xcode that is **File > Add Package Dependencies**, with `https://github.com/phranck/PlayableAirplay.git`, and then `import PlayableAirplay`. Swift Package Manager resolves swift-crypto and BigInt automatically.
+Add the package to your project. In Xcode that is **File > Add Package Dependencies**, with `https://github.com/phranck/AirplayKit.git`, and then `import AirplayKit`. Swift Package Manager resolves swift-crypto and BigInt automatically.
 
 In a package of your own:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/phranck/PlayableAirplay.git", exact: "0.1.0"),
+    .package(url: "https://github.com/phranck/AirplayKit.git", exact: "0.2.0"),
 ],
 targets: [
-    .target(name: "YourTarget", dependencies: ["PlayableAirplay"]),
+    .target(name: "YourTarget", dependencies: ["AirplayKit"]),
 ]
 ```
 
@@ -162,7 +162,7 @@ They cover discovery parsing and state, protocol messages, cryptography, audio b
 
 ## What it rests on
 
-The protocol, which is written down in the reference under `Sources/PlayableAirplay/PlayableAirplay.docc` from published descriptions and from measurements taken here. Every statement there says where it came from and whether it was measured or reported.
+The protocol, which is written down in the reference under `Sources/AirplayKit/AirplayKit.docc` from published descriptions and from measurements taken here. Every statement there says where it came from and whether it was measured or reported.
 
 The cryptography comes from [swift-crypto](https://github.com/apple/swift-crypto) and the arbitrary-precision arithmetic from [BigInt](https://github.com/attaswift/BigInt). Neither is reimplemented. `NOTICE` carries both licences.
 

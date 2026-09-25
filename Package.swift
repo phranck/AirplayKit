@@ -10,10 +10,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "PlayableAirplay",
+    name: "AirplayKit",
     platforms: [.macOS(.v12)],
     products: [
-        .library(name: "PlayableAirplay", targets: ["PlayableAirplay"]),
+        .library(name: "AirplayKit", targets: ["AirplayKit"]),
 
         /*
          The layer underneath, offered on purpose rather than by accident.
@@ -23,7 +23,7 @@ let package = Package(
          header is what Objective-C does with a C library, so it takes this one
          and gets the same thing a step lower down.
          */
-        .library(name: "CPlayableAirplay", targets: ["CPlayableAirplay"]),
+        .library(name: "CAirplayKit", targets: ["CAirplayKit"]),
 
     ],
     dependencies: [
@@ -43,8 +43,8 @@ let package = Package(
     targets: [
         // The Swift interface, and the only thing a caller sees.
         .target(
-            name: "PlayableAirplay",
-            dependencies: ["CPlayableAirplay", "PlayableAirplaySender", "PlayableAirplayDevices"]
+            name: "AirplayKit",
+            dependencies: ["CAirplayKit", "AirplayKitSender", "AirplayKitDevices"]
         ),
 
         /*
@@ -55,7 +55,7 @@ let package = Package(
          pairing, timing and transport types directly.
          */
         .target(
-            name: "PlayableAirplaySender",
+            name: "AirplayKitSender",
             dependencies: [
                 .product(name: "Crypto", package: "swift-crypto"),
                 .product(name: "BigInt", package: "BigInt"),
@@ -68,7 +68,7 @@ let package = Package(
          Its own target, and the lowest Swift one, because the C interface has
          to reach it. An Objective-C application takes the C library and gets
          everything through the header, and that header cannot promise
-         something declared above it: CPlayableAirplay sits under the Swift
+         something declared above it: CAirplayKit sits under the Swift
          library that knows about receivers, and the reverse would be a cycle.
 
          Uses Foundation for AirPlay metadata and standard UPnP device descriptions.
@@ -77,18 +77,18 @@ let package = Package(
          Not a product. The Swift library hands it on as properties of a
          receiver, and C hands it on through the header.
          */
-        .target(name: "PlayableAirplayDevices"),
+        .target(name: "AirplayKitDevices"),
 
         /*
          The C discovery boundary.
 
          The public C header and the discovery implementation. The session
          entry points are exported by the Swift sender through @_cdecl, and
-         the device naming entry points come from PlayableAirplayDevices.
+         the device naming entry points come from AirplayKitDevices.
          */
         .target(
-            name: "CPlayableAirplay",
-            dependencies: ["PlayableAirplaySender", "PlayableAirplayDevices"],
+            name: "CAirplayKit",
+            dependencies: ["AirplayKitSender", "AirplayKitDevices"],
             linkerSettings: [
                 // Bonjour. Apple's own on its platforms, Avahi's compatibility
                 // library everywhere else.
@@ -99,18 +99,18 @@ let package = Package(
         // Finds receivers, plays a tone, and plays a file, from a terminal.
         .executableTarget(
             name: "Demo",
-            dependencies: ["PlayableAirplay", "PlayableAirplaySender"]
+            dependencies: ["AirplayKit", "AirplayKitSender"]
         ),
 
         .testTarget(
-            name: "PlayableAirplayTests",
-            dependencies: ["PlayableAirplay", "CPlayableAirplay",
-                           "PlayableAirplayDevices", "PlayableAirplaySender"]
+            name: "AirplayKitTests",
+            dependencies: ["AirplayKit", "CAirplayKit",
+                           "AirplayKitDevices", "AirplayKitSender"]
         ),
 
         .testTarget(
-            name: "PlayableAirplaySenderTests",
-            dependencies: ["PlayableAirplaySender"]
+            name: "AirplayKitSenderTests",
+            dependencies: ["AirplayKitSender"]
         ),
     ]
 )

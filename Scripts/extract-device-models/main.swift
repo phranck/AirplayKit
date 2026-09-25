@@ -13,7 +13,7 @@
 //  again on a newer macOS to pick up models that did not exist before, and
 //  commit what it writes.
 //
-//      swift Scripts/extract-device-models/main.swift > Sources/PlayableAirplay/DeviceModelNames.swift
+//      swift Scripts/extract-device-models/main.swift > Sources/AirplayKit/DeviceModelNames.swift
 //
 //  The identifiers come out of the system's own bundles rather than from a
 //  guess at what exists, and the names come out of `UTType`, because a fair

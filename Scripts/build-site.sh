@@ -17,7 +17,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
-moduleName="PlayableAirplay"
+moduleName="AirplayKit"
 symbolDirectory="build/symbol-graph"
 siteDirectory="build/site"
 
@@ -41,7 +41,7 @@ fi
 # do not silently extract for different platform versions.
 targetTriple="$(swift -print-target-info | python3 -c 'import json,sys; print(json.load(sys.stdin)["target"]["triple"])')"
 symbolArguments=(-module-name "$moduleName" -output-dir "$symbolDirectory" -target "$targetTriple"
-    -minimum-access-level public -I Sources/CPlayableAirplay/include
+    -minimum-access-level public -I Sources/CAirplayKit/include
     "${moduleSearch[@]}")
 if command -v xcrun > /dev/null 2>&1; then
     symbolArguments+=(-sdk "$(xcrun --sdk macosx --show-sdk-path)")
@@ -59,7 +59,7 @@ fi
 # only moment it is cheap to find is this one.
 "$docc" convert "Sources/$moduleName/$moduleName.docc" \
     --fallback-display-name "$moduleName" \
-    --fallback-bundle-identifier "at.playable.airplay" \
+    --fallback-bundle-identifier "work.layered.airplaykit" \
     --fallback-bundle-version "1" \
     --additional-symbol-graph-dir "$symbolDirectory" \
     --output-path "$siteDirectory/docs" \
@@ -79,8 +79,8 @@ documentationPath="/docs/documentation/$(echo "$moduleName" | tr '[:upper:]' '[:
 # The reference is the renderer's own application and brings its own
 # stylesheet. This adds the site's typefaces to it, on every page, because each
 # page carries its own shell.
-cp Website/docs-theme/fonts.css "$siteDirectory/docs/playable-fonts.css"
-python3 Scripts/inject-stylesheet.py "$siteDirectory/docs" /docs/playable-fonts.css
+cp Website/docs-theme/fonts.css "$siteDirectory/docs/airplaykit-fonts.css"
+python3 Scripts/inject-stylesheet.py "$siteDirectory/docs" /docs/airplaykit-fonts.css
 
 cat > "$siteDirectory/docs/index.html" <<HTML
 <!doctype html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PlayableAirplay</title>
+<title>AirplayKit</title>
 <meta name="description" content="Discover AirPlay 2 receivers, manage speaker groups and send an application's audio from macOS or Linux without moving the system output.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="styles.css">
@@ -42,14 +42,14 @@
 
 <header class="masthead">
   <div class="masthead-row measure">
-    <a class="wordmark" href="./" aria-label="PlayableAirplay, home">Playable<b>Airplay</b></a>
+    <a class="wordmark" href="./" aria-label="AirplayKit, home">Playable<b>Airplay</b></a>
 
     <nav class="masthead-links" aria-label="Sections">
       <a href="#interface"><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>Interface</a>
       <a href="#example"><svg class="icon" aria-hidden="true"><use href="#ph-terminal-window"></use></svg>Example</a>
       <a href="#usage"><svg class="icon" aria-hidden="true"><use href="#ph-package"></use></svg>Usage</a>
       <a href="docs/" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-book-open"></use></svg>API reference</a>
-      <a href="https://github.com/phranck/PlayableAirplay" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-github-logo"></use></svg>Source</a>
+      <a href="https://github.com/phranck/AirplayKit" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-github-logo"></use></svg>Source</a>
     </nav>
 
     <button class="theme-toggle" type="button" id="theme-toggle" aria-pressed="false">
@@ -66,10 +66,10 @@
     <div class="hero-words">
       <p class="eyebrow">Swift, macOS and Linux</p>
       <h1>Play to the speaker in the other room without taking the whole machine with you.</h1>
-      <p class="standfirst">Apple's route picker moves the system's output, so everything on the Mac follows it. PlayableAirplay speaks RAOP to the receiver itself. One application streams to the kitchen, and the rest of the machine keeps playing where it always did.</p>
+      <p class="standfirst">Apple's route picker moves the system's output, so everything on the Mac follows it. AirplayKit speaks RAOP to the receiver itself. One application streams to the kitchen, and the rest of the machine keeps playing where it always did.</p>
       <p class="hero-actions">
         <a class="action action-primary" href="docs/" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-book-open"></use></svg>API reference</a>
-        <a class="action" href="https://github.com/phranck/PlayableAirplay" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-github-logo"></use></svg>Get the source</a>
+        <a class="action" href="https://github.com/phranck/AirplayKit" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#ph-github-logo"></use></svg>Get the source</a>
       </p>
     </div>
 
@@ -101,7 +101,7 @@
       <div>
         <h3><code>AirPlayDiscovery</code></h3>
         <p>Browses for AirPlay receivers and reports the current set each time it changes, sorted by name. It can find receivers without moving the system's output. Each <code>AirPlayReceiver</code> carries its speaker name, advertised model and connection details. The raw <code>model</code> can be abbreviated, such as <code>Bookshelf</code>; use <code>productName</code> for a formatted label or call <code>await receiver.resolveProductName()</code> when a fuller name is available from a standard device description.</p>
-        <p>Changes arrive on a queue you name. Typed PlayableAirplay events report appearances and advertised name, model and playback-state changes.</p>
+        <p>Changes arrive on a queue you name. Typed AirplayKit events report appearances and advertised name, model and playback-state changes.</p>
       </div>
       <div>
         <h3><code>AirPlaySession</code></h3>
@@ -169,7 +169,7 @@ group.dissolve()</code></pre>
   <section id="usage" class="prose-section">
     <p class="section-number">04</p>
     <h2>How to use it</h2>
-    <p class="lead">It is a Swift package. The sender is written in Swift and uses swift-crypto and BigInt, which Swift Package Manager resolves during the build. C and Objective-C callers can use the separate <code>CPlayableAirplay</code> product.</p>
+    <p class="lead">It is a Swift package. The sender is written in Swift and uses swift-crypto and BigInt, which Swift Package Manager resolves during the build. C and Objective-C callers can use the separate <code>CAirplayKit</code> product.</p>
 
     <figure class="panel" data-variant="apple">
       <figcaption>
@@ -184,16 +184,16 @@ group.dissolve()</code></pre>
 <span class="c">// In a package of your own:</span>
 
 dependencies: [
-    .package(url: <span class="s">"https://github.com/phranck/PlayableAirplay.git"</span>, exact: <span class="s">"0.1.0"</span>),
+    .package(url: <span class="s">"https://github.com/phranck/AirplayKit.git"</span>, exact: <span class="s">"0.2.0"</span>),
 ],
 targets: [
-    .target(name: <span class="s">"YourTarget"</span>, dependencies: [<span class="s">"PlayableAirplay"</span>]),
+    .target(name: <span class="s">"YourTarget"</span>, dependencies: [<span class="s">"AirplayKit"</span>]),
 ]</code></pre>
 <pre data-variant="portable" hidden><code><span class="c"># Bonjour on Linux is Avahi's compatibility library.</span>
 sudo apt install libavahi-compat-libdnssd-dev</code></pre>
     </figure>
 
-    <p>Then <code>import PlayableAirplay</code>. On Linux, use the same <code>Package.swift</code> dependency shown in the macOS tab, then run <code>swift build</code>. Browsing needs <code>avahi-daemon</code> running at the time, which is a matter of the machine rather than of the build.</p>
+    <p>Then <code>import AirplayKit</code>. On Linux, use the same <code>Package.swift</code> dependency shown in the macOS tab, then run <code>swift build</code>. Browsing needs <code>avahi-daemon</code> running at the time, which is a matter of the machine rather than of the build.</p>
   </section>
 
 </main>

@@ -8,8 +8,8 @@
 
 import Dispatch
 import Foundation
-import PlayableAirplay
-import PlayableAirplaySender
+import AirplayKit
+import AirplayKitSender
 
 // The library runs on Linux as well, and AVFoundation does not. Everything that
 // reads any format and resamples it is Apple's framework doing the work, so
@@ -36,7 +36,7 @@ func describe(_ problem: AirPlayDiscovery.Problem) -> String {
 
 /// Browses for a while and prints the set each time it changes.
 func listReceivers(forSeconds seconds: Int) -> Int32 {
-    let printing = DispatchQueue(label: "at.playable.airplay.demo")
+    let printing = DispatchQueue(label: "work.layered.airplaykit.demo")
 
     var discovery: AirPlayDiscovery?
     discovery = AirPlayDiscovery(deliveringOn: printing) { receivers in
@@ -92,7 +92,7 @@ func listReceivers(forSeconds seconds: Int) -> Int32 {
 
 /// Exercises the public group API with one live join and one live departure.
 func testGroupAPI(names: [String], seconds: Int) -> Int32 {
-    let queue = DispatchQueue(label: "at.playable.airplay.demo.groupDiscovery")
+    let queue = DispatchQueue(label: "work.layered.airplaykit.demo.groupDiscovery")
     var latest: [AirPlayReceiver] = []
     let discovery = AirPlayDiscovery(deliveringOn: queue) { latest = $0 }
     Thread.sleep(forTimeInterval: 6)
@@ -107,7 +107,7 @@ func testGroupAPI(names: [String], seconds: Int) -> Int32 {
     var opened: AirPlayGroup?
     do {
         let group = try AirPlayGroup(receivers: Array(receivers.prefix(1)),
-                                     senderName: "PlayableAirplay group test")
+                                     senderName: "AirplayKit group test")
         opened = group
         defer { group.dissolve() }
         print("group opened: \(group.memberIDs)")
@@ -160,10 +160,10 @@ func testGroupAPI(names: [String], seconds: Int) -> Int32 {
 /// Keeps one AirPlay session open while device-side volume changes arrive.
 func watchVolume(on host: String, seconds: Int) -> Int32 {
     do {
-        let session = try AirPlaySession(host: host, senderName: "PlayableAirplay volume watch")
+        let session = try AirPlaySession(host: host, senderName: "AirplayKit volume watch")
         defer { session.close() }
         print("initial volume: \(session.volume.map(String.init(describing:)) ?? "unknown")")
-        let queue = DispatchQueue(label: "at.playable.airplay.demo.volume")
+        let queue = DispatchQueue(label: "work.layered.airplaykit.demo.volume")
         session.observeChanges(deliveringOn: queue) { event in
             if case .volumeChanged(let id, let level) = event {
                 print("volumeChanged \(id): \(level)")
@@ -192,7 +192,7 @@ func watchVolume(on host: String, seconds: Int) -> Int32 {
 func playThroughSwiftSender(at host: String, port: UInt16, seconds: Int) -> Int32 {
     do {
         print("connecting to \(host):\(port)")
-        let sender = try AirPlaySender(host: host, port: port, senderName: "PlayableAirplay")
+        let sender = try AirPlaySender(host: host, port: port, senderName: "AirplayKit")
         try sender.setVolume(0.3)
         print("session up, sending \(seconds) seconds of 440 Hz at a third of full volume")
 
@@ -250,7 +250,7 @@ func playThroughSwiftSender(at host: String, port: UInt16, seconds: Int) -> Int3
 func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 {
     do {
         print("connecting to \(host):\(port)")
-        let connection = try ReceiverConnection(host: host, port: port, senderName: "PlayableAirplay")
+        let connection = try ReceiverConnection(host: host, port: port, senderName: "AirplayKit")
 
         try connection.pair()
 
@@ -276,7 +276,7 @@ func pairWithReceiver(at host: String, port: UInt16, seconds: Int = 0) -> Int32 
             print("  \(key) = \(info[key] ?? "")")
         }
 
-        let eventPort = try session.open(senderName: "PlayableAirplay")
+        let eventPort = try session.open(senderName: "AirplayKit")
         print("  session open, event channel wanted on \(eventPort)")
 
         // Before RECORD, because a receiver answers RECORD with 500 until this
@@ -373,7 +373,7 @@ func playTone(on host: String, port: UInt16, forSeconds seconds: Int) -> Int32 {
     let session: AirPlaySession
 
     do {
-        session = try AirPlaySession(host: host, port: port, senderName: "PlayableAirplay demo")
+        session = try AirPlaySession(host: host, port: port, senderName: "AirplayKit demo")
     } catch {
         FileHandle.standardError.write(Data("could not open: \(error)\n".utf8))
         return 1
