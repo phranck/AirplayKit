@@ -12,11 +12,13 @@
 
 #include <arpa/inet.h>
 #include <dns_sd.h>
+#include <errno.h>
 #include <poll.h>
 #include <pthread.h>
 #include <strings.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 /*
@@ -107,6 +109,12 @@ typedef struct PABrowseContext {
     struct PADiscovery *discovery;
     PAServiceKind kind;
 } PABrowseContext;
+
+/** A resolve finishes only when its callback arrives, which may take several socket events. */
+typedef struct PAResolveContext {
+    PABrowseContext *browse;
+    bool completed;
+} PAResolveContext;
 
 struct PADiscovery {
     DNSServiceRef browsers[2];
@@ -288,7 +296,9 @@ static void DNSSD_API onResolved(DNSServiceRef service, DNSServiceFlags flags, u
                                  uint16_t port, uint16_t txtLength, const unsigned char *txt, void *context) {
     (void)service; (void)flags; (void)interfaceIndex;
 
-    PABrowseContext *browse = (PABrowseContext *)context;
+    PAResolveContext *resolution = (PAResolveContext *)context;
+    resolution->completed = true;
+    PABrowseContext *browse = resolution->browse;
     PADiscovery *discovery = browse->discovery;
     const bool isRaop = browse->kind == PAServiceRaop;
 
@@ -462,39 +472,48 @@ static void DNSSD_API onBrowsed(DNSServiceRef service, DNSServiceFlags flags, ui
         // answered. A resolve left open keeps a socket per receiver for as
         // long as discovery runs.
         DNSServiceRef resolver = NULL;
+        PAResolveContext resolution = { .browse = browse, .completed = false };
         if (DNSServiceResolve(&resolver, 0, interfaceIndex, instance, type, domain,
-                              onResolved, browse) != kDNSServiceErr_NoError) {
+                              onResolved, &resolution) != kDNSServiceErr_NoError) {
             return;
         }
 
-        // Waited on rather than processed straight away, because processing
-        // blocks until an answer arrives and a service can be announced without
-        // being resolvable. A record left behind by a receiver that went away
-        // without withdrawing it does exactly that, and blocking here holds the
-        // whole discovery, including the stop that is waiting for this thread.
-        // The wake pipe is watched alongside it, so stopping is noticed here
-        // too. Without it a stop that arrives whilst a resolve is waiting has
-        // to sit out the whole timeout, and the caller waits with it, which is
-        // exactly what the pipe was added to prevent.
+        // A readable DNS-SD socket does not necessarily mean the resolve
+        // callback has arrived. Avahi can require several ProcessResult calls
+        // for one resolve. Keep processing until the callback, the original
+        // deadline, or a stop; a stale advertisement must not hold discovery.
         const int resolveSocket = DNSServiceRefSockFD(resolver);
         const int wake = discovery->wakePipe[0];
         if (resolveSocket >= 0) {
-            struct pollfd watched[2];
-            nfds_t watchedCount = 0;
-
-            // The resolve is always first, so the answer to "did the resolve
-            // itself answer" is read from a fixed place.
-            watched[watchedCount++] = (struct pollfd){ .fd = resolveSocket, .events = POLLIN, .revents = 0 };
-            if (wake >= 0) {
-                watched[watchedCount++] = (struct pollfd){ .fd = wake, .events = POLLIN, .revents = 0 };
+            struct timespec started;
+            if (clock_gettime(CLOCK_MONOTONIC, &started) != 0) {
+                DNSServiceRefDeallocate(resolver);
+                return;
             }
 
-            // Only where the resolve itself answered. A wake means stopping,
-            // and processing a result then would hand a record to a handler
-            // that is going away.
-            if (poll(watched, watchedCount, PA_RESOLVE_TIMEOUT_MILLISECONDS) > 0
-                && (watched[0].revents & POLLIN)) {
-                DNSServiceProcessResult(resolver);
+            struct pollfd watched[2];
+            nfds_t watchedCount = 0;
+            watched[watchedCount++] =
+                (struct pollfd){ .fd = resolveSocket, .events = POLLIN, .revents = 0 };
+            if (wake >= 0) {
+                watched[watchedCount++] =
+                    (struct pollfd){ .fd = wake, .events = POLLIN, .revents = 0 };
+            }
+
+            while (!discovery->stopping && !resolution.completed) {
+                struct timespec now;
+                if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) break;
+
+                const int64_t elapsed = (now.tv_sec - started.tv_sec) * 1000
+                    + (now.tv_nsec - started.tv_nsec) / 1000000;
+                const int64_t remaining = PA_RESOLVE_TIMEOUT_MILLISECONDS - elapsed;
+                if (remaining <= 0) break;
+
+                const int ready = poll(watched, watchedCount, (int)remaining);
+                if (ready < 0 && errno == EINTR) continue;
+                if (ready <= 0 || (wake >= 0 && watched[1].revents != 0)) break;
+                if (!(watched[0].revents & POLLIN)) break;
+                if (DNSServiceProcessResult(resolver) != kDNSServiceErr_NoError) break;
             }
         }
 
