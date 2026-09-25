@@ -11,7 +11,7 @@
 
 # AirplayKit
 
-Targets AirPlay 2 audio output from macOS and Linux through Swift. Playback against receivers is recorded for macOS. Linux builds in CI; receiver playback on Linux has not yet been recorded.
+Targets AirPlay 2 audio output from macOS and Linux through Swift. A WAVE file played audibly from an Ubuntu 26.04 aarch64 guest to one Sonos receiver. Linux group playback has not yet been checked with a listener.
 
 Apple's own route picker only moves the whole system's output, and the private entitlements that would let an app pick a receiver for itself are not in the public SDK. This library takes the other road: it speaks RAOP to the receiver directly, so one application streams to a speaker whilst everything else on the machine keeps playing through the built-in output.
 
@@ -49,22 +49,32 @@ In a package of your own:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/phranck/AirplayKit.git", exact: "0.2.0"),
+    .package(url: "https://github.com/phranck/AirplayKit.git", branch: "main"),
 ],
 targets: [
     .target(name: "YourTarget", dependencies: ["AirplayKit"]),
 ]
 ```
 
+The renamed `AirplayKit` product is currently available from `main`; it does not yet have a version tag. Pin a release tag when one is published.
+
 ### Linux
 
-The same dependency line, and one system package first, because Bonjour on Linux is Avahi's compatibility library:
+Use the same package dependency. On a fresh Ubuntu 26.04 installation, the Swift toolchain also needs the system compiler and linker, while Bonjour uses Avahi's compatibility library:
 
 ```bash
-sudo apt install libavahi-compat-libdnssd-dev
+sudo apt install build-essential libavahi-compat-libdnssd-dev libcap2-bin
 ```
 
-Then `swift build` as usual. Browsing needs `avahi-daemon` running at the time, which is a runtime matter rather than a build one.
+Then `swift build` as usual. Browsing needs `avahi-daemon` running and mDNS traffic to reach the receivers.
+
+Playback also needs permission to bind the PTP UDP ports 319 and 320. Ubuntu reserves these ports for privileged processes. Grant the final executable `CAP_NET_BIND_SERVICE` after building it, for example for the included Demo (`setcap` comes from `libcap2-bin`):
+
+```bash
+sudo setcap cap_net_bind_service=+ep "$(swift build --show-bin-path)/Demo"
+```
+
+Run the built executable after setting its capability, for example `"$(swift build --show-bin-path)/Demo" wave ~/Music/track.wav speaker.local`. Apply the capability again after rebuilding the executable. An application launched by a service manager can instead receive this capability from its service configuration. The receiver must be able to send PTP traffic back to the sender; a successful TCP pairing alone does not establish that path.
 
 ### What comes with it
 
@@ -134,7 +144,7 @@ In an audio callback the samples usually arrive as a pointer already, and there 
 ```bash
 swift run Demo list
 swift run Demo play speaker.local 7000 5
-swift run Demo wave ~/Music/track.wav speaker.local
+"$(swift build --show-bin-path)/Demo" wave ~/Music/track.wav speaker.local # Linux, after setcap
 swift run Demo file ~/Music/track.m4a speaker.local # macOS only
 ```
 
@@ -146,7 +156,7 @@ The package is built and tested with Swift 6.2.4, and `.swift-version` is where 
 
 The pin is there because compilers disagree about what they accept. In a Swift test target that imports the C header, a direct call into a Swift `@_cdecl` group function made Linux Swift 6.2.4 abort while linking SIL: the header declared an opaque pointer where the Swift export used a raw pointer. That test was removed; the C and Objective-C boundary is checked through the caller build. A gate run on another compiler can therefore promise less than it looks like it promises.
 
-A local run means what a CI run means when it uses the same compiler, which is the toolchain of that version from [swift.org](https://www.swift.org/install/) or an Xcode carrying it. [swiftly](https://github.com/swiftlang/swiftly) picks it from `.swift-version` without being told. Where the two differ, `Scripts/build-and-test.sh` says which compiler it ran on and which one CI will use.
+A local run means what a CI run means when it uses the same compiler, which is the toolchain of that version from [swift.org](https://www.swift.org/install/) or an Xcode carrying it. [swiftly](https://github.com/swiftlang/swiftly) picks it from `.swift-version` on distributions it supports. On the tested Ubuntu 26.04 VM, swiftly 1.1.2 refused that platform; the official Swift 6.4.0 Ubuntu 26.04 toolchain built the released tag and passed all 170 tests. That is additional verification, not a replacement for the pinned CI toolchain. Where local and CI toolchains differ, `Scripts/build-and-test.sh` says which compiler it ran on and which one CI will use.
 
 ## Tests
 
@@ -154,7 +164,7 @@ A local run means what a CI run means when it uses the same compiler, which is t
 swift test
 ```
 
-They cover discovery parsing and state, protocol messages, cryptography, audio buffering and loopback control exchanges, including reading a receiver's volume. Whether a particular speaker accepts pairing and plays audio requires a device test.
+They cover discovery parsing and state, protocol messages, cryptography, audio buffering and loopback control exchanges, including reading a receiver's volume. Whether a particular speaker accepts pairing and plays audio requires a device test. The [Ubuntu 26.04 release validation](Documentation/Research/ubuntu-26.04-release-validation.md) records the local build, tests, discovery diagnosis and audible single-receiver playback separately from CI.
 
 `Scripts/build-and-test.sh` is the whole gate, and `Scripts/check-linux.sh` compiles the package inside the same Swift image CI uses, so Linux is checked here before anything is pushed. That check compiles rather than tests, because the test process deadlocks inside the container on this machine, which is #25. CI runs the tests on Linux.
 

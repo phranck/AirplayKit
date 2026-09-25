@@ -42,7 +42,7 @@
 
 <header class="masthead">
   <div class="masthead-row measure">
-    <a class="wordmark" href="./" aria-label="AirplayKit, home">Playable<b>Airplay</b></a>
+    <a class="wordmark" href="./" aria-label="AirplayKit, home">Airplay<b>Kit</b></a>
 
     <nav class="masthead-links" aria-label="Sections">
       <a href="#interface"><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>Interface</a>
@@ -133,7 +133,7 @@ session.volume = <span class="n">0.7</span>
     <p class="section-number">02</p>
     <h2>Streaming a file</h2>
     <p class="lead">Read a file, turn it into what AirPlay carries, open a session, and keep it fed until the file runs out. On macOS AVFoundation converts formats the system can read. On Linux the portable example takes a WAVE file that is already 16 bit stereo at 44100 Hz.</p>
-    <p>Both functions are excerpts from <code>Sources/Demo/Demo.swift</code> and use its surrounding imports and helpers. To run the complete Demo, use <code>swift run Demo file ~/Music/track.m4a speaker.local</code> on macOS or <code>swift run Demo wave ~/Music/track.wav speaker.local</code> on Linux. Receiver playback has been recorded on macOS. Linux builds in CI; receiver playback on Linux has not yet been recorded.</p>
+    <p>Both functions are excerpts from <code>Sources/Demo/Demo.swift</code> and use its surrounding imports and helpers. To run the complete Demo, use <code>swift run Demo file ~/Music/track.m4a speaker.local</code> on macOS. On Linux, build first, grant the executable its PTP port capability as shown below, then run <code>"$(swift build --show-bin-path)/Demo" wave ~/Music/track.wav speaker.local</code>. On an Ubuntu 26.04 aarch64 guest, a WAVE file played audibly to one Sonos receiver. Linux group playback has not yet been checked with a listener.</p>
 
     <figure class="panel" data-variant="apple">
       <figcaption>
@@ -184,16 +184,19 @@ group.dissolve()</code></pre>
 <span class="c">// In a package of your own:</span>
 
 dependencies: [
-    .package(url: <span class="s">"https://github.com/phranck/AirplayKit.git"</span>, exact: <span class="s">"0.2.0"</span>),
+    .package(url: <span class="s">"https://github.com/phranck/AirplayKit.git"</span>, branch: <span class="s">"main"</span>),
 ],
 targets: [
     .target(name: <span class="s">"YourTarget"</span>, dependencies: [<span class="s">"AirplayKit"</span>]),
 ]</code></pre>
-<pre data-variant="portable" hidden><code><span class="c"># Bonjour on Linux is Avahi's compatibility library.</span>
-sudo apt install libavahi-compat-libdnssd-dev</code></pre>
+<pre data-variant="portable" hidden><code><span class="c"># Compiler/linker tools and Avahi's Bonjour compatibility library.</span>
+sudo apt install build-essential libavahi-compat-libdnssd-dev libcap2-bin
+swift build
+<span class="c"># Allow the Demo to bind PTP UDP ports 319 and 320.</span>
+sudo setcap cap_net_bind_service=+ep "$(swift build --show-bin-path)/Demo"</code></pre>
     </figure>
 
-    <p>Then <code>import AirplayKit</code>. On Linux, use the same <code>Package.swift</code> dependency shown in the macOS tab, then run <code>swift build</code>. Browsing needs <code>avahi-daemon</code> running at the time, which is a matter of the machine rather than of the build.</p>
+    <p>Then <code>import AirplayKit</code>. The renamed product is available from <code>main</code>; a version tag has not yet been published. On Linux, use the same <code>Package.swift</code> dependency shown in the macOS tab. Browsing needs <code>avahi-daemon</code> and network access to mDNS advertisements. Playback needs permission to bind PTP UDP ports 319 and 320, and the receiver must be able to reach the sender on those ports. Reapply the capability after rebuilding the executable. <code>setcap</code> is provided by <code>libcap2-bin</code>.</p>
   </section>
 
 </main>
