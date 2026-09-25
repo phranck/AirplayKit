@@ -11,7 +11,7 @@ import PackageDescription
 
 let package = Package(
     name: "PlayableAirplay",
-    platforms: [.macOS(.v12), .iOS(.v15)],
+    platforms: [.macOS(.v12)],
     products: [
         .library(name: "PlayableAirplay", targets: ["PlayableAirplay"]),
 
@@ -28,7 +28,7 @@ let package = Package(
     ],
     dependencies: [
         /*
-         The cryptography AirPlay 2 needs, on Apple's platforms and on Linux
+         The cryptography AirPlay 2 needs, on macOS and Linux
          alike: X25519, Ed25519, ChaCha20-Poly1305, HKDF and SHA-512.
          */
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
@@ -50,12 +50,9 @@ let package = Package(
         /*
          The sender, in Swift.
 
-         Built beside the C++ one rather than in place of it, so there is never
-         a state in which nothing plays. It takes over underneath the two faces
-         above once it does, which is #31, and the C++ checkout goes with it.
-
-         Not a product. Nothing outside this package has a reason to reach it,
-         and the two libraries above stay the whole of what a caller sees.
+         This is the implementation beneath the Swift and C products. It is
+         package-scoped: callers use the two products above rather than its
+         pairing, timing and transport types directly.
          */
         .target(
             name: "PlayableAirplaySender",
@@ -74,7 +71,8 @@ let package = Package(
          something declared above it: CPlayableAirplay sits under the Swift
          library that knows about receivers, and the reverse would be a cycle.
 
-         Depends on nothing. It answers from two strings and a table.
+         Uses Foundation for AirPlay metadata and standard UPnP device descriptions.
+         It has no package dependency of its own.
 
          Not a product. The Swift library hands it on as properties of a
          receiver, and C hands it on through the header.
@@ -82,18 +80,11 @@ let package = Package(
         .target(name: "PlayableAirplayDevices"),
 
         /*
-         Everything underneath, in one target.
+         The C discovery boundary.
 
-         The C interface, the C++ sender, ed25519 and Mbed TLS could each be a
-         target of their own, and on Apple's platforms they were. On Linux they
-         cannot be: SwiftPM compiles C and C++ with explicit modules there, and
-         it does not hand a C++ target the modules of the C targets it depends
-         on, so every include across that line fails to resolve. One target has
-         no line to cross.
-
-         That is why the path is the package root: a header search path has to
-         sit inside its own target, and these headers are spread over three
-         checkouts.
+         The public C header and the discovery implementation. The session
+         entry points are exported by the Swift sender through @_cdecl, and
+         the device naming entry points come from PlayableAirplayDevices.
          */
         .target(
             name: "CPlayableAirplay",

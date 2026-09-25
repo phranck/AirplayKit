@@ -31,7 +31,7 @@ import Foundation
  3 bits   end tag, 7
  ```
  */
-public enum ALACFrame {
+package enum ALACFrame {
     // MARK: - What goes over the wire, declared once
 
     // Every one of these is fixed by the protocol rather than chosen here, and

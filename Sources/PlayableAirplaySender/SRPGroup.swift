@@ -20,7 +20,7 @@ import Foundation
  Everything a receiver pads is padded to the modulus's own length, which is 384
  bytes. That is what `padded` is for.
  */
-public enum SRPGroup {
+package enum SRPGroup {
     /// The modulus, 384 bytes, as RFC 5054 section 4 prints it.
     public static let modulusHex =
         "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74" +

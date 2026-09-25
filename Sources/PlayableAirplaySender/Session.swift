@@ -8,7 +8,7 @@
 import Foundation
 
 /// What can go wrong bringing a session up, beyond what the socket or the receiver reports.
-public enum SessionFailure: Error, Equatable {
+package enum SessionFailure: Error, Equatable {
     /// A reply that should have been a property list was not one.
     case replyIsNotAPropertyList
 
@@ -19,11 +19,11 @@ public enum SessionFailure: Error, Equatable {
 /**
  Which audio path a stream takes.
 
- The two differ in more than a number. Realtime is RTP over UDP and is what the
- present C++ sender speaks. Buffered is a stream of blocks over TCP, it is what
- Apple's own senders use, and it is the one a Sonos plays.
+ The two differ in more than a number. Realtime is RTP over UDP. Buffered is a
+ stream of blocks over TCP; it is what Apple's own senders use and the path this
+ package currently opens.
  */
-public enum StreamKind: Int {
+package enum StreamKind: Int {
     case realtime = 0x60
     case buffered = 103
 }
@@ -35,7 +35,38 @@ public enum StreamKind: Int {
  SETUPs, and the event channel has to be open before RECORD, or the receiver
  answers 500 and will not render anything afterwards.
  */
-public struct Session {
+package struct Session {
+    /// Values shared across a group even though each receiver has its own session.
+    package struct Timing {
+        let groupUUID: String
+        let clockIdentifier: Int64
+        let peerID: String
+        let deviceIdentifier: String
+        let isGroup: Bool
+
+        package init(groupUUID: String, clockIdentifier: Int64, peerID: String,
+                     deviceIdentifier: String, isGroup: Bool) {
+            self.groupUUID = groupUUID
+            self.clockIdentifier = clockIdentifier
+            self.peerID = peerID
+            self.deviceIdentifier = deviceIdentifier
+            self.isGroup = isGroup
+        }
+
+        static func newGroup() -> Timing {
+            let suffix = UInt32.random(in: 1...UInt32.max)
+            let clockID = UInt64(0x0200_0000_0000_0000) | UInt64(suffix) << 16 | 8
+            let mac = String(format: "02:00:%02X:%02X:%02X:%02X",
+                             (suffix >> 24) & 0xff, (suffix >> 16) & 0xff,
+                             (suffix >> 8) & 0xff, suffix & 0xff)
+            let groupID = UUID().uuidString.uppercased()
+            return Timing(groupUUID: groupID,
+                          clockIdentifier: Int64(bitPattern: clockID),
+                          peerID: groupID,
+                          deviceIdentifier: mac,
+                          isGroup: true)
+        }
+    }
 
     /// What the receiver answered the stream SETUP with.
     public struct Stream {
@@ -47,10 +78,14 @@ public struct Session {
 
         /// How much audio the receiver will hold, which only the buffered path reports.
         public let audioBufferSize: Int?
+
+        /// The receiver's identifier for stream teardown, if it supplied one.
+        public let streamID: Int?
     }
 
     private let connection: ReceiverConnection
     private let sessionIdentifier: String
+    private let timing: Timing
     private let uri: String
 
     /// The numeric session identifier, which the URI names and which a stream is tied to.
@@ -68,11 +103,18 @@ public struct Session {
      @param connection A connection that has already paired, so everything from
      here is encrypted.
      */
-    public init(connection: ReceiverConnection) {
+    package init(connection: ReceiverConnection, timing: Timing? = nil) {
         self.connection = connection
-        self.sessionIdentifier = UUID().uuidString.uppercased()
+        let sessionIdentifier = UUID().uuidString.uppercased()
+        self.sessionIdentifier = sessionIdentifier
         self.streamConnectionIdentifier = Int64(UInt32.random(in: 1...UInt32.max))
-        self.clockIdentifier = Int64.random(in: 1...Int64.max)
+        let identity = timing ?? Timing(groupUUID: sessionIdentifier,
+                                        clockIdentifier: Int64.random(in: 1...Int64.max),
+                                        peerID: sessionIdentifier,
+                                        deviceIdentifier: Self.deviceIdentifier,
+                                        isGroup: false)
+        self.timing = identity
+        self.clockIdentifier = identity.clockIdentifier
         self.uri = "rtsp://\(connection.localAddress)/\(streamConnectionIdentifier)"
     }
 
@@ -97,38 +139,13 @@ public struct Session {
      @returns The event channel's port.
      */
     public mutating func open(senderName: String) throws -> UInt16 {
-        // PTP, because a receiver on the buffered path will not take an anchor
-        // without a clock to read it against, and these receivers advertise PTP
-        // and nothing else. What the sender then has to be is a clock the
-        // receiver can follow.
-        let peer: [String: Any] = [
-            "Addresses": [connection.localAddress],
-            "ID": sessionIdentifier,
-            "ClockID": clockIdentifier,
-            "DeviceType": 0,
-            "SupportsClockPortMatchingOverride": true,
-        ]
-
-        let body: [String: Any] = [
-            "deviceID": Self.deviceIdentifier,
-            "macAddress": Self.deviceIdentifier,
-            "sessionUUID": sessionIdentifier,
-            "groupUUID": sessionIdentifier,
-            "timingProtocol": "PTP",
-            "timingPeerInfo": peer,
-            "timingPeerList": [peer],
-            "timingPort": 0,
-            "isMultiSelectAirPlay": false,
-            "groupContainsGroupLeader": false,
-            "senderSupportsRelay": false,
-            "statsCollectionEnabled": false,
-            "model": "PlayableAirplay1,1",
-            "name": senderName,
-            "osName": "PlayableAirplay",
-            "osVersion": "1.0",
-            "osBuildVersion": "1",
-            "sourceVersion": "550.10",
-        ]
+        // PTP names the timeline that later anchors refer to. A standalone
+        // session can follow the receiver's clock; group members need one
+        // clock identity shared across their separate sessions.
+        let body = Self.setupProperties(senderName: senderName,
+                                        sessionUUID: sessionIdentifier,
+                                        localAddress: connection.localAddress,
+                                        timing: timing)
 
         let reply = try connection.send(RTSPRequest(method: "SETUP",
                                                     uri: uri,
@@ -143,6 +160,38 @@ public struct Session {
         eventPort = checked
 
         return eventPort
+    }
+
+    static func setupProperties(senderName: String, sessionUUID: String,
+                                localAddress: String, timing: Timing) -> [String: Any] {
+        let peer: [String: Any] = [
+            "Addresses": [localAddress],
+            "ID": timing.peerID,
+            "ClockID": timing.clockIdentifier,
+            "DeviceType": 0,
+            "SupportsClockPortMatchingOverride": true,
+        ]
+
+        return [
+            "deviceID": timing.deviceIdentifier,
+            "macAddress": timing.deviceIdentifier,
+            "sessionUUID": sessionUUID,
+            "groupUUID": timing.groupUUID,
+            "timingProtocol": "PTP",
+            "timingPeerInfo": peer,
+            "timingPeerList": [peer],
+            "timingPort": 0,
+            "isMultiSelectAirPlay": timing.isGroup,
+            "groupContainsGroupLeader": false,
+            "senderSupportsRelay": timing.isGroup,
+            "statsCollectionEnabled": false,
+            "model": "PlayableAirplay1,1",
+            "name": senderName,
+            "osName": "PlayableAirplay",
+            "osVersion": "1.0",
+            "osBuildVersion": "1",
+            "sourceVersion": "550.10",
+        ]
     }
 
     /**
@@ -209,7 +258,8 @@ public struct Session {
 
         return Stream(dataPort: checked,
                       controlPort: control,
-                      audioBufferSize: first["audioBufferSize"] as? Int)
+                      audioBufferSize: first["audioBufferSize"] as? Int,
+                      streamID: first["streamID"] as? Int)
     }
 
     /**
@@ -233,7 +283,8 @@ public struct Session {
 
      Without this a receiver on the buffered path holds everything it is sent
      and plays none of it, because nothing has told it when the first frame
-     sounds. One of these arrives in a whole session.
+     sounds. A stream can receive a fresh anchor after a group change or stream
+     rebuild; the mapping must remain equivalent across group members.
 
      @param rtpTime The timestamp the stream starts at.
      @param seconds The network time that timestamp corresponds to.
@@ -277,6 +328,48 @@ public struct Session {
                                         body: body))
     }
 
+    /// Reads the receiver's current level after session SETUP.
+    public func readVolume() throws -> Float {
+        let reply = try connection.send(VolumeParameter.readRequest(uri: uri))
+        return try VolumeParameter.level(from: reply.body)
+    }
+
+    /// Stops playback immediately before taking a group member out.
+    func pause() throws {
+        try connection.send(RTSPRequest(method: "SETRATEANCHORTIME",
+                                        uri: uri,
+                                        headers: [("Content-Type", Self.propertyListType)],
+                                        body: try Self.encoded(["rate": 0])))
+    }
+
+    /// Discards audio the receiver has buffered beyond the last transmitted block.
+    func flushBuffered(untilSequence sequence: UInt32, timestamp: UInt32) throws {
+        try connection.send(RTSPRequest(method: "FLUSHBUFFERED",
+                                        uri: uri,
+                                        headers: [("Content-Type", Self.propertyListType)],
+                                        body: try Self.encoded([
+                                            "flushUntilSeq": Int64(sequence),
+                                            "flushUntilTS": Int64(timestamp),
+                                        ])))
+    }
+
+    /// Tears down the buffered stream and then its enclosing session.
+    func teardown(streamID: Int?) throws {
+        if let streamID {
+            try connection.send(RTSPRequest(method: "TEARDOWN",
+                                            uri: uri,
+                                            headers: [("Content-Type", Self.propertyListType)],
+                                            body: try Self.encoded([
+                                                "streams": [["streamID": streamID,
+                                                             "type": StreamKind.buffered.rawValue]],
+                                            ])))
+        }
+        try connection.send(RTSPRequest(method: "TEARDOWN",
+                                        uri: uri,
+                                        headers: [("Content-Type", Self.propertyListType)],
+                                        body: try Self.encoded([:])))
+    }
+
     // MARK: - Private
 
     /**
@@ -315,5 +408,33 @@ public struct Session {
         else { throw SessionFailure.replyIsNotAPropertyList }
 
         return dictionary
+    }
+}
+
+/// The text parameter the receiver uses for its own volume.
+enum VolumeParameter {
+    static func readRequest(uri: String) -> RTSPRequest {
+        RTSPRequest(method: "GET_PARAMETER",
+                    uri: uri,
+                    headers: [("Content-Type", "text/parameters")],
+                    body: Data("volume\r\n".utf8))
+    }
+
+    static func level(from body: Data) throws -> Float {
+        guard let text = String(data: body, encoding: .utf8) else {
+            throw SessionFailure.replyIsMissing("volume")
+        }
+
+        let lines = text.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        guard lines.count == 1 else { throw SessionFailure.replyIsMissing("volume") }
+
+        let parts = lines[0].split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              parts[0].trimmingCharacters(in: .whitespaces) == "volume",
+              let decibels = Float(parts[1].trimmingCharacters(in: .whitespaces)),
+              decibels.isFinite, decibels >= -144, decibels <= 0
+        else { throw SessionFailure.replyIsMissing("volume") }
+
+        return max(0, (decibels + 30) / 30)
     }
 }

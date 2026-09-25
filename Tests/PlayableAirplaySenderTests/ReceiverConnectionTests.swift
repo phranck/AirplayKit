@@ -39,6 +39,8 @@ private final class AnsweringReceiver {
     private let listener: Int32
     private let lock = NSLock()
     private var seen: [Int] = []
+    private var requests: [String] = []
+    private let volumeReply: Data?
 
     /// Every `CSeq` that arrived, in the order it arrived in.
     var sequencesSeen: [Int] {
@@ -48,7 +50,15 @@ private final class AnsweringReceiver {
         return seen
     }
 
-    init() throws {
+    var requestsSeen: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+
+        return requests
+    }
+
+    init(volumeReply: String? = nil) throws {
+        self.volumeReply = volumeReply.map { Data($0.utf8) }
         // On a local handle throughout, because the stored one cannot be read
         // from a closure until every member has a value.
         let handle = socket(AF_INET, streamSocketKind, 0)
@@ -111,18 +121,24 @@ private final class AnsweringReceiver {
 
             pending += Data(arrived[0..<count])
 
-            // Every request here is bodyless, so the blank line is the whole of
-            // where one ends.
             while let range = pending.range(of: separator) {
                 let head = String(decoding: pending[pending.startIndex..<range.lowerBound], as: UTF8.self)
-                pending = Data(pending[range.upperBound...])
+                let length = Self.contentLength(in: head)
+                guard pending.distance(from: range.upperBound, to: pending.endIndex) >= length else { break }
+
+                let bodyEnd = pending.index(range.upperBound, offsetBy: length)
+                let body = Data(pending[range.upperBound..<bodyEnd])
+                pending = Data(pending[bodyEnd...])
 
                 let sequence = Self.sequence(in: head)
                 lock.lock()
                 seen.append(sequence)
+                requests.append(head + "\r\n\r\n" + String(decoding: body, as: UTF8.self))
                 lock.unlock()
 
-                let reply = Data("RTSP/1.0 200 OK\r\nCSeq: \(sequence)\r\n\r\n".utf8)
+                let responseBody = head.hasPrefix("GET_PARAMETER ") ? volumeReply ?? Data() : Data()
+                let reply = Data("RTSP/1.0 200 OK\r\nCSeq: \(sequence)\r\nContent-Length: \(responseBody.count)\r\n\r\n".utf8)
+                    + responseBody
                 reply.withUnsafeBytes { bytes in
                     _ = send(handle, bytes.baseAddress, reply.count, sendFlags)
                 }
@@ -134,6 +150,14 @@ private final class AnsweringReceiver {
     private static func sequence(in head: String) -> Int {
         for line in head.components(separatedBy: "\r\n") where line.lowercased().hasPrefix("cseq:") {
             return Int(line.dropFirst("cseq:".count).trimmingCharacters(in: .whitespaces)) ?? 0
+        }
+
+        return 0
+    }
+
+    private static func contentLength(in head: String) -> Int {
+        for line in head.components(separatedBy: "\r\n") where line.lowercased().hasPrefix("content-length:") {
+            return Int(line.dropFirst("content-length:".count).trimmingCharacters(in: .whitespaces)) ?? 0
         }
 
         return 0
@@ -205,5 +229,21 @@ final class ReceiverConnectionTests: XCTestCase {
         }
 
         XCTAssertEqual(receiver.sequencesSeen, [1, 2, 3])
+    }
+
+    func testSessionReadsVolumeFromTheReceiver() throws {
+        let receiver = try AnsweringReceiver(volumeReply: "volume: -12.0\r\n")
+        defer { receiver.close() }
+
+        let connection = try ReceiverConnection(host: "127.0.0.1",
+                                                port: receiver.port,
+                                                senderName: "PlayableAirplay tests",
+                                                timeout: 2)
+        let session = Session(connection: connection)
+
+        XCTAssertEqual(try session.readVolume(), 0.6, accuracy: 0.0001)
+        XCTAssertEqual(receiver.requestsSeen.count, 1)
+        XCTAssertTrue(receiver.requestsSeen[0].hasPrefix("GET_PARAMETER rtsp://"))
+        XCTAssertTrue(receiver.requestsSeen[0].hasSuffix("\r\n\r\nvolume\r\n"))
     }
 }

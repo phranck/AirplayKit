@@ -16,7 +16,7 @@ import Foundation
  kept as it is rather than dropped, because a message carrying something
  unexpected is still a message worth reading.
  */
-public enum HomeKitTLVType: UInt8, Sendable {
+package enum HomeKitTLVType: UInt8, Sendable {
     case method = 0x00
     case identifier = 0x01
     case salt = 0x02
@@ -39,7 +39,7 @@ public enum HomeKitTLVType: UInt8, Sendable {
  @property type The number the receiver reads the item by.
  @property value The bytes under it, of any length, including none.
  */
-public struct HomeKitTLVItem: Equatable, Sendable {
+package struct HomeKitTLVItem: Equatable, Sendable {
     public let type: UInt8
     public let value: Data
 
@@ -62,7 +62,7 @@ public struct HomeKitTLVItem: Equatable, Sendable {
  is not an edge case here: a 3072-bit SRP public key is 384 bytes and is split
  every time.
  */
-public enum HomeKitTLV {
+package enum HomeKitTLV {
     /// What one item's length field can express, and therefore where a value is split.
     static let maximumItemLength = 255
 
@@ -160,7 +160,7 @@ public enum HomeKitTLV {
     }
 }
 
-public extension Array where Element == HomeKitTLVItem {
+package extension Array where Element == HomeKitTLVItem {
     /**
      The value under a type, or nil where the message does not carry it.
 

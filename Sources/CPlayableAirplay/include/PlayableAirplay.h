@@ -332,6 +332,20 @@ void pa_discovery_stop(PADiscovery *discovery);
 size_t pa_product_name(const char *manufacturer, const char *model, char *out, size_t capacity);
 
 /**
+ Reads standard UPnP device metadata, then AirPlay `/info`, to obtain the best
+ product name this receiver publishes. Falls back to pa_product_name when those
+ endpoints provide nothing. No manufacturer-specific model table is used.
+
+ The call returns immediately. `handler` is called once on a background thread;
+ `name` is valid only until the callback returns. The caller must keep `context`
+ valid until that callback. NULL `handler` does nothing.
+ */
+typedef void (*PAProductNameHandler)(void *context, const char *name);
+void pa_resolve_product_name(const char *host, const char *manufacturer,
+                             const char *model, PAProductNameHandler handler,
+                             void *context);
+
+/**
  The SF Symbol that draws a receiver, such as `hifispeaker` or `homepod.mini`.
 
  Apple's hardware is drawn as itself, because the symbol catalogue has one
@@ -354,6 +368,26 @@ size_t pa_pair_symbol_name(const char *manufacturer, const char *model, char *ou
 /** A connection to one receiver, carrying audio. */
 typedef struct PASession PASession;
 
+/** Optional application-owned volume memory, shared by sessions and groups. */
+typedef struct PAVolumeMemory PAVolumeMemory;
+
+/**
+ Opens a JSON store at an application-chosen path. No file is created until a
+ confirmed level is recorded. Disabled stores neither restore nor write.
+ An invalid or unreadable existing file returns NULL without replacing it.
+ */
+PAVolumeMemory *pa_volume_memory_open(const char *path, bool enabled, PAResult *result);
+
+/** Changes the feature for existing and future sessions using this store. */
+void pa_volume_memory_set_enabled(PAVolumeMemory *memory, bool enabled);
+bool pa_volume_memory_is_enabled(PAVolumeMemory *memory);
+
+/** Copies the latest persistence write error, or an empty string. Returns bytes required. */
+size_t pa_volume_memory_last_error(PAVolumeMemory *memory, char *out, size_t capacity);
+
+/** Releases the caller's handle. Open sessions retain the store themselves. */
+void pa_volume_memory_close(PAVolumeMemory *memory);
+
 /**
  Opens a session with a receiver and pairs with it.
 
@@ -366,6 +400,11 @@ typedef struct PASession PASession;
  @return The session, or NULL when it could not be opened.
  */
 PASession *pa_session_open(const char *host, uint16_t port, const char *senderName, PAResult *result);
+
+/** Like pa_session_open, restoring and recording volume by stable PAReceiver.id. */
+PASession *pa_session_open_with_volume_memory(const char *identifier, const char *host,
+                                              uint16_t port, const char *senderName,
+                                              PAVolumeMemory *memory, PAResult *result);
 
 /**
  Hands the session the next audio to play.
@@ -502,6 +541,41 @@ double pa_session_waited_seconds(PASession *session);
 void pa_session_set_volume(PASession *session, float volume);
 
 /**
+ Reads the receiver's volume for this session, from 0 for silent to 1 for full.
+
+ The level is read from the receiver when the session opens. If its reply does
+ not contain a usable level, no level is invented. The last level successfully
+ set through this session is available afterwards. This cannot read a receiver
+ without a session.
+
+ @param session  The open session, or NULL.
+ @param volume   Where to write the level, unchanged if no level is known.
+ @return Whether a level is known.
+ */
+bool pa_session_get_volume(PASession *session, float *volume);
+
+/** A changed receiver volume, from this caller or another control on the device. */
+typedef void (*PAVolumeHandler)(void *context, float level);
+
+/** Installs or removes the per-session volume callback. Passing NULL removes it. */
+void pa_session_set_volume_handler(PASession *session, PAVolumeHandler handler,
+                                   void *context);
+
+/**
+ A request pushed by the receiver on an open session.
+
+ The method, path and body belong to the callback and must be copied to retain
+ them. The callback runs on the event connection's thread, after its RTSP reply
+ was sent. The body may be a binary property list. Commands sent before a
+ handler is installed cannot be replayed.
+ */
+typedef void (*PAEventHandler)(void *context, const char *method, const char *path,
+                               const uint8_t *body, size_t bodyLength);
+
+/** Installs or removes the event handler. Passing NULL removes it. */
+void pa_session_set_event_handler(PASession *session, PAEventHandler handler, void *context);
+
+/**
  What a session did, for reading once it has ended.
 
  The same four figures the functions above answer whilst a session is open, so
@@ -532,7 +606,129 @@ typedef struct PASessionReport {
  */
 void pa_session_close(PASession *session, PASessionReport *report);
 
-/** A sentence describing a result, in English, for a log rather than a person. */
+/** One AirPlay 2 group with a shared PTP clock and media timeline. */
+typedef struct PAGroup PAGroup;
+
+/**
+ Opens a group of one or more receivers. The three arrays have `count` entries
+ at matching indices. Identifiers are the stable `PAReceiver.id` values and
+ hosts and ports come from the same discovery records. The group copies them.
+ */
+PAGroup *pa_group_open(const char *const *identifiers,
+                       const char *const *hosts,
+                       const uint16_t *ports,
+                       size_t count,
+                       const char *senderName,
+                       PAResult *result);
+
+/** Like pa_group_open, restoring each member's saved volume before playback. */
+PAGroup *pa_group_open_with_volume_memory(const char *const *identifiers,
+                                          const char *const *hosts,
+                                          const uint16_t *ports,
+                                          size_t count,
+                                          const char *senderName,
+                                          PAVolumeMemory *memory,
+                                          PAResult *result);
+
+/** Adds one receiver while the existing members keep playing. */
+PAResult pa_group_add(PAGroup *group, const char *identifier,
+                      const char *host, uint16_t port);
+
+/** Removes one receiver while the other members keep playing. */
+PAResult pa_group_remove(PAGroup *group, const char *identifier);
+
+/** The number of receivers currently in the group. */
+size_t pa_group_member_count(PAGroup *group);
+
+/**
+ Copies one member's stable identifier into `out`, including a terminator where
+ capacity is nonzero. Returns the bytes the full identifier needs, excluding
+ its terminator. An index outside the group returns zero and writes an empty
+ string where possible.
+ */
+size_t pa_group_member_id(PAGroup *group, size_t index, char *out, size_t capacity);
+
+/** Copies interleaved signed 16-bit stereo PCM without waiting for the network. */
+bool pa_group_write(PAGroup *group, const int16_t *frames, size_t frameCount);
+
+/** Whether this group still accepts audio. */
+bool pa_group_is_running(PAGroup *group);
+
+/** Frames accepted but not yet sent to the receivers. */
+size_t pa_group_held_frames(PAGroup *group);
+
+/** Discards frames still buffered for the group and returns their count. */
+size_t pa_group_discard_held_audio(PAGroup *group);
+
+/** Reads one member's last known volume, from 0 to 1. */
+bool pa_group_get_volume(PAGroup *group, const char *identifier, float *volume);
+
+/** Sets one member's own volume, from 0 to 1. */
+PAResult pa_group_set_volume(PAGroup *group, const char *identifier, float volume);
+
+/** Sets every current member's own volume, from 0 to 1. */
+PAResult pa_group_set_volume_all(PAGroup *group, float volume);
+
+/** Reads the mean member volume. Returns false if any member's level is unknown. */
+bool pa_group_get_average_volume(PAGroup *group, float *volume);
+
+/** Moves the mean member volume while preserving relative levels where possible.
+    Returns PAResultInvalidArgument if any member's level is unknown. */
+PAResult pa_group_set_average_volume(PAGroup *group, float volume);
+
+/** Group lifecycle and membership changes made through this sender. */
+typedef enum PAGroupChange {
+    PAGroupChangeCreated = 0,
+    PAGroupChangeJoined,
+    PAGroupChangeLeft,
+    PAGroupChangeDissolved,
+    PAGroupChangeEnded,
+    PAGroupChangeLost,
+} PAGroupChange;
+
+/**
+ Called when group membership changes. `identifier` names a joining or leaving
+ receiver and is NULL for creation, dissolution and an unexpected group end. A
+ lost member is reported with PAGroupChangeLost while the others keep playing. On
+ creation, query `pa_group_member_count` and `pa_group_member_id` for the
+ initial set. Strings belong to the callback.
+ */
+typedef void (*PAGroupMembershipHandler)(void *context, PAGroupChange change,
+                                          const char *groupID,
+                                          const char *identifier);
+
+/** Installs a membership callback and immediately reports the current group. */
+void pa_group_set_membership_handler(PAGroup *group,
+                                     PAGroupMembershipHandler handler,
+                                     void *context);
+
+/** A changed volume on one group member, from either this caller or elsewhere. */
+typedef void (*PAGroupVolumeHandler)(void *context, const char *identifier, float level);
+
+/** Installs or removes a volume change callback. Passing NULL removes it. */
+void pa_group_set_volume_handler(PAGroup *group, PAGroupVolumeHandler handler,
+                                 void *context);
+
+/**
+ A receiver-pushed request, identified by its stable group member ID. Strings
+ and body are valid only during the callback. The receiver has already received
+ the RTSP reply when this runs.
+ */
+typedef void (*PAGroupEventHandler)(void *context, const char *identifier,
+                                    const char *method, const char *path,
+                                    const uint8_t *body, size_t bodyLength);
+
+/** Installs or removes the event handler. Passing NULL removes it. */
+void pa_group_set_event_handler(PAGroup *group, PAGroupEventHandler handler,
+                                void *context);
+
+/** Stops all members and reports PAGroupChangeDissolved. The handle remains valid. */
+void pa_group_dissolve(PAGroup *group);
+
+/** Stops every member and releases the group. Safe to call with NULL. */
+void pa_group_close(PAGroup *group);
+
+/** An English result description, including a conditional Home app hint for pairing refusals. */
 const char *pa_result_description(PAResult result);
 
 #ifdef __cplusplus

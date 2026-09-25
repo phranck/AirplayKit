@@ -9,6 +9,22 @@ import XCTest
 @testable import PlayableAirplaySender
 
 final class SampleRingTests: XCTestCase {
+    private final class Samples: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [Int16] = []
+
+        func append(_ samples: [Int16]) {
+            lock.lock()
+            values.append(contentsOf: samples)
+            lock.unlock()
+        }
+
+        var snapshot: [Int16] {
+            lock.lock()
+            defer { lock.unlock() }
+            return values
+        }
+    }
 
     // MARK: - Writing and reading
 
@@ -262,8 +278,7 @@ final class SampleRingTests: XCTestCase {
         let sent = expectation(description: "everything written")
         let received = expectation(description: "everything read")
 
-        var readBack: [Int16] = []
-        readBack.reserveCapacity(packets * packet)
+        let collected = Samples()
 
         DispatchQueue.global().async {
             var next: Int16 = 0
@@ -294,7 +309,7 @@ final class SampleRingTests: XCTestCase {
             var taken = 0
             while taken < packets {
                 if ring.read(into: &out) {
-                    readBack.append(contentsOf: out)
+                    collected.append(out)
                     taken += 1
                 }
                 else { usleep(200) }
@@ -303,6 +318,7 @@ final class SampleRingTests: XCTestCase {
         }
 
         wait(for: [sent, received], timeout: 20)
+        let readBack = collected.snapshot
 
         XCTAssertEqual(readBack.count, packets * packet)
 

@@ -18,7 +18,7 @@ import Foundation
  So the question is answered here, once, and both faces translate the answer
  into their own vocabulary.
  */
-public enum SenderFailureKind {
+package enum SenderFailureKind {
     /// The receiver could not be reached at all.
     case unreachable
 
@@ -64,6 +64,13 @@ public enum SenderFailureKind {
         // below 1024, and this machine would not grant them.
         case is PTPFailure:
             self = .senderFailed
+
+        case GroupFailure.needsReceiver, GroupFailure.duplicateReceiver,
+             GroupFailure.receiverNotInGroup, GroupFailure.volumeUnavailable:
+            self = .invalidRequest
+
+        case GroupFailure.groupEnded:
+            self = .sessionEnded
 
         default:
             self = .senderFailed

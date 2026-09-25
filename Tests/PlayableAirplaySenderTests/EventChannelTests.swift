@@ -92,6 +92,64 @@ final class EventChannelTests: XCTestCase {
         XCTAssertEqual(plaintext, partial)
     }
 
+    func testARequestBodyIsDeliveredOnlyAfterItIsComplete() throws {
+        let body = Data([0x62, 0x70, 0x6c, 0x69, 0x73, 0x74])
+        let headers = Data("POST /command RTSP/1.0\r\nCSeq: 7\r\nContent-Length: 6\r\n\r\n".utf8)
+        var plaintext = headers + body.prefix(3)
+        var sealing = EncryptedChannel(key: key)
+        var received: [EventChannel.Request] = []
+        var replies = 0
+
+        try EventChannel.answerRequests(in: &plaintext,
+                                        sealedWith: &sealing,
+                                        sendingThrough: { _ in replies += 1 },
+                                        onRequest: { received.append($0) })
+        XCTAssertEqual(replies, 0)
+        XCTAssertTrue(received.isEmpty)
+
+        plaintext += body.suffix(3)
+        try EventChannel.answerRequests(in: &plaintext,
+                                        sealedWith: &sealing,
+                                        sendingThrough: { _ in replies += 1 },
+                                        onRequest: { received.append($0) })
+        XCTAssertEqual(replies, 1)
+        XCTAssertEqual(received.count, 1)
+        XCTAssertEqual(received[0].method, "POST")
+        XCTAssertEqual(received[0].path, "/command")
+        XCTAssertEqual(received[0].body, body)
+        XCTAssertTrue(plaintext.isEmpty)
+    }
+
+    func testARequestBodyCannotBeMistakenForTheNextRequest() throws {
+        let first = Data("POST /command RTSP/1.0\r\nCSeq: 7\r\nContent-Length: 8\r\n\r\n".utf8)
+            + Data("\r\n\r\nbody".utf8)
+        var plaintext = first + request(sequence: 8)
+        var sealing = EncryptedChannel(key: key)
+        var delivered: [EventChannel.Request] = []
+        var replies = 0
+
+        try EventChannel.answerRequests(in: &plaintext,
+                                        sealedWith: &sealing,
+                                        sendingThrough: { _ in replies += 1 },
+                                        onRequest: { delivered.append($0) })
+
+        XCTAssertEqual(replies, 2)
+        XCTAssertEqual(delivered.map(\.path), ["/command", "*"])
+        XCTAssertEqual(delivered[0].body, Data("\r\n\r\nbody".utf8))
+        XCTAssertTrue(plaintext.isEmpty)
+    }
+
+    func testOversizedBodyIsRefusedBeforeBufferingIt() {
+        var plaintext = Data("POST /command RTSP/1.0\r\nContent-Length: 1048577\r\n\r\n".utf8)
+        var sealing = EncryptedChannel(key: key)
+
+        XCTAssertThrowsError(try EventChannel.answerRequests(in: &plaintext,
+                                                              sealedWith: &sealing,
+                                                              sendingThrough: { _ in })) { error in
+            XCTAssertTrue(error is EventChannelFailure)
+        }
+    }
+
     // MARK: - What a reply carries
 
     func testTheReplyCarriesNothingBeyondTheStatusLineAndTheSequence() {

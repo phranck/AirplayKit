@@ -12,8 +12,9 @@ import Foundation
  Audio over TCP, as a stream of length-prefixed blocks.
 
  This is stream type 103, which is what an iPhone uses and what a Sonos plays.
- The realtime path exists beside it and is what the older sender here speaks,
- and a receiver that accepts realtime may still render nothing from it.
+ The realtime path exists in the protocol, but this package currently sends
+ buffered audio. A receiver that accepts realtime may still render nothing
+ from it.
 
  ```text
  2 bytes   big-endian length, counting itself
@@ -29,7 +30,7 @@ import Foundation
  beyond that it simply stops draining the connection, so there is no message to
  send and nothing to wait for.
  */
-public final class BufferedAudioStream {
+package final class BufferedAudioStream {
     private let connection: TCPConnection
     private let key: SymmetricKey
 
@@ -83,6 +84,15 @@ public final class BufferedAudioStream {
      nothing here to synchronise.
      */
     public var nextTimestamp: UInt32 { timestamp }
+
+    /// The next buffered block's sequence number, for a final flush.
+    var nextSequence: UInt32 { sequence }
+
+    /// Places a new group member at the shared media position before its first block.
+    func start(at timestamp: UInt32) {
+        precondition(sequence == 0)
+        self.timestamp = timestamp
+    }
 
     /**
      Sends one packet's worth of samples.
