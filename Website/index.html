@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PlayableAirplay</title>
-<meta name="description" content="Send audio to an AirPlay 2 receiver from macOS and from Linux, from Swift. One application streams to a speaker whilst the rest of the machine keeps its own output.">
+<meta name="description" content="Discover AirPlay 2 receivers, manage speaker groups and send an application's audio from macOS or Linux without moving the system output.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="styles.css">
 <script>
@@ -88,52 +88,54 @@
     <ol class="path-line">
       <li><span class="path-mark"></span><b><svg class="icon path-icon" aria-hidden="true"><use href="#ph-wave-sine"></use></svg>Your frames</b><span>16 bit stereo, 44100 Hz</span></li>
       <li><span class="path-mark"></span><b><svg class="icon path-icon" aria-hidden="true"><use href="#ph-plugs-connected"></use></svg>The session</b><span>paired, encrypted, paced</span></li>
-      <li><span class="path-mark"></span><b><svg class="icon path-icon" aria-hidden="true"><use href="#ph-broadcast"></use></svg>The network</b><span>RAOP over RTSP and RTP</span></li>
+      <li><span class="path-mark"></span><b><svg class="icon path-icon" aria-hidden="true"><use href="#ph-broadcast"></use></svg>The network</b><span>encrypted RTSP and buffered audio</span></li>
       <li><span class="path-mark"></span><b><svg class="icon path-icon" aria-hidden="true"><use href="#ph-speaker-hifi"></use></svg>The speaker</b><span>its own volume, its own room</span></li>
     </ol>
   </section>
 
   <section id="interface" class="prose-section">
     <p class="section-number">01</p>
-    <h2>Two types, and that is the interface</h2>
+    <h2>Discovery and playback</h2>
 
     <div class="columns">
       <div>
         <h3><code>AirPlayDiscovery</code></h3>
-        <p>Browses for the service AirPlay receivers advertise and reports the whole set each time it changes, sorted by name. It finds every receiver on the network, including the ones nothing is connected to, which is the part the system picker does not do.</p>
-        <p>Changes arrive on a queue you name, so a list on screen never updates from the sender's thread.</p>
+        <p>Browses for AirPlay receivers and reports the current set each time it changes, sorted by name. It can find receivers without moving the system's output. Each <code>AirPlayReceiver</code> carries its speaker name, model and connection details.</p>
+        <p>Changes arrive on a queue you name. Typed PlayableAirplay events report appearances and advertised name, model and playback-state changes.</p>
       </div>
       <div>
         <h3><code>AirPlaySession</code></h3>
         <p>Pairs with one receiver and carries the audio. Writing never waits, because the thread producing live audio must not block, so a write that does not take the frames says whether the buffer is merely full or the receiver has hung up.</p>
-        <p>The volume it carries is the speaker's own control rather than a gain on the samples, so it survives a track change.</p>
+        <p>The volume it carries is the speaker's own control rather than a gain on the samples. The initial level is available when the receiver answers the volume query. Changes made at the receiver are reported while the session is open.</p>
       </div>
     </div>
 
     <figure class="panel">
       <figcaption><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg><span class="panel-label">Playing to one of them</span><button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button></figcaption>
 <pre><code><span class="k">let</span> session = <span class="k">try</span> <span class="t">AirPlaySession</span>(receiver: receiver, senderName: <span class="s">"My App"</span>)
+<span class="k">if let</span> level = session.volume { print(level) }
 session.volume = <span class="n">0.7</span>
 
-<span class="k">switch</span> session.write(frames) {
-<span class="k">case</span> .taken:      <span class="k">break</span>           <span class="c">// on its way</span>
-<span class="k">case</span> .bufferFull: offerAgain()     <span class="c">// not caught up yet</span>
-<span class="k">case</span> .ended:      session.close()  <span class="c">// the receiver hung up</span>
-}</code></pre>
+<span class="k">var</span> outcome = session.write(frames)
+<span class="k">while</span> outcome == .bufferFull {
+    Thread.sleep(forTimeInterval: <span class="n">0.01</span>)
+    outcome = session.write(frames)
+}
+<span class="k">if</span> outcome == .ended { session.close() }</code></pre>
     </figure>
   </section>
 
   <section id="example" class="prose-section">
     <p class="section-number">02</p>
     <h2>A file, start to finish</h2>
-    <p class="lead">Read a file, turn it into what AirPlay carries, open a session, and keep it fed until the file runs out. On Apple's platforms AVFoundation does the conversion and takes any format the system can read. On Linux there is no AVFoundation, so the portable one takes a WAVE file that is already 16 bit stereo at 44100 and hands the bytes over as they are.</p>
-    <p>Both are lifted out of <code>Sources/Demo/Demo.swift</code> when this page is built, so what stands here is what the compiler saw. Both have been played to a speaker.</p>
+    <p class="lead">Read a file, turn it into what AirPlay carries, open a session, and keep it fed until the file runs out. On macOS AVFoundation converts formats the system can read. On Linux the portable example takes a WAVE file that is already 16 bit stereo at 44100 Hz.</p>
+    <p>Both examples are lifted out of <code>Sources/Demo/Demo.swift</code> when this page is built. Receiver playback has been recorded on macOS. Linux builds in CI; receiver playback on Linux has not yet been recorded.</p>
 
     <figure class="panel" data-variant="apple">
       <figcaption>
         <svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>
         <span class="variants" role="group" aria-label="Which platform">
-          <button class="variant" type="button" data-variant="apple" aria-pressed="true">macOS &amp; iOS</button>
+          <button class="variant" type="button" data-variant="apple" aria-pressed="true">macOS</button>
           <button class="variant" type="button" data-variant="portable" aria-pressed="false">Linux</button>
         </span>
         <button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button>
@@ -145,21 +147,31 @@ session.volume = <span class="n">0.7</span>
 
   <section class="prose-section">
     <p class="section-number">03</p>
-    <h2>What it will not do</h2>
-    <p class="lead">One session reaches one receiver. Several sessions at once would each start their own timeline against their own clock, so two speakers in the same room would drift apart within a minute. Holding them together needs a single timeline shared between them, and the sender underneath has not done that work, so this library does not offer it and does not pretend to.</p>
-    <p>It also does not resample. The audio goes in as interleaved signed 16 bit stereo at 44100 Hz, because that is what AirPlay carries, and anything else is converted before it arrives.</p>
+    <h2>Groups and live changes</h2>
+    <p class="lead"><code>AirPlayGroup</code> can start on one receiver and add others under a shared clock and timeline. Add and remove members while audio continues, dissolve the group, and set one receiver's volume or the whole group's. The average-volume control keeps relative levels where possible.</p>
+    <p>Typed <code>AirPlayEvent</code> values report discovery changes, volume changes on connected speakers and membership changes made through this sender. Another controller's group membership cannot be reliably inferred from the tested receivers' Bonjour records. Two and three Sonos speakers played together in local tests. A Sonos and HomePod mini pair also played together after Home speaker access was temporarily opened. The listener judged the speakers simultaneous; exact acoustic delay was not measured. Under the restored home-members-only rule, the HomePod rejects this library's fresh pairing.</p>
+    <figure class="panel">
+      <figcaption><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg><span class="panel-label">Managing a group</span><button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button></figcaption>
+<pre><code><span class="k">let</span> group = <span class="k">try</span> <span class="t">AirPlayGroup</span>(receivers: [office, diningRoom], senderName: <span class="s">"My App"</span>)
+group.observeChanges { event <span class="k">in</span> print(event) }
+<span class="k">try</span> group.add(bathroom)
+<span class="k">try</span> group.setVolume(<span class="n">0.5</span>, for: office.id)
+<span class="k">try</span> group.remove(diningRoom.id)
+group.dissolve()</code></pre>
+    </figure>
+    <p>Audio must arrive as interleaved signed 16 bit stereo at 44100 Hz. Resampling happens before writing to the library.</p>
   </section>
 
   <section id="usage" class="prose-section">
     <p class="section-number">04</p>
     <h2>How to use it</h2>
-    <p class="lead">It is a Swift package, and everything underneath it is built as part of that package. The C++ sender, ed25519 and Mbed TLS come from their own checkouts, so a clone and a build is the whole of it and nothing is fetched behind your back.</p>
+    <p class="lead">It is a Swift package. The sender is written in Swift and uses swift-crypto and BigInt, which Swift Package Manager resolves during the build. C and Objective-C callers can use the separate <code>CPlayableAirplay</code> product.</p>
 
     <figure class="panel" data-variant="apple">
       <figcaption>
         <svg class="icon" aria-hidden="true"><use href="#ph-terminal-window"></use></svg>
         <span class="variants" role="group" aria-label="Which platform">
-          <button class="variant" type="button" data-variant="apple" aria-pressed="true">macOS &amp; iOS</button>
+          <button class="variant" type="button" data-variant="apple" aria-pressed="true">macOS</button>
           <button class="variant" type="button" data-variant="portable" aria-pressed="false">Linux</button>
         </span>
         <button class="copy" type="button"><svg class="icon copy-idle" aria-hidden="true"><use href="#ph-copy"></use></svg><svg class="icon copy-done" aria-hidden="true"><use href="#ph-check"></use></svg><span class="visually-hidden">Copy this to the clipboard</span></button>
@@ -168,7 +180,7 @@ session.volume = <span class="n">0.7</span>
 <span class="c">// In a package of your own:</span>
 
 dependencies: [
-    .package(url: <span class="s">"https://github.com/phranck/PlayableAirplay.git"</span>, branch: <span class="s">"main"</span>),
+    .package(url: <span class="s">"https://github.com/phranck/PlayableAirplay.git"</span>, branch: <span class="s">"develop"</span>),
 ],
 targets: [
     .target(name: <span class="s">"YourTarget"</span>, dependencies: [<span class="s">"PlayableAirplay"</span>]),
@@ -178,11 +190,11 @@ sudo apt install libavahi-compat-libdnssd-dev
 
 <span class="c"># Then the same dependency, and swift build as usual.</span>
 dependencies: [
-    .package(url: <span class="s">"https://github.com/phranck/PlayableAirplay.git"</span>, branch: <span class="s">"main"</span>),
+    .package(url: <span class="s">"https://github.com/phranck/PlayableAirplay.git"</span>, branch: <span class="s">"develop"</span>),
 ],</code></pre>
     </figure>
 
-    <p>Then <code>import PlayableAirplay</code> and there is nothing else to set up. On Linux, browsing needs <code>avahi-daemon</code> running at the time, which is a matter of the machine rather than of the build.</p>
+    <p>Then <code>import PlayableAirplay</code>. On Linux, browsing needs <code>avahi-daemon</code> running at the time, which is a matter of the machine rather than of the build.</p>
   </section>
 
 </main>

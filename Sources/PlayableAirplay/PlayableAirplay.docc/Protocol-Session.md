@@ -278,7 +278,9 @@ the speaker leaves  the sender's five again
 
 The new member is listed first and the sender last. Every member contributes every address it can be reached at, which here is one IPv4 address and four IPv6 ones, among them a link-local, a unique local and two global. So the request answers the question of who is in this clock group and where each of them is, and the sender counts as a member of it.
 
-A speaker joining an existing session changes nothing else. No second SETUP, no further RECORD, no new anchor and no interruption. One `SETPEERS` arrives with the enlarged list and the session carries on, and the same holds in reverse when it leaves (measured 2026-09-22, decrypted, F-034).
+In one observed join, the existing session received only an enlarged `SETPEERS` list and carried on without a new SETUP, RECORD or anchor (measured 2026-09-22, decrypted, F-034). A later join rebuilt the existing buffered stream at a different sample rate and sent a fresh anchor under a different clock identity (measured 2026-09-24, decrypted, F-121). The peer-list-only sequence is therefore one valid case, not a universal rule.
+
+The local Swift sender subsequently opened a group on Büro alone, added Esszimmer and Badezimmer in sequence and removed Esszimmer while its tone producer kept running. The group API completed all operations and retained Büro and Badezimmer (measured 2026-09-24, F-129). That run did not include an operator listening report at either join, so it establishes the local control sequence, not gapless acoustic output at the transitions.
 
 ### SETPEERSX
 
@@ -306,7 +308,7 @@ fe80::1.58367 -> fe80::3.7000    371 packets
 
 That is the reading the published evidence already leaned towards. A capture of a second speaker being added showed the sender's `SETPEERS` going out on the session of the receiver that was already playing, naming the new speaker's addresses rather than handing anything over to it, and nothing in `SETPEERS` or `SETPEERSX` nominates a receiver to relay audio to other receivers (reported likely, [Cozzi, RTSP](https://web.archive.org/web/20220214214845/https://emanuelecozzi.net/docs/airplay2/rtsp/)).
 
-So a sender opens a full session to every receiver separately, sends each of them the same anchor, and uses `SETPEERS` to tell each receiver about the others so that all of them lock to the same clock. Each receiver then works out for itself when to play each frame. <doc:Protocol-Timing> covers the clock and the anchor.
+So a sender opens a full session to every receiver separately and uses `SETPEERS` to tell each receiver about the others. The two controlled receivers got different anchor fields that mapped the same media to the same clock within about 2.7 microseconds (measured 2026-09-24, decrypted, F-119). That control-plane measurement did not establish audible synchronisation. Later, this library sent one tone to two and then three real Sonos receivers over separate sessions; the listener judged them simultaneous, without an acoustic offset measurement (F-126). <doc:Protocol-Timing> covers the clock and the anchor.
 
 ### The grouping fields
 

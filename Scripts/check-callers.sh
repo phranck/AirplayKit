@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 #
 #  check-callers.sh
-#  Builds the application that consumes this package by a local path.
+#  Builds the application that consumes this package.
 #
-#  PlayableAirplay.h is a published interface, and its one known caller does not
-#  take a release of it. podlive-macos names this working tree by a relative path,
-#  so whatever is checked out here is what that application compiles against, and
-#  a changed declaration reaches it the moment it is saved. Nothing else in this
-#  repository would say so: every gate here was green on the change that stopped
-#  it compiling.
+#  PlayableAirplay.h is a published interface, and podlive-macos is its one known
+#  Objective-C caller. A local path tests this checkout directly. A remote SPM
+#  reference tests the released version instead; it cannot validate unreleased
+#  changes here, and the output says so rather than claiming that it does.
 #
 #  Not in CI, because the runner has no copy of that application and has no
 #  business with one. This is the gate for a machine that has it, and on a
@@ -40,16 +38,21 @@ if [[ ! -f "$project/project.pbxproj" ]]; then
     exit 1
 fi
 
-# Which package that project actually compiles. It names one by a relative path,
-# which is resolved from the directory holding the project, and a machine with
-# two checkouts of this package would otherwise build the other one and report a
-# green gate about code nobody changed.
+# Which package that project actually compiles. A local path is resolved from
+# the directory holding the project, so two checkouts cannot be confused.
 reference="$(sed -n 's/^[[:space:]]*relativePath = \(.*PlayableAirplay\);$/\1/p' \
     "$project/project.pbxproj" | head -1)"
 
 if [[ -z "$reference" ]]; then
-    echo "$project names no local PlayableAirplay, so building it would prove nothing." >&2
-    exit 1
+    if ! grep -q 'repositoryURL = "https://github.com/phranck/PlayableAirplay.git";' \
+        "$project/project.pbxproj"; then
+        echo "$project names neither this checkout nor the PlayableAirplay GitHub package." >&2
+        exit 1
+    fi
+    echo "== $caller, which compiles the released PlayableAirplay package from GitHub"
+    echo "This checks the released caller, not unreleased code in $root."
+    "$caller/Scripts/run-tests.sh"
+    exit 0
 fi
 
 # Empty where that path leads nowhere. `|| true` is what keeps a failed cd from

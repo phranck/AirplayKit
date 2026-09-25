@@ -65,6 +65,49 @@ html {
 :root {
     --typography-html-font: "Barlow", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
     --typography-html-font-mono: "Fira Code Nerd Font", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --border-radius: 14px;
+    --overviewcard-border-radius: 18px;
+    --code-border-radius: 14px;
+    --aside-border-radius: 14px;
+    --button-border-radius: 10px;
+    --inline-code-border-radius: 6px;
+    --tutorial-step-border-radius: 14px;
+}
+
+/* DocC defaults to black in dark mode. Keep its contrast, but use the same
+   warm charcoal surface and quiet outlines as the site in front of it. */
+body[data-color-scheme="dark"] {
+    --color-fill: #171d21;
+    --color-fill-secondary: #20282d;
+    --color-fill-tertiary: #293238;
+    --color-fill-gray: #364147;
+    --color-fill-gray-secondary: #263037;
+    --color-fill-gray-tertiary: #303b42;
+    --color-fill-gray-quaternary: #303b42;
+    --color-figure-gray: #edf1f2;
+    --color-figure-gray-secondary: #bdc8cc;
+    --color-figure-gray-secondary-alt: #a7b5bb;
+    --color-card-background: #20282d;
+    --color-card-shadow: rgba(0, 0, 0, 0.12);
+    --color-link-block-card-border: rgba(189, 200, 204, 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+    body[data-color-scheme="auto"] {
+        --color-fill: #171d21;
+        --color-fill-secondary: #20282d;
+        --color-fill-tertiary: #293238;
+        --color-fill-gray: #364147;
+        --color-fill-gray-secondary: #263037;
+        --color-fill-gray-tertiary: #303b42;
+        --color-fill-gray-quaternary: #303b42;
+        --color-figure-gray: #edf1f2;
+        --color-figure-gray-secondary: #bdc8cc;
+        --color-figure-gray-secondary-alt: #a7b5bb;
+        --color-card-background: #20282d;
+        --color-card-shadow: rgba(0, 0, 0, 0.12);
+        --color-link-block-card-border: rgba(189, 200, 204, 0.14);
+    }
 }
 
 /*

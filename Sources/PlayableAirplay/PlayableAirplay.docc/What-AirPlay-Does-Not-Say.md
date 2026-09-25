@@ -1,6 +1,6 @@
 # What AirPlay does not say
 
-The questions a receiver will not answer over this protocol, and why this library does not go round the back to ask them.
+The questions a receiver will not answer over AirPlay, and the limits on what this library can report.
 
 ## Overview
 
@@ -32,11 +32,15 @@ The satellites publish no AirPlay service of their own and nothing can be sent t
 
 So a list of AirPlay receivers is already a list of things that can be played to, and a bonded set appears in it once, correctly.
 
-## Why the answers are not fetched from elsewhere
+## Product descriptions from another standard
 
-Every one of those questions is answered by the manufacturer's own services. A Sonos publishes all of it on port 1400, over plain HTTP and without authentication, and this package spoke those services until 2026-09-24.
+With explicit permission for model names, ``AirPlayReceiver/resolveProductName()`` now looks for the receiver's standard UPnP root device description by SSDP and reads its `modelName`. This is a read-only metadata request. It can distinguish a SYMFONISK Bookshelf from the short AirPlay label `Bookshelf` on the tested receiver. Other manufacturers can use the same path if they publish a compatible description; support for every AirPlay receiver has not been established. When no UPnP description is available, it uses AirPlay `/info` and then the published model. It does not hide a short model while waiting.
 
-They were taken out deliberately. A feature that works on one make of speaker and nowhere else is not a feature of this library, and a HomePod answers none of it. Worse, having them to hand makes the wrong design look like the right one: grouping over a manufacturer's services reads as an answer until somebody asks what happens in a house with two makes of speaker in it.
+## Why playback state is not fetched from elsewhere
+
+The other questions can be answered by some manufacturers' own services. A Sonos publishes them on port 1400 over plain HTTP and without authentication, and this package spoke those services until 2026-09-24.
+
+Control through those services was removed deliberately. The UPnP metadata exception above reads a standard device description for its product name only. Playback, volume, grouping and group events still use the AirPlay API rather than manufacturer control services.
 
 What this library does instead is say plainly what it does not know. ``AirPlayReceiver/isFullyDescribed`` is that principle in one property.
 
