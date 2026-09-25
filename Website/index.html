@@ -180,7 +180,7 @@ group.dissolve()</code></pre>
 <span class="c">// In a package of your own:</span>
 
 dependencies: [
-    .package(url: <span class="s">"https://github.com/phranck/PlayableAirplay.git"</span>, branch: <span class="s">"develop"</span>),
+    .package(url: <span class="s">"https://github.com/phranck/PlayableAirplay.git"</span>, exact: <span class="s">"0.1.0"</span>),
 ],
 targets: [
     .target(name: <span class="s">"YourTarget"</span>, dependencies: [<span class="s">"PlayableAirplay"</span>]),
@@ -190,7 +190,7 @@ sudo apt install libavahi-compat-libdnssd-dev
 
 <span class="c"># Then the same dependency, and swift build as usual.</span>
 dependencies: [
-    .package(url: <span class="s">"https://github.com/phranck/PlayableAirplay.git"</span>, branch: <span class="s">"develop"</span>),
+    .package(url: <span class="s">"https://github.com/phranck/PlayableAirplay.git"</span>, exact: <span class="s">"0.1.0"</span>),
 ],</code></pre>
     </figure>
 
