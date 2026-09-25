@@ -1,0 +1,21 @@
+//
+//  module.modulemap
+//  Makes the header a Clang module, which is what lets the Swift wrapper reach
+//  it without a bridging header, on macOS and on Linux alike.
+//
+//  The C prefix is the usual mark for the layer underneath: the module a Swift
+//  caller imports is AirplayKit, and this is what that module is built on.
+//
+//  Copyright © 2026 LAYERED. All rights reserved.
+//
+
+module CAirplayKit {
+    header "AirplayKit.h"
+    export *
+
+    // Internal to this package. They are named here so the tests can reach the
+    // pieces that can be checked without a receiver on the network, and they are
+    // not part of what a consumer is offered.
+    header "receiver_name.h"
+    header "receiver_state.h"
+}

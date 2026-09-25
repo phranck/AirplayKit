@@ -39,7 +39,7 @@ swift_version="$(cat .swift-version)"
 # package this needs already in it. Building it once takes a minute; not having
 # it costs most of a minute in every single run. The tag carries the version, so
 # raising the pin builds a new image rather than reusing the old one.
-image="playable-airplay-linux:${swift_version}"
+image="airplaykit-linux:${swift_version}"
 
 # Where the Linux build lives between runs. Named, so it survives, and so a
 # person can find it with `docker volume ls` and remove it when it is in the way.
@@ -49,11 +49,11 @@ image="playable-airplay-linux:${swift_version}"
 # The version is in the name because objects compiled by one toolchain have no
 # business being linked by another. Raising the pin therefore starts from
 # nothing and leaves the old volume behind, which `docker volume rm` clears.
-volume="playable-airplay-linux-build-${swift_version}"
+volume="airplaykit-linux-build-${swift_version}"
 
 # A name of its own per run, so the container can be found and removed even
 # where this script is killed before it can tidy up.
-container="playable-airplay-linux-$$"
+container="airplaykit-linux-$$"
 
 # Generous, because a cold volume compiles Mbed TLS, the C++ sender and two
 # Swift packages from nothing. A warm one is well under a minute.

@@ -1,4 +1,4 @@
-PlayableAirplay
+AirplayKit
 Copyright 2026 phranck
 
 This product depends on two Swift packages, fetched by the package manager and
@@ -9,7 +9,7 @@ built from source. Both keep their own licences:
   BigInt                MIT, (c) 2016-2017 Karoly Lorentey
                         https://github.com/attaswift/BigInt
 
-The protocol this speaks is written down in Sources/PlayableAirplay.docc from
+The protocol this speaks is written down in Sources/AirplayKit/AirplayKit.docc from
 published descriptions and from measurements taken here. Those are facts about a
 wire rather than anybody's code, and every statement names where it came from.
 No source was taken from any project, and none from a GPL or AGPL one.
