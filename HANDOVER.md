@@ -6,7 +6,7 @@ Read this once, then work from the issues. **The issues are the plan**, this fil
 
 ## What the library is for
 
-[#113](https://github.com/phranck/PlayableAirplay/issues/113) states it and is the reference the work is measured against. In short: working AirPlay 2 on macOS, iOS and Linux, so that a program can find receivers, stream to one, group several and dissolve the group, set the volume of one speaker and of a group, read each speaker's model and name, and be told when any of that changes elsewhere on the network.
+[#113](https://github.com/phranck/PlayableAirplay/issues/113) states the original scope. The later decision narrows the supported sender platforms to macOS and Linux. A program must be able to find receivers, stream to one, group several and dissolve the group, set the volume of one speaker or all group members, read each speaker's model and name, and receive typed PlayableAirplay events when observable values change. Speaker renaming is out of scope.
 
 Two rules on that, both stated by phranck and both non-negotiable:
 
@@ -18,11 +18,15 @@ Two rules on that, both stated by phranck and both non-negotiable:
 
 Both repositories are on `develop` with everything merged, and `main` carries the same tree as of this session. No open pull requests. No local branches left except one, below.
 
-**PlayableAirplay**: 224 tests, Linux builds, the site builds and publishes from `main`, and the Objective-C caller builds. The Swift sender is complete and plays cleanly to a Sonos and a HomePod. Two independent audits were run and all seventeen resulting issues are fixed.
+**PlayableAirplay at the time of this handover**: 224 tests, Linux builds, the site builds and publishes from `main`, and the Objective-C caller builds. Later local work adds a shared PTP group sender and typed events. Its current status must be checked against the working tree and the latest test log.
 
 **Podlive**: 25 tests, and it plays to AirPlay speakers from the player row. It has a test target for the first time, `PodliveTests`, run with `Scripts/run-tests.sh`.
 
-## What to do next, in order
+**Local continuation on 2026-09-24, not yet committed:** Podlive's player now uses `PAGroup` through PlayableAirplay's C API for one or several selected receivers. The popover can add and remove speakers while the stream continues, and This Mac closes the group. `LWAirPlayOutput` sends the player volume to all members and applies it when a new member joins. The 28 Podlive tests passed after the integration. A temporary live XCTest opened Büro, joined Esszimmer, removed Büro and finished with one member while feeding twenty seconds of PCM; F-139 records what this proves and what still depends on a listening report. The group adapter needs the new `pa_group_discard_held_audio` API in the local PlayableAirplay checkout. Keep the two repositories' pending changes together when reviewing or integrating them.
+
+## Historical next steps at this handover
+
+This list records what was pending when the handover was written. It is not a current task list. Later local work added a group sender, typed events and physical tests; check the working tree, [test log](Documentation/Research/test-log.md) and open issues before taking the next step.
 
 1. [#114](https://github.com/phranck/PlayableAirplay/issues/114) Read the receiver's volume with `GET_PARAMETER` rather than only setting it. Small, and it fixes a visible fault: a fresh session shows the wrong number because it imposes a level instead of adopting the one the speaker is at. Apple's own sender reads it between the session SETUP and RECORD.
 2. [#18](https://github.com/phranck/PlayableAirplay/issues/18) The measurement multi-room rests on: whether every member of a group is given the identical anchor, and what a leaving member is told. Needs two receivers under your own control, so it is bench work rather than typing.

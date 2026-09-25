@@ -11,15 +11,17 @@
 
 # PlayableAirplay
 
-Sends audio to an AirPlay 2 receiver from macOS and from Linux, from Swift.
+Targets AirPlay 2 audio output from macOS and Linux through Swift. Playback against receivers is recorded for macOS. Linux builds in CI; receiver playback on Linux has not yet been recorded.
 
 Apple's own route picker only moves the whole system's output, and the private entitlements that would let an app pick a receiver for itself are not in the public SDK. This library takes the other road: it speaks RAOP to the receiver directly, so one application streams to a speaker whilst everything else on the machine keeps playing through the built-in output.
 
 ## What it does
 
-Discovery finds every `_raop._tcp` receiver on the network, whether or not anything is currently connected to it, says which of them speak AirPlay 2, reports what each one says it is, and says which of them are already in use. A session pairs with one of them, takes 16 bit stereo frames at 44100 Hz, and carries the volume.
+Discovery browses `_raop._tcp` and `_airplay._tcp` without moving the system output, reports the receivers it sees, says which of them speak AirPlay 2, and carries each published name and model. Apple's receivers also publish whether they are in use; other receivers may not update those flags. A session pairs with one receiver, takes 16 bit stereo frames at 44100 Hz, reads its current volume where the receiver reports one, and can change that volume. Receiver-pushed requests are available through Swift and C event callbacks.
 
-One session reaches one receiver. Several sessions at once would each start their own RTP timeline against their own clock, so the receivers would drift apart, and holding them together needs a single timeline shared between them. That is the multi-room work the sender underneath has not done yet, so this library does not offer it and does not pretend to.
+One session reaches one receiver. `AirPlayGroup` can start with one receiver and add others under one PTP clock and media timeline. It can add or remove receivers while audio continues, dissolve the group, and set individual or all member volumes. Two and three Sonos receivers played together in local tests. A mixed Sonos and HomePod mini group also played for 30 seconds after Home speaker access was temporarily set to "Anyone On the Same Network". The listener reported simultaneous playback in each test; exact inter-speaker offset has not been measured. Under the restored "Only People Sharing This Home" rule, the HomePod refused this library's fresh transient pairing. Authorized pairing under that rule is not yet supported. Typed `AirPlayEvent` callbacks report discovery changes, volume changes during an open connection, and membership changes made through this sender. Other controllers' group topology is not reliably observable from the tested Bonjour records.
+
+Per-receiver volume memory is opt-in. An application supplies its own storage path to `AirPlayVolumeMemory` (Swift) or `pa_volume_memory_open` (C), enables the feature, and passes that object to a session or group. Confirmed levels are stored by stable receiver ID and restored before playback on reconnect or group join. Turning the feature off keeps the saved file but stops restores and writes. Changes made while a speaker is disconnected may be overwritten on reconnect.
 
 ## Documentation
 
@@ -31,23 +33,23 @@ To read them locally, run `./Scripts/build-site.sh` and serve `build/site`, whic
 
 All of it is Swift, apart from the discovery, which is C because Bonjour is a C library on both platforms.
 
-`Sources/PlayableAirplay` is the library: `AirPlayDiscovery`, `AirPlaySession`, `AirPlayReceiver` and `AirPlayError`. That is the whole interface, and nothing from underneath reaches it: no opaque pointer, no C buffer, no `pa_` function.
+`Sources/PlayableAirplay` is the Swift library: `AirPlayDiscovery`, `AirPlayReceiver`, `AirPlaySession`, `AirPlayGroup`, `AirPlayEvent` and `AirPlayError`. Protocol types remain underneath; no opaque pointer, C buffer or `pa_` function reaches this interface.
 
-`Sources/PlayableAirplaySender` is the sender itself: the pairing, the encrypted channels, the session and the audio. It takes its cryptography from swift-crypto and its arbitrary-precision arithmetic from BigInt, and implements nothing either of them offers. Nothing anywhere touches AVFoundation, CoreAudio or AppKit.
+`Sources/PlayableAirplaySender` is the sender itself: the pairing, the encrypted channels, the session and the audio. It takes its cryptography from swift-crypto and its arbitrary-precision arithmetic from BigInt, and implements nothing either of them offers. The library does not depend on AVFoundation, CoreAudio or AppKit. The macOS Demo uses AVFoundation to convert file formats before handing PCM to the library.
 
 `CPlayableAirplay` is offered as a product of its own for one case: an Objective-C application, which has no Swift to import the library from. Calling a C header is what Objective-C does with a C library, so it takes `CPlayableAirplay`, imports `PlayableAirplay.h`, and gets the same thing a step lower down. The functions behind that header are Swift, exported with C linkage.
 
 ## Using it in a project
 
-### macOS and iOS
+### macOS
 
-Add the package to your project and that is the whole of it. In Xcode that is **File > Add Package Dependencies**, with `https://github.com/phranck/PlayableAirplay.git`, and then `import PlayableAirplay`. Nothing else is fetched at build time and there is nothing to configure.
+Add the package to your project. In Xcode that is **File > Add Package Dependencies**, with `https://github.com/phranck/PlayableAirplay.git`, and then `import PlayableAirplay`. Swift Package Manager resolves swift-crypto and BigInt automatically.
 
 In a package of your own:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/phranck/PlayableAirplay.git", branch: "main"),
+    .package(url: "https://github.com/phranck/PlayableAirplay.git", branch: "develop"),
 ],
 targets: [
     .target(name: "YourTarget", dependencies: ["PlayableAirplay"]),
@@ -84,10 +86,11 @@ let discovery = AirPlayDiscovery { receivers in
 discovery.stop()
 ```
 
-Opening a session pairs with the receiver and blocks until it is playing or has refused, which takes a couple of seconds on one that was asleep. After that, write frames as they arrive:
+Opening a session pairs with the receiver and blocks until it is ready for audio or has refused, which takes a couple of seconds on one that was asleep. After that, write frames as they arrive:
 
 ```swift
 let session = try AirPlaySession(receiver: receiver, senderName: "My App")
+print(session.volume as Any) // nil if the receiver did not report a usable level.
 session.volume = 0.7
 
 // 16 bit, stereo, interleaved, 44100 Hz.
@@ -107,6 +110,20 @@ case .ended:
 
 Writing never waits, because the thread producing live audio must not. `.bufferFull` is therefore back pressure rather than a failure, and it says the four seconds the sender holds are not yet spent. `.ended` is the receiver having hung up, and the answer to it is to close the session.
 
+Call `session.observeEvents { event in ... }` to receive requests pushed by the receiver, including binary property list commands. `session.observeChanges` reports typed volume changes while connected, and `discovery.observeChanges` reports advertised device changes. A group has `observeChanges`, `observeMembership` and `observeVolume` for its own members. Reading a speaker's volume currently requires an open session or group membership.
+
+```swift
+let group = try AirPlayGroup(receivers: [office, diningRoom], senderName: "My App")
+group.observeChanges { event in print(event) }
+try group.add(bathroom)
+try group.setVolume(0.6, for: office.id)
+try group.setVolume(0.5) // Every current member.
+try group.remove(diningRoom.id)
+group.dissolve()
+```
+
+Write the same 16 bit stereo frames to `group.write` that a single session accepts. `setVolume(_:)` sets every member to the same level. `averageVolume` and `setAverageVolume(_:)` provide a group fader that preserves differences while members remain inside their 0 to 1 range. The latter requires a known level for every member.
+
 In an audio callback the samples usually arrive as a pointer already, and there is a `write` for that. It copies them once, from where they are into the session's buffer, and allocates nothing on the way.
 
 ## The example
@@ -120,13 +137,13 @@ swift run Demo wave ~/Music/track.wav speaker.local
 swift run Demo file ~/Music/track.m4a speaker.local
 ```
 
-`list` browses for five seconds and prints what it found. `play` opens a session and sends a quiet 440 Hz tone. `wave` plays a WAVE file that is already 16 bit stereo at 44100, using nothing but Foundation, so it runs wherever the library does. `file` takes any format the system can read and converts it, which is AVFoundation's work and therefore Apple's platforms only.
+`list` browses for five seconds and prints what it found. `play` opens a session and sends a quiet 440 Hz tone. `wave` plays a WAVE file that is already 16 bit stereo at 44100, using nothing but Foundation, so it runs wherever the library does. `file` takes any format macOS can read and converts it with AVFoundation.
 
 ## The toolchain
 
 The package is built and tested with Swift 6.2.4, and `.swift-version` is where that version is written down. Both CI runners are pinned to it: the macOS one builds with Xcode 26.3, whose compiler reports 6.2.4 on that runner, and the Linux one runs in the `swift:6.2.4` image, which `Scripts/check-linux.sh` builds from as well.
 
-The pin is there because the compilers disagree about what they accept. Swift 6.1.2 aborts on a call into an `@_cdecl` function from a test target that also imports the C header, and later versions compile it without a word, so a gate run on another compiler promises less than it looks like it promises.
+The pin is there because compilers disagree about what they accept. In a Swift test target that imports the C header, a direct call into a Swift `@_cdecl` group function made Linux Swift 6.2.4 abort while linking SIL: the header declared an opaque pointer where the Swift export used a raw pointer. That test was removed; the C and Objective-C boundary is checked through the caller build. A gate run on another compiler can therefore promise less than it looks like it promises.
 
 A local run means what a CI run means when it uses the same compiler, which is the toolchain of that version from [swift.org](https://www.swift.org/install/) or an Xcode carrying it. [swiftly](https://github.com/swiftlang/swiftly) picks it from `.swift-version` without being told. Where the two differ, `Scripts/build-and-test.sh` says which compiler it ran on and which one CI will use.
 
@@ -136,7 +153,7 @@ A local run means what a CI run means when it uses the same compiler, which is t
 swift test
 ```
 
-They cover what can be checked without a receiver on the network: the parsing of a Bonjour instance name into an address and a name, what the session and the discovery do when they are handed nothing usable, and that every failure says what it means. Whether a particular speaker accepts a pairing is not something a test can settle, and the example is how that gets answered.
+They cover discovery parsing and state, protocol messages, cryptography, audio buffering and loopback control exchanges, including reading a receiver's volume. Whether a particular speaker accepts pairing and plays audio requires a device test.
 
 `Scripts/build-and-test.sh` is the whole gate, and `Scripts/check-linux.sh` compiles the package inside the same Swift image CI uses, so Linux is checked here before anything is pushed. That check compiles rather than tests, because the test process deadlocks inside the container on this machine, which is #25. CI runs the tests on Linux.
 

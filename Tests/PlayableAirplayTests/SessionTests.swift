@@ -6,9 +6,11 @@
 //
 
 import CPlayableAirplay
+import Foundation
 import XCTest
 
 @testable import PlayableAirplay
+@testable import PlayableAirplaySender
 
 final class SessionTests: XCTestCase {
     func testRefusesAReceiverItCannotUse() {
@@ -21,6 +23,43 @@ final class SessionTests: XCTestCase {
         }
     }
 
+    func testUnknownSessionHasNoVolume() {
+        var level: Float = -1
+
+        XCTAssertFalse(pa_session_get_volume(nil, &level))
+        XCTAssertEqual(level, -1)
+    }
+
+    func testSwiftVolumeMemoryDefaultsToOptInAndCanToggle() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PlayableAirplay-public-volume-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("volumes.json")
+
+        let swift = try AirPlayVolumeMemory(fileURL: file)
+        XCTAssertFalse(swift.isEnabled)
+        swift.isEnabled = true
+        XCTAssertTrue(swift.isEnabled)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    func testAnAbsentGroupHasNoAudioToDiscard() {
+        XCTAssertEqual(CPlayableAirplay.pa_group_discard_held_audio(nil), 0)
+    }
+
+    func testReceiverEventPreservesTheBodyAndNamesAPropertyListCommand() throws {
+        let body = try PropertyListSerialization.data(fromPropertyList: ["type": "updateInfo", "value": ["x": 1]],
+                                                      format: .binary, options: 0)
+        let event = AirPlaySession.Event(EventChannel.Request(method: "POST", path: "/command", body: body))
+
+        XCTAssertEqual(event.method, "POST")
+        XCTAssertEqual(event.path, "/command")
+        XCTAssertEqual(event.body, body)
+        XCTAssertEqual(event.commandType, "updateInfo")
+    }
+
     func testEveryFailureSaysWhatItMeans() {
         let all: [AirPlayError] = [.unreachable, .pairingRefused, .sessionEnded, .invalidRequest, .senderFailed]
 
@@ -28,6 +67,15 @@ final class SessionTests: XCTestCase {
             XCTAssertFalse(failure.description.isEmpty, "\(failure) says nothing")
             XCTAssertNotEqual(failure.description, "unknown", "\(failure) is not described")
         }
+    }
+
+    func testPairingRefusalSuggestsCheckingHomeSpeakerAccessConditionally() {
+        let swiftMessage = AirPlayError.pairingRefused.description
+        let cMessage = String(cString: pa_result_description(CResult.pairingRefused.rawValue)!)
+
+        XCTAssertEqual(swiftMessage, cMessage)
+        XCTAssertTrue(swiftMessage.contains("If this is a HomePod"))
+        XCTAssertTrue(swiftMessage.contains("Home Settings > Speakers & TV"))
     }
 
     func testDiscoveryStartsAndStops() {

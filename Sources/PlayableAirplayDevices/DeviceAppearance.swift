@@ -17,7 +17,7 @@ import Foundation
 /// What kind of thing a device is, as far as what it publishes says.
 ///
 /// Enough to pick a picture for it and no more.
-public enum DeviceKind: String, Sendable {
+package enum DeviceKind: String, Sendable {
     /// A HomePod of the full size.
     case homePod
 
@@ -43,7 +43,7 @@ public enum DeviceKind: String, Sendable {
 /// fields joined. Apple publishes none and puts an identifier in the model
 /// instead, and that absence is what tells the two cases apart without a table
 /// of identifiers.
-public enum DeviceAppearance {
+package enum DeviceAppearance {
     /**
      What kind of thing this is.
 
@@ -229,7 +229,7 @@ public enum DeviceAppearance {
 /// A caller drawing a list of destinations has the machine it is running on in
 /// it as well as the receivers, and that machine is not a receiver: it arrives
 /// as an identifier out of `sysctl` rather than out of a service record.
-public enum AppleDevice {
+package enum AppleDevice {
     /// What Apple calls a model identifier, such as "MacBook Air" for `Mac16,12`.
     ///
     /// - Returns: The name, or the family where the table does not carry the

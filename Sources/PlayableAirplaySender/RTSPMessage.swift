@@ -8,12 +8,12 @@
 import Foundation
 
 /// What can go wrong reading an answer off the wire.
-public enum RTSPFailure: Error, Equatable {
+package enum RTSPFailure: Error, Equatable {
     /// The bytes are not a status line followed by headers.
     case answerIsNotReadable
 
     /// The receiver answered with a status other than 200.
-    case receiverAnswered(status: Int, reason: String)
+    case receiverAnswered(status: Int, reason: String, request: String)
 }
 
 /**
@@ -29,7 +29,7 @@ public enum RTSPFailure: Error, Equatable {
  @property headers Everything beyond the ones this builds itself.
  @property body The bytes under the headers, if any.
  */
-public struct RTSPRequest {
+package struct RTSPRequest {
     public let method: String
     public let uri: String
     public var headers: [(name: String, value: String)]
@@ -80,7 +80,7 @@ public struct RTSPRequest {
  @property headers Every header, in the order they arrived.
  @property body The bytes under them.
  */
-public struct RTSPResponse: Equatable {
+package struct RTSPResponse: Equatable {
     public let status: Int
     public let reason: String
     public let headers: [(name: String, value: String)]

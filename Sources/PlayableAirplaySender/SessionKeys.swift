@@ -25,7 +25,7 @@ import Foundation
  @property eventsRead What the sender's answers on the event channel are encrypted with.
  @property audio The key the audio payload is encrypted under, which the stream SETUP also carries as `shk`.
  */
-public struct SessionKeys: Equatable {
+package struct SessionKeys: Equatable {
     public let controlWrite: Data
     public let controlRead: Data
     public let eventsWrite: Data

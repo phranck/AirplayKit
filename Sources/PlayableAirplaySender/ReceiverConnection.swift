@@ -29,7 +29,7 @@ import Foundation
  ``stop()`` deliberately takes no lock, because its whole purpose is to bring
  back a thread that is blocked inside one of those exchanges.
  */
-public final class ReceiverConnection {
+package final class ReceiverConnection {
     /// What a sender calls itself to a receiver, matching what an Apple sender sends.
     public static let userAgent = "AirPlay/550.10"
 
@@ -148,7 +148,8 @@ public final class ReceiverConnection {
 
         let answer = try readAnswer()
         guard answer.status == 200 else {
-            throw RTSPFailure.receiverAnswered(status: answer.status, reason: answer.reason)
+            throw RTSPFailure.receiverAnswered(status: answer.status, reason: answer.reason,
+                                               request: "\(carried.method) \(carried.uri) (CSeq \(sequence))")
         }
 
         return answer

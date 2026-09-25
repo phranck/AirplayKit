@@ -19,9 +19,11 @@ let session = try AirPlaySession(host: "sonos-2.local", senderName: "My App")
 
 ### What opening a session actually does
 
-The two sides have to agree on a key before any audio moves, and neither trusts the network in between. The exchange is the transient form of the pairing Apple uses across its own accessories: a password-authenticated agreement that establishes a shared secret without ever sending it, an elliptic-curve exchange on top of that, and from then on a stream encrypted with the key both sides derived.
+The two sides have to agree on a key before any audio moves. This library uses transient pair-setup: an SRP password-authenticated exchange establishes a shared secret without sending it, and the sender checks the receiver's proof. There is no separate elliptic-curve pair-verify step on this path. The control connection is encrypted with keys derived from that secret. See <doc:Protocol-Pairing>.
 
-None of that is visible here. What it costs is time: several round trips, plus however long the receiver takes to wake up and answer. That is the whole reason ``AirPlaySession/init(receiver:senderName:)`` blocks rather than handing back something that becomes usable later, and why it gives up rather than waiting for ever.
+None of that is visible here. What it costs is time: several round trips, plus however long the receiver takes to wake up and answer. That is why opening a session blocks rather than handing back something that becomes usable later, and why it gives up rather than waiting for ever.
+
+If the receiver refuses pairing, ``AirPlayError/pairingRefused`` provides an English message that an application can show. It conditionally points HomePod users to **Home Settings > Speakers & TV** in the Home app. A refusal alone does not prove which receiver rule caused it, and PlayableAirplay does not change that setting.
 
 Once the pairing is through, the sender announces the format, the receiver allocates its buffers, and the two agree where the timeline starts. From there the sender paces packets onto the network against its own clock, and the receiver plays them a fixed distance behind.
 
@@ -29,7 +31,7 @@ Once the pairing is through, the sender announces the format, the receiver alloc
 
 Interleaved, signed 16 bit, two channels, at ``AirPlaySession/sampleRate`` samples a second. Anything else has to be converted before it gets here.
 
-That is not a simplification for the sake of a small interface. The realtime AirPlay stream carries ALAC at that rate, and the sender encodes into it, so audio at any other rate would have to be resampled first. Doing that here would mean a second resampler competing with the one the platform already has, and on Apple's platforms `AVAudioConverter` is both better at it and already in the process.
+The sender encodes ALAC at that rate, so audio at any other rate must be resampled first. On macOS, the Demo uses `AVAudioConverter` for this step. On Linux, the portable WAVE example expects audio in the required format.
 
 ```swift
 switch session.write(frames) {
@@ -58,7 +60,23 @@ So a write that does not take the frames says why, and the two reasons want oppo
 
 ``AirPlaySession/volume`` moves the receiver's own control rather than scaling what is sent. Setting it sends a parameter to the receiver, which is why it survives a track change, why the speaker's own display follows it, and why it costs nothing in the audio path.
 
+Opening a session reads the receiver's current level first. The property is `nil` if a complete reply does not contain a usable level; without optional memory, the library does not change the speaker's level while opening. A transport failure still fails the session. Assigning `nil` leaves the level alone.
+
+An application can opt into ``AirPlayVolumeMemory`` and pass it when opening the session. An enabled store restores a level saved for the receiver's stable ID before audio starts, and records confirmed changes during playback. Without a saved level, opening leaves the receiver's level alone. The host-only initializer has no volume store unless one is explicitly supplied with a receiver ID.
+
 The range here is 0 to 1 and the protocol's is an attenuation in decibels, so the two are not the same curve. Half way up this control is half way up the receiver's range, which sounds louder than half volume: decibels are how the ear hears, not how a linear fader is spaced. Somebody wanting a fader that sounds linear should shape the value before setting it.
+
+### Receiver events
+
+The receiver can push requests over the encrypted event connection. Register a handler to receive each complete request after the library has answered it:
+
+```swift
+session.observeEvents { event in
+    print(event.path, event.commandType as Any)
+}
+```
+
+``AirPlaySession/Event`` preserves the original body so an application can inspect commands the library does not yet interpret. A command sent before registration cannot be replayed. The callback defaults to the main queue; pass another queue when processing belongs elsewhere. ``AirPlaySession/observeChanges(deliveringOn:_:)`` delivers typed volume changes while the session is open. Discovery separately reports published receiver names, models and flags. AirPlay 2 receivers do not all publish every state change, so an absent event is not proof that a value stayed unchanged. See <doc:Observing-Changes>.
 
 ### Finishing
 

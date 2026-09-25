@@ -36,9 +36,9 @@ What settles it: a capture of a session whose session SETUP carries `timingProto
 
 ### 5. What X-Apple-HKP: 8 means
 
-Apple's own sender sends 8 on every pair-verify request (measured 2026-09-22, captured, F-021) and 4 on a pair-setup (measured 2026-09-22, read off a receiver, F-073). The published record names only 3 and 4 as values a sender sends, and one receiver's own list of the constant stops at 7. Since 8 has only ever been seen on pair-verify, the value plausibly names the mode of that request, and that reading is not tested.
+An iPhone sent 8 on four pair-verify requests (measured 2026-09-22, captured, F-021), while a Mac sent 6 on pair-verify with stored credentials against two Apple receivers (F-134) and 4 on pair-setup with an unfamiliar test receiver (F-073). One receiver's published constant list stops at 7. The captures do not isolate which difference between the senders or pairing states caused 6 versus 8, nor what 8 means.
 
-What settles it: a receiver that logs the value and accepts 3, 4 and 8 in turn, showing whether any of them changes what it does.
+What settles it: a receiver that logs the value and accepts 3, 4, 6 and 8 in turn under otherwise identical conditions, showing whether the value changes what it does.
 
 ### 6. Which X-Apple-HKP value the PIN path wants
 
@@ -86,35 +86,37 @@ A Mac sending to Apple receivers used IPv6 link-local. An iPhone sending to the 
 
 What settles it: the same pair of devices recorded with each playing to the other, and the address selection each one makes read out of the connection attempts rather than out of the connection that succeeded.
 
-### 14. How a member leaves a group, from the sender's side
-
-A member leaving is visible from the receiving end as one `SETPEERS` with the shortened list (measured 2026-09-22, decrypted, F-033). What the sender sends to the member that is leaving was not observed, because the receiver reading the channel was never the one that left.
-
-What settles it: two receivers under our own control in one group, with one of them removed.
-
-### 15. What a receiver must do about asyncPTPClockConfig
+### 14. What a receiver must do about asyncPTPClockConfig
 
 A macOS 27.2 sender that asked for `asyncPTPClockConfig` and received an ordinary SETUP reply waited eight seconds, asked `GET /info` once more, and gave up without sending the stream SETUP (measured 2026-09-22, decrypted, F-077). The receiver in that run writes nothing at all on its event channel, so the `updateTimingPeerInfo` message Apple's own strings and one open implementation both describe could never have arrived. The reply shape is not the gate, because shairport-sync sends the same three keys and works, and the absence of PTP on the receiver is not the gate either, because nqptp is not a PTP clock. <doc:Protocol-Timing> carries both.
 
-What settles it: making that receiver push `updateTimingPeerInfo` on the event channel and watching whether the stream SETUP follows.
+What settles it: making that receiver push `updateTimingPeerInfo` on the event channel and watching whether the stream SETUP follows. A 2026-09-24 macOS attempt reached only `GET /info`, so the experimental event push was never exercised.
 
-### 16. How a sender reconciles different receiver latencies
+### 15. How a sender reconciles different receiver latencies
 
-Nothing in the reachable record addresses it. The anchor is the mechanism that makes reconciliation unnecessary, because each receiver subtracts its own output latency locally, and no source says that is the whole answer.
+Two controlled receiver channels got different anchors that mapped the same media to the same PTP clock within about 2.7 microseconds (measured 2026-09-24, decrypted, F-119). Their output latencies and audible synchronisation were not measured, so the remaining question is where latency compensation happens.
 
-What settles it: a capture of a Mac playing to two receivers whose reported `outputLatencyMicros` differ, checked for any per-receiver difference in the anchor.
+What settles it: capture anchors and reported `outputLatencyMicros` from two real receivers with different output latencies, then measure their acoustic output.
 
-### 17. Whether a macOS sender is stricter than an iOS one
+### 16. Whether a macOS sender is stricter than an iOS one
 
 Every comparison so far put macOS 27.2 against iOS 18.7, so platform and version moved together. Two of the keys in the session SETUP are new in OS 27, so the older sender was not taking a more lenient path through the same protocol but speaking an earlier one.
 
 What settles it: an iOS 27 device against the same receiver.
 
-### 18. Whether two receivers in one group are given the same anchor
+### 17. Which additional timing information other receiver models need
 
-How a group is held together is read from one side only: one receiver's `SETPEERS` and one receiver's `SETRATEANCHORTIME`. That the anchor is identical for every member is the reading the rest of the design rests on, and it is not measured.
+Two Sonos receivers did not converge when a diagnostic sender advertised a shared group UUID and timing identity but sent no PTP traffic (measured 2026-09-24, F-124). With an active sender PTP clock sending Sync, Follow_Up and Announce and answering Delay_Req, both Sonos receivers used a shared anchor; two and three real receivers then played an audible test tone that the operator judged simultaneous (measured 2026-09-24, F-125 and F-126). This establishes a working path for those Sonos receivers, not the exact Apple sender profile or support across other receiver models. The probe used IPv4 peer lists and did not establish whether other models require IPv6 peers or different timing messages.
 
-What settles it: a receiver on each of two machines in one session, with the two anchors compared directly.
+What settles the remaining question: capture a working Apple group with the sender's PTP packets and complete peer lists visible, then test other receiver models against this sender.
+
+### 18. How an authorized third-party sender pairs under home-members-only access
+
+The local sender received `403 Forbidden` for its first transient `POST /pair-setup` to a HomePod mini while it advertised `acl=1` (F-130 and F-132). After the operator changed the Home app access setting, Emma advertised `acl=0` and accepted the unchanged request; a 30-second mixed Sonos and HomePod group was audible and judged simultaneous (F-135, F-137 and F-138). Restoring the original rule returned the announcement to `acl=1` and the same first pairing request to 403 (F-138). This establishes the access rule as the gate for this sender's fresh transient path on this HomePod. A Sonos that accepted transient pairing also advertised `acl=1`, so the field is not a universal admission rule across brands.
+
+Eter Radio on this Mac connected successfully with `POST /pair-verify` and `X-Apple-HKP: 6`, as did the earlier macOS group capture (F-134 and F-136). Both used an existing pairing; neither capture shows how those credentials were obtained. Whether this library can obtain authorized credentials for Emma under the restored rule, and by what supported user action, remains open. An Apple Home access setting and any AirPlay password requirement must be treated separately.
+
+What settles it: observe an authorized first pairing to this HomePod under the restrictive rule, including the required user interaction and resulting credential storage, then verify a fresh session using those credentials. Do not infer those steps from a pair-verify-only capture.
 
 ## Closed by the measurement
 
@@ -128,6 +130,8 @@ These were open in the published record and are not open now.
 | Whether the PTP traffic is unicast or multicast | Unicast, over IPv6 link-local. No multicast PTP packet appeared at all (measured 2026-09-22, captured, F-009) | <doc:Protocol-Timing> |
 | Whether the receivers run a Best Master Clock election or accept whoever announces | They announce with full Best Master Clock fields and contest it. `priority2` decides (measured 2026-09-22, captured, F-011) | <doc:Protocol-Timing> |
 | Whether `SETPEERS` grows when a second speaker joins | It does, and it carries the whole membership each time rather than a change to it (measured 2026-09-22, decrypted, F-033) | <doc:Protocol-Session> |
+| How a member is removed from a group | The leaving receiver got `SETRATEANCHORTIME` with `rate: 0`, then `FLUSHBUFFERED`, then a stream `TEARDOWN` (measured 2026-09-24, decrypted, F-120). A shorter peer list on the remaining receiver was observed in a separate run (F-033); it was not preserved without gaps in the two-probe run. | <doc:Protocol-Control> |
+| Whether two members receive identical anchors | No. Their 48 kHz streams received different anchor fields, but the same clock identity and equivalent media-to-clock mappings within about 2.7 microseconds (measured 2026-09-24, decrypted, F-119). Audible synchronisation remains untested. | <doc:Protocol-Timing> |
 | What a PTP clock identity is made of | The device's six-byte hardware address with `0008` after it, which is why none of them ends in the `fffe` of standard EUI-64 (measured 2026-09-22, decrypted, F-076) | <doc:Protocol-Timing> |
 | Whether a receiver has to speak PTP before a sender will send audio | No. nqptp answers nothing, originates nothing, and is not a PTP clock, and a session whose timing fails still reaches playback | <doc:Protocol-Timing> |
 | Whether one Bonjour service type is enough to find every receiver | No. A receiver can publish `_airplay._tcp` alone, and the group identity is published there and in no RAOP record (measured 2026-09-22, browsed, F-066 and F-068) | <doc:Protocol-Finding-Receivers> |

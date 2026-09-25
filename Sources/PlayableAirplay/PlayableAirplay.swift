@@ -22,6 +22,16 @@ import PlayableAirplaySender
 /// is the only thing known about it before a session is opened. A receiver that
 /// has gone quiet keeps its values; it simply stops appearing in the set.
 public struct AirPlayReceiver: Identifiable, Hashable, Sendable {
+    /// The device family inferred from its published model and manufacturer.
+    public enum Kind: String, Sendable {
+        case homePod
+        case homePodMini
+        case appleTV
+        case mac
+        case speaker
+        case unknown
+    }
+
     /// What identifies the hardware, taken from the service instance name.
     ///
     /// It stays the same across sightings, which is what lets a selection
@@ -174,9 +184,10 @@ public enum AirPlayError: Error, Sendable {
 
     /// The receiver answered and refused the pairing.
     ///
-    /// It is reachable and it said no. A receiver already streaming from
-    /// somewhere else does this, and so does one that wants a code typed into
-    /// it, which this library does not ask for.
+    /// It is reachable and it said no. For example, a HomePod mini answered
+    /// `403 Forbidden` to fresh transient pairing under the home-members-only
+    /// rule, then accepted the unchanged request when that rule was opened.
+    /// This case alone does not reveal every receiver's reason for refusal.
     case pairingRefused
 
     /// The session was set up and the receiver ended it.
@@ -289,6 +300,8 @@ public final class AirPlayDiscovery {
     private var handle: OpaquePointer?
     private let queue: DispatchQueue
     private let onChange: ([AirPlayReceiver]) -> Void
+    private let eventsLock = NSLock()
+    private var eventObserver: ((AirPlayEvent) -> Void)?
 
     /// Starts browsing.
     ///
@@ -327,9 +340,14 @@ public final class AirPlayDiscovery {
             let state = Problem(problem, code: reported)
 
             discovery.queue.async {
+                let changes = ReceiverEventDiff.changes(from: discovery.receivers, to: found)
                 discovery.receivers = found
                 discovery.problem = state
                 discovery.onChange(found)
+                discovery.eventsLock.lock()
+                let observer = discovery.eventObserver
+                discovery.eventsLock.unlock()
+                for change in changes { observer?(change) }
             }
         }, context, &problem, &code)
 
@@ -340,6 +358,25 @@ public final class AirPlayDiscovery {
 
     deinit {
         stop()
+    }
+
+    /// Delivers typed receiver changes on the discovery's delivery queue.
+    /// Installing it also reports the receivers already known as appearances.
+    public func observeChanges(_ handler: @escaping (AirPlayEvent) -> Void) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.eventsLock.lock()
+            self.eventObserver = handler
+            self.eventsLock.unlock()
+            for receiver in self.receivers { handler(.receiverAppeared(receiver)) }
+        }
+    }
+
+    /// Stops delivering typed receiver changes; complete snapshots still arrive.
+    public func stopObservingChanges() {
+        eventsLock.lock()
+        eventObserver = nil
+        eventsLock.unlock()
     }
 }
 
@@ -365,11 +402,52 @@ public extension AirPlayDiscovery {
 /// clock and paces packets onto the network, so writing into it never waits and
 /// a refused write is usually that buffer being full.
 ///
-/// One session reaches one receiver. Several at once would each start their own
-/// timeline against their own clock, so the receivers would drift apart within a
-/// minute. Holding them together needs a single timeline shared between them,
-/// which the sender underneath has not done yet.
+/// One session reaches one receiver. For synchronized playback to several
+/// receivers, use ``AirPlayGroup``, which gives its members a shared PTP clock
+/// and media timeline.
 public final class AirPlaySession {
+    /// A request pushed by the receiver on this session's event connection.
+    public struct Event: Sendable {
+        public let method: String
+        public let path: String
+        public let body: Data
+
+        /// The command name when the body is a binary property list with a `type` key.
+        public var commandType: String? {
+            guard let value = try? PropertyListSerialization.propertyList(from: body, format: nil),
+                  let dictionary = value as? [String: Any] else { return nil }
+            return dictionary["type"] as? String
+        }
+
+        package init(_ request: EventChannel.Request) {
+            method = request.method
+            path = request.path
+            body = request.body
+        }
+    }
+
+    /// Audio the sender had to invent or delay when the source could not keep up.
+    public struct Underruns: Equatable, Sendable {
+        /// Packets filled with silence.
+        public let packets: Int
+
+        /// Duration of those packets, in seconds.
+        public let duration: TimeInterval
+
+        /// Total time spent waiting for source audio, in seconds.
+        public let waited: TimeInterval
+
+        /// Times the stream slipped beyond the promised playback anchor.
+        public let fellBehind: Int
+
+        fileprivate init(_ report: AirPlaySender.Underruns) {
+            packets = report.packets
+            duration = report.duration
+            waited = report.waited
+            fellBehind = report.fellBehind
+        }
+    }
+
     /// What became of frames handed to ``write(_:)-([Int16])``.
     ///
     /// Two of these mean the frames were not taken, and they want opposite
@@ -407,7 +485,7 @@ public final class AirPlaySession {
     /// Whether the receiver is still taking audio.
     public var isRunning: Bool { heldSender()?.isRunning ?? false }
 
-    /// The receiver's own volume, from 0 for silent to 1 for full.
+    /// The receiver's own volume, from 0 for silent to 1 for full, if known.
     ///
     /// Setting it sends a parameter to the receiver rather than scaling the
     /// samples, which is why it survives a track change, why the speaker's own
@@ -418,29 +496,27 @@ public final class AirPlaySession {
     /// range, which is louder than half volume to the ear. Shape the value
     /// before setting it where a fader should sound even.
     ///
-    /// Anything outside the range is brought into it, and reading it back gives
-    /// what was actually sent.
-    public var volume: Float {
+    /// `nil` means the receiver did not answer the read on opening. Assigning
+    /// `nil` leaves its level alone. Anything outside the range is clamped.
+    public var volume: Float? {
         get {
+            if let held = heldSender() { return held.volume }
+
             state.lock()
             defer { state.unlock() }
 
-            return sentVolume
+            return lastVolume
         }
         set {
-            state.lock()
-            sentVolume = min(max(newValue, 0), 1)
-            let level = sentVolume
-            let held = sender
-            state.unlock()
+            guard let newValue, let held = heldSender() else { return }
 
             // Outside the lock, because setting it sends a request and waits
             // for the answer, and nothing that sends is worth blocking a write
             // behind.
             //
-            // Swallowed, because a property setter has no way to report it and
-            // a volume that did not arrive is not worth ending a session over.
-            try? held?.setVolume(level)
+            // A failed request leaves the last known level in place. The
+            // property setter cannot report the transport error to a caller.
+            try? held.setVolume(newValue)
         }
     }
 
@@ -454,7 +530,13 @@ public final class AirPlaySession {
      */
     private let state = NSLock()
     private var sender: AirPlaySender?
-    private var sentVolume: Float = 1
+    private var lastVolume: Float?
+    private let observers = NSLock()
+    private var volumeObserver: (queue: DispatchQueue, handler: (Float) -> Void)?
+    private var changeObserver: (queue: DispatchQueue, handler: (AirPlayEvent) -> Void)?
+
+    /// The discovery identifier, or the host when opened by address.
+    public private(set) var receiverID: String
 
     /**
      What the session had recorded when it was closed.
@@ -464,7 +546,7 @@ public final class AirPlaySession {
      it a caller that stops playback and then asks how the session went is told
      that nothing happened.
      */
-    private var lastUnderruns = AirPlaySender.Underruns.none
+    private var lastUnderruns = Underruns(.none)
 
     /// The sender, taken under the lock and used outside it.
     private func heldSender() -> AirPlaySender? {
@@ -482,9 +564,12 @@ public final class AirPlaySession {
     /// - Parameters:
     ///   - receiver: Where to play, as discovery reported it.
     ///   - senderName: What the receiver shows as the source, such as "Podlive".
+    ///   - volumeMemory: Optional application-owned store for this receiver's level.
     /// - Throws: An ``AirPlayError`` when the receiver cannot be reached or refuses.
-    public convenience init(receiver: AirPlayReceiver, senderName: String) throws {
-        try self.init(host: receiver.host, port: receiver.port, senderName: senderName)
+    public convenience init(receiver: AirPlayReceiver, senderName: String,
+                            volumeMemory: AirPlayVolumeMemory? = nil) throws {
+        try self.init(host: receiver.host, port: receiver.port, senderName: senderName,
+                      receiverID: receiver.id, volumeMemory: volumeMemory)
     }
 
     /// Opens a session with a receiver named by hand, which is how a known speaker
@@ -495,11 +580,28 @@ public final class AirPlaySession {
     ///   - port: Its port, which is 7000 on every receiver seen so far.
     ///   - senderName: What the receiver shows as the source.
     /// - Throws: An ``AirPlayError`` when the receiver cannot be reached or refuses.
-    public init(host: String, port: UInt16 = 7000, senderName: String) throws {
+    public convenience init(host: String, port: UInt16 = 7000, senderName: String) throws {
+        try self.init(host: host, port: port, senderName: senderName,
+                      receiverID: host, volumeMemory: nil)
+    }
+
+    /// Opens a known receiver with optional volume memory keyed by its stable ID.
+    ///
+    /// - Parameters:
+    ///   - host: The receiver's host name.
+    ///   - port: Its RTSP port.
+    ///   - senderName: What the receiver shows as the source.
+    ///   - receiverID: Stable ID from discovery; do not use its display name.
+    ///   - volumeMemory: Optional application-owned store for this receiver's level.
+    public init(host: String, port: UInt16 = 7000, senderName: String,
+                receiverID: String, volumeMemory: AirPlayVolumeMemory?) throws {
         guard !host.isEmpty, port != 0 else { throw AirPlayError.invalidRequest }
+        self.receiverID = receiverID
 
         do {
-            sender = try AirPlaySender(host: host, port: port, senderName: senderName)
+            sender = try AirPlaySender(host: host, port: port, senderName: senderName,
+                                       receiverID: receiverID, volumeMemory: volumeMemory?.storage)
+            sender?.volumeHandler = { [weak self] level in self?.deliverVolume(level) }
         }
         catch {
             throw AirPlayError(error)
@@ -514,6 +616,54 @@ public final class AirPlaySession {
 // MARK: - Session, playing
 
 public extension AirPlaySession {
+    /// Delivers volume changes made through this session or elsewhere on the receiver.
+    func observeVolume(deliveringOn queue: DispatchQueue = .main,
+                       _ handler: @escaping (Float) -> Void) {
+        observers.lock()
+        volumeObserver = (queue, handler)
+        observers.unlock()
+    }
+
+    /// Stops delivering volume changes.
+    func stopObservingVolume() {
+        observers.lock()
+        volumeObserver = nil
+        observers.unlock()
+    }
+
+    /// Delivers typed PlayableAirplay events for this session.
+    func observeChanges(deliveringOn queue: DispatchQueue = .main,
+                        _ handler: @escaping (AirPlayEvent) -> Void) {
+        observers.lock()
+        changeObserver = (queue, handler)
+        observers.unlock()
+    }
+
+    /// Stops delivering typed session changes.
+    func stopObservingChanges() {
+        observers.lock()
+        changeObserver = nil
+        observers.unlock()
+    }
+
+    /// Delivers receiver-pushed requests on a chosen queue, after answering them.
+    ///
+    /// The handler receives the original binary body. Its schema varies by
+    /// receiver, so unknown commands remain available rather than being lost.
+    /// Events sent before this handler is installed cannot be replayed.
+    func observeEvents(deliveringOn queue: DispatchQueue = .main,
+                       _ handler: @escaping (Event) -> Void) {
+        heldSender()?.eventHandler = { request in
+            let event = Event(request)
+            queue.async { handler(event) }
+        }
+    }
+
+    /// Stops delivering events from this session.
+    func stopObservingEvents() {
+        heldSender()?.eventHandler = nil
+    }
+
     /// Hands the session the next audio to play.
     ///
     /// Interleaved, signed 16 bit, two channels, 44100 Hz. The call copies what it
@@ -605,7 +755,7 @@ public extension AirPlaySession {
     /// discarding audio that is already late. The session stays connected and
     /// keeps taking frames whilst the speaker is silent, so nothing else about
     /// it looks wrong.
-    var underruns: AirPlaySender.Underruns {
+    var underruns: Underruns {
         guard let held = heldSender() else {
             state.lock()
             defer { state.unlock() }
@@ -613,7 +763,7 @@ public extension AirPlaySession {
             return lastUnderruns
         }
 
-        return held.underruns
+        return Underruns(held.underruns)
     }
 
     /// Ends the session.
@@ -632,9 +782,11 @@ public extension AirPlaySession {
         // recorded nothing.
         let held = heldSender()
         let recorded = held?.underruns
+        let volume = held?.volume
 
         state.lock()
-        if let recorded { lastUnderruns = recorded }
+        if let recorded { lastUnderruns = Underruns(recorded) }
+        if let volume { lastVolume = volume }
         sender = nil
         state.unlock()
 
@@ -647,16 +799,28 @@ public extension AirPlaySession {
             let afterStopping = held.underruns
 
             state.lock()
-            lastUnderruns = afterStopping
+            lastUnderruns = Underruns(afterStopping)
             state.unlock()
         }
+    }
+}
+
+private extension AirPlaySession {
+    func deliverVolume(_ level: Float) {
+        observers.lock()
+        let volume = volumeObserver
+        let changes = changeObserver
+        observers.unlock()
+        volume?.queue.async { volume?.handler(level) }
+        let id = receiverID
+        changes?.queue.async { changes?.handler(.volumeChanged(id: id, level: level)) }
     }
 }
 
 // MARK: - Describing a failure
 
 extension AirPlayError: CustomStringConvertible {
-    /// What this is, in English, for a log rather than for a person.
+    /// What this is, in English, for a log or a message to the caller.
     ///
     /// Said here rather than fetched from the C interface, which says the same
     /// thing for its own callers. Two sentences for one failure would be two
@@ -665,7 +829,9 @@ extension AirPlayError: CustomStringConvertible {
     public var description: String {
         switch self {
         case .unreachable: return "the receiver could not be reached"
-        case .pairingRefused: return "the receiver refused the pairing"
+        case .pairingRefused:
+            return "the receiver refused the pairing. If this is a HomePod, "
+                 + "check Home Settings > Speakers & TV in the Home app."
         case .sessionEnded: return "the receiver ended the session"
         case .invalidRequest: return "the caller passed something unusable"
         case .senderFailed: return "the sender failed for a reason the caller cannot act on"

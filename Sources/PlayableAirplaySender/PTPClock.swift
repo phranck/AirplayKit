@@ -14,7 +14,7 @@ import Darwin
 #endif
 
 /// What can go wrong listening for a receiver's clock.
-public enum PTPFailure: Error, Equatable {
+package enum PTPFailure: Error, Equatable {
     /**
      One of the two ports could not be bound.
 
@@ -35,21 +35,21 @@ public enum PTPFailure: Error, Equatable {
  expresses the anchor on that clock, which is why a sender has to read it.
 
  A receiver on the buffered path will not take an anchor on a timeline it cannot
- read, and it names that timeline by a clock identity. These receivers keep the
- clock themselves and announce it: they send Announce, Sync and Follow_Up to the
- addresses `SETPEERS` gave them, and expect the sender to follow rather than to
- lead.
+ read, and it names that timeline by a clock identity. In the measured
+ single-receiver sessions, the receiver announced its own clock and sent
+ Announce, Sync and Follow_Up to addresses named by `SETPEERS`. This reader
+ follows that clock. It does not establish a shared clock for multiple receivers.
 
  So this listens rather than speaks. It takes the grandmaster's identity out of
  an Announce and its time out of a Follow_Up, and from then on it can say what
  that clock reads at any later instant.
 
  The estimate carries the one-way delay of the network as an error, because
- nothing here sends a Delay_Req to measure it. For placing the start of a stream
- a few hundred microseconds out, that is immaterial; for holding two speakers in
- step it would not be, and that is the multi-room work rather than this.
+ nothing here sends a Delay_Req to measure it. The current single-receiver
+ stream tolerates that estimate; synchronising two receivers requires a common
+ clock and a measured delay, which this listener does not provide.
  */
-public final class PTPClock {
+package final class PTPClock {
     /// The ports PTP uses: the event messages on one and everything else on the other.
     static let eventPort: UInt16 = 319
     static let generalPort: UInt16 = 320

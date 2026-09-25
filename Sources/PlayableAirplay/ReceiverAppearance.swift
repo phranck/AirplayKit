@@ -9,23 +9,27 @@ import Foundation
 import PlayableAirplayDevices
 
 public extension AirPlayReceiver {
-    /// What kind of thing a receiver is, as far as what it publishes says.
-    typealias Kind = DeviceKind
-
     /// What kind of thing this is.
     ///
     /// Apple's receivers publish no manufacturer and put an identifier in
     /// ``model``, so the identifier's family says what they are. Everybody else
     /// publishes a manufacturer, and nothing they publish says what shape the
-    /// thing is, so they are all ``DeviceKind/speaker``.
+    /// thing is, so they are all `DeviceKind.speaker`.
     ///
     /// A receiver whose ``AirPlayReceiver/isFullyDescribed`` is false has not
     /// published a manufacturer yet rather than published none, so this answers
     /// from its identifier alone. Apple's hardware is still recognised, because
     /// its identifier says so by itself, and everybody else's is
-    /// ``DeviceKind/unknown`` until the rest of the record arrives.
+    /// `DeviceKind.unknown` until the rest of the record arrives.
     var kind: Kind {
-        DeviceAppearance.kind(manufacturer: manufacturer, model: model)
+        switch DeviceAppearance.kind(manufacturer: manufacturer, model: model) {
+        case .homePod: return .homePod
+        case .homePodMini: return .homePodMini
+        case .appleTV: return .appleTV
+        case .mac: return .mac
+        case .speaker: return .speaker
+        case .unknown: return .unknown
+        }
     }
 
     /// What to call this on screen, under the name its owner gave it.
@@ -45,11 +49,24 @@ public extension AirPlayReceiver {
     ///
     /// This is what is known at the moment it is read. A receiver whose
     /// ``AirPlayReceiver/isFullyDescribed`` is false answers from half a record,
-    /// so a Sonos reads as "One" here and as "Sonos One" once the rest has
-    /// arrived, and a caller that shows the first without marking it provisional
-    /// shows two names for one speaker a moment apart.
+    /// so a Sonos may read as "One" here and as "Sonos One" once the rest has
+    /// arrived. ``resolveProductName()`` can read a fuller model independently
+    /// of whether that second Bonjour record arrives.
     var productName: String {
         DeviceAppearance.productName(manufacturer: manufacturer, model: model)
+    }
+
+    /// Reads a fuller product name when the receiver publishes a standard UPnP
+    /// device description. If it does not, the AirPlay `/info` response may
+    /// complete the Bonjour fields. The published product name remains the
+    /// fallback, so a receiver without either endpoint stays visible.
+    ///
+    /// This performs network requests and should be called when the receiver
+    /// appears, rather than while constructing a view row.
+    func resolveProductName() async -> String {
+        await ReceiverMetadataResolver.shared.productName(host: host,
+                                                           manufacturer: manufacturer,
+                                                           model: model)
     }
 
     /// The SF Symbol that draws this, such as `hifispeaker`.
