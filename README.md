@@ -17,7 +17,7 @@ Apple's own route picker only moves the whole system's output, and the private e
 
 ## What it does
 
-Discovery browses `_raop._tcp` and `_airplay._tcp` without moving the system output, reports the receivers it sees, says which of them speak AirPlay 2, and carries each published name and model. Apple's receivers also publish whether they are in use; other receivers may not update those flags. A session pairs with one receiver, takes 16 bit stereo frames at 44100 Hz, reads its current volume where the receiver reports one, and can change that volume. Receiver-pushed requests are available through Swift and C event callbacks.
+Discovery browses `_raop._tcp` and `_airplay._tcp` without moving the system output, reports the receivers it sees, says which of them speak AirPlay 2, and carries each published name and model. The `model` field is the advertised value and may be abbreviated, such as `Bookshelf`. For a speaker list, `productName` formats the published fields and `await receiver.resolveProductName()` can read a fuller name from a standard device description. Apple's receivers also publish whether they are in use; other receivers may not update those flags. A session pairs with one receiver, takes 16 bit stereo frames at 44100 Hz, reads its current volume where the receiver reports one, and can change that volume. Receiver-pushed requests are available through Swift and C event callbacks.
 
 One session reaches one receiver. `AirPlayGroup` can start with one receiver and add others under one PTP clock and media timeline. It can add or remove receivers while audio continues, dissolve the group, and set individual or all member volumes. Two and three Sonos receivers played together in local tests. A mixed Sonos and HomePod mini group also played for 30 seconds after Home speaker access was temporarily set to "Anyone On the Same Network". The listener reported simultaneous playback in each test; exact inter-speaker offset has not been measured. Under the restored "Only People Sharing This Home" rule, the HomePod refused this library's fresh transient pairing. Authorized pairing under that rule is not yet supported. Typed `AirPlayEvent` callbacks report discovery changes, volume changes during an open connection, and membership changes made through this sender. Other controllers' group topology is not reliably observable from the tested Bonjour records.
 
@@ -27,17 +27,17 @@ Per-receiver volume memory is opt-in. An application supplies its own storage pa
 
 The site is at [playable-airplay.layered.work](https://playable-airplay.layered.work/), and the reference under [/docs](https://playable-airplay.layered.work/docs/). Both are built from the source by CI on every push to `main`.
 
-To read them locally, run `./Scripts/build-site.sh` and serve `build/site`, which the reference needs because it is served from `/docs`. That script is also what CI runs, so the two cannot drift apart.
+To read them locally, run `./Scripts/build-site.sh` and serve `build/site`, which the reference needs because it is served from `/docs`. CI uses the same script to build both from one commit. The file-streaming snippets on the home page come from the compiled Demo; the other page text and examples are maintained separately and must still be checked against the API.
 
 ## How it is put together
 
-All of it is Swift, apart from the discovery, which is C because Bonjour is a C library on both platforms.
+The sender, public Swift interface and device metadata are Swift. Bonjour discovery and its name and state parsing are C, using the same DNS-SD interface on both platforms.
 
 `Sources/PlayableAirplay` is the Swift library: `AirPlayDiscovery`, `AirPlayReceiver`, `AirPlaySession`, `AirPlayGroup`, `AirPlayEvent` and `AirPlayError`. Protocol types remain underneath; no opaque pointer, C buffer or `pa_` function reaches this interface.
 
 `Sources/PlayableAirplaySender` is the sender itself: the pairing, the encrypted channels, the session and the audio. It takes its cryptography from swift-crypto and its arbitrary-precision arithmetic from BigInt, and implements nothing either of them offers. The library does not depend on AVFoundation, CoreAudio or AppKit. The macOS Demo uses AVFoundation to convert file formats before handing PCM to the library.
 
-`CPlayableAirplay` is offered as a product of its own for one case: an Objective-C application, which has no Swift to import the library from. Calling a C header is what Objective-C does with a C library, so it takes `CPlayableAirplay`, imports `PlayableAirplay.h`, and gets the same thing a step lower down. The functions behind that header are Swift, exported with C linkage.
+`CPlayableAirplay` is offered as a product of its own for one case: an Objective-C application, which has no Swift to import the library from. Calling a C header is what Objective-C does with a C library, so it takes `CPlayableAirplay`, imports `PlayableAirplay.h`, and gets the same thing a step lower down. The discovery entry points are implemented in C; session, group and device-naming entry points are implemented in Swift and exported with C linkage.
 
 ## Using it in a project
 
@@ -77,7 +77,7 @@ Discovery reports the whole set each time it changes, sorted by name, on a queue
 ```swift
 let discovery = AirPlayDiscovery { receivers in
     for receiver in receivers {
-        print("\(receiver.name) at \(receiver.host):\(receiver.port), a \(receiver.model)")
+        print("\(receiver.name) at \(receiver.host):\(receiver.port): \(receiver.productName)")
     }
 }
 
@@ -104,7 +104,8 @@ case .bufferFull:
     break
 
 case .ended:
-    session.close()
+    // Schedule session.close() outside the audio callback.
+    break
 }
 ```
 
@@ -134,7 +135,7 @@ In an audio callback the samples usually arrive as a pointer already, and there 
 swift run Demo list
 swift run Demo play speaker.local 7000 5
 swift run Demo wave ~/Music/track.wav speaker.local
-swift run Demo file ~/Music/track.m4a speaker.local
+swift run Demo file ~/Music/track.m4a speaker.local # macOS only
 ```
 
 `list` browses for five seconds and prints what it found. `play` opens a session and sends a quiet 440 Hz tone. `wave` plays a WAVE file that is already 16 bit stereo at 44100, using nothing but Foundation, so it runs wherever the library does. `file` takes any format macOS can read and converts it with AVFoundation.
