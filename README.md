@@ -74,7 +74,7 @@ Playback also needs permission to bind the PTP UDP ports 319 and 320. Ubuntu res
 sudo setcap cap_net_bind_service=+ep "$(swift build --show-bin-path)/Demo"
 ```
 
-Apply the capability again after rebuilding the executable. An application launched by a service manager can instead receive this capability from its service configuration. The receiver must be able to send PTP traffic back to the sender; a successful TCP pairing alone does not establish that path.
+Run the built executable after setting its capability, for example `"$(swift build --show-bin-path)/Demo" wave ~/Music/track.wav speaker.local`. Apply the capability again after rebuilding the executable. An application launched by a service manager can instead receive this capability from its service configuration. The receiver must be able to send PTP traffic back to the sender; a successful TCP pairing alone does not establish that path.
 
 ### What comes with it
 
@@ -144,7 +144,7 @@ In an audio callback the samples usually arrive as a pointer already, and there 
 ```bash
 swift run Demo list
 swift run Demo play speaker.local 7000 5
-swift run Demo wave ~/Music/track.wav speaker.local
+"$(swift build --show-bin-path)/Demo" wave ~/Music/track.wav speaker.local # Linux, after setcap
 swift run Demo file ~/Music/track.m4a speaker.local # macOS only
 ```
 

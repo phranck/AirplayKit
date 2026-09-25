@@ -42,7 +42,7 @@
 
 <header class="masthead">
   <div class="masthead-row measure">
-    <a class="wordmark" href="./" aria-label="AirplayKit, home">Playable<b>Airplay</b></a>
+    <a class="wordmark" href="./" aria-label="AirplayKit, home">Airplay<b>Kit</b></a>
 
     <nav class="masthead-links" aria-label="Sections">
       <a href="#interface"><svg class="icon" aria-hidden="true"><use href="#ph-code"></use></svg>Interface</a>
@@ -133,7 +133,7 @@ session.volume = <span class="n">0.7</span>
     <p class="section-number">02</p>
     <h2>Streaming a file</h2>
     <p class="lead">Read a file, turn it into what AirPlay carries, open a session, and keep it fed until the file runs out. On macOS AVFoundation converts formats the system can read. On Linux the portable example takes a WAVE file that is already 16 bit stereo at 44100 Hz.</p>
-    <p>Both functions are excerpts from <code>Sources/Demo/Demo.swift</code> and use its surrounding imports and helpers. To run the complete Demo, use <code>swift run Demo file ~/Music/track.m4a speaker.local</code> on macOS or <code>swift run Demo wave ~/Music/track.wav speaker.local</code> on Linux. On an Ubuntu 26.04 aarch64 guest, a WAVE file played audibly to one Sonos receiver. Linux group playback has not yet been checked with a listener.</p>
+    <p>Both functions are excerpts from <code>Sources/Demo/Demo.swift</code> and use its surrounding imports and helpers. To run the complete Demo, use <code>swift run Demo file ~/Music/track.m4a speaker.local</code> on macOS. On Linux, build first, grant the executable its PTP port capability as shown below, then run <code>"$(swift build --show-bin-path)/Demo" wave ~/Music/track.wav speaker.local</code>. On an Ubuntu 26.04 aarch64 guest, a WAVE file played audibly to one Sonos receiver. Linux group playback has not yet been checked with a listener.</p>
 
     <figure class="panel" data-variant="apple">
       <figcaption>
