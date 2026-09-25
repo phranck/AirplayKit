@@ -4,7 +4,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/phranck/AirplayKit?style=flat&label=Commit&labelColor=1c1c1c&color=fb8c00)](https://github.com/phranck/AirplayKit/commits/main)
 [![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux-fdd835?style=flat&labelColor=1c1c1c)](https://github.com/phranck/AirplayKit/actions/workflows/ci.yml)
 [![Language](https://img.shields.io/badge/Written%20in-Swift-43a047?style=flat&labelColor=1c1c1c)](https://swift.org)
-[![Documentation](https://img.shields.io/badge/Reference-DocC-1e88e5?style=flat&labelColor=1c1c1c)](https://playable-airplay.layered.work/docs/)
+[![Documentation](https://img.shields.io/badge/Reference-DocC-1e88e5?style=flat&labelColor=1c1c1c)](https://airplaykit.layered.work/docs/)
 [![License](https://img.shields.io/github/license/phranck/AirplayKit?style=flat&label=License&labelColor=1c1c1c&color=8e24aa)](https://layered.mit-license.org)
 
 </div>
@@ -25,7 +25,7 @@ Per-receiver volume memory is opt-in. An application supplies its own storage pa
 
 ## Documentation
 
-The site is at [playable-airplay.layered.work](https://playable-airplay.layered.work/), and the reference under [/docs](https://playable-airplay.layered.work/docs/). Both are built from the source by CI on every push to `main`.
+The site is at [airplaykit.layered.work](https://airplaykit.layered.work/), and the reference under [/docs](https://airplaykit.layered.work/docs/). Both are built from the source by CI on every push to `main`.
 
 To read them locally, run `./Scripts/build-site.sh` and serve `build/site`, which the reference needs because it is served from `/docs`. CI uses the same script to build both from one commit. The file-streaming snippets on the home page come from the compiled Demo; the other page text and examples are maintained separately and must still be checked against the API.
 
