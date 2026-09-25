@@ -49,7 +49,7 @@ In a package of your own:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/phranck/PlayableAirplay.git", branch: "develop"),
+    .package(url: "https://github.com/phranck/PlayableAirplay.git", exact: "0.1.0"),
 ],
 targets: [
     .target(name: "YourTarget", dependencies: ["PlayableAirplay"]),
@@ -157,7 +157,7 @@ They cover discovery parsing and state, protocol messages, cryptography, audio b
 
 `Scripts/build-and-test.sh` is the whole gate, and `Scripts/check-linux.sh` compiles the package inside the same Swift image CI uses, so Linux is checked here before anything is pushed. That check compiles rather than tests, because the test process deadlocks inside the container on this machine, which is #25. CI runs the tests on Linux.
 
-`Scripts/check-callers.sh` builds the application that takes this package by a local path, which is how a change to `PlayableAirplay.h` reaches a caller before any release does. Run it before pushing anything that touches that header. On a machine without that application it says so and passes, and it cannot run in CI, because the runner has no copy of it.
+`Scripts/check-callers.sh` builds the known Objective-C caller when its checkout is available. A local package reference checks this working tree; Podlive's tagged SPM reference checks the released package instead. The script states which one it tested. It cannot run in CI because that runner has no Podlive checkout.
 
 ## What it rests on
 
