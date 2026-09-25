@@ -100,7 +100,7 @@
     <div class="columns">
       <div>
         <h3><code>AirPlayDiscovery</code></h3>
-        <p>Browses for AirPlay receivers and reports the current set each time it changes, sorted by name. It can find receivers without moving the system's output. Each <code>AirPlayReceiver</code> carries its speaker name, model and connection details.</p>
+        <p>Browses for AirPlay receivers and reports the current set each time it changes, sorted by name. It can find receivers without moving the system's output. Each <code>AirPlayReceiver</code> carries its speaker name, advertised model and connection details. The raw <code>model</code> can be abbreviated, such as <code>Bookshelf</code>; use <code>productName</code> for a formatted label or call <code>await receiver.resolveProductName()</code> when a fuller name is available from a standard device description.</p>
         <p>Changes arrive on a queue you name. Typed PlayableAirplay events report appearances and advertised name, model and playback-state changes.</p>
       </div>
       <div>
@@ -116,20 +116,24 @@
 <span class="k">if let</span> level = session.volume { print(level) }
 session.volume = <span class="n">0.7</span>
 
-<span class="k">var</span> outcome = session.write(frames)
-<span class="k">while</span> outcome == .bufferFull {
-    Thread.sleep(forTimeInterval: <span class="n">0.01</span>)
-    outcome = session.write(frames)
-}
-<span class="k">if</span> outcome == .ended { session.close() }</code></pre>
+<span class="k">switch</span> session.write(frames) {
+<span class="k">case</span> .taken:
+    <span class="k">break</span>
+<span class="k">case</span> .bufferFull:
+    <span class="c">// A live source drops these frames; a file reader can pause and retry.</span>
+    <span class="k">break</span>
+<span class="k">case</span> .ended:
+    <span class="c">// Arrange to close the session outside the audio callback.</span>
+    <span class="k">break</span>
+}</code></pre>
     </figure>
   </section>
 
   <section id="example" class="prose-section">
     <p class="section-number">02</p>
-    <h2>A file, start to finish</h2>
+    <h2>Streaming a file</h2>
     <p class="lead">Read a file, turn it into what AirPlay carries, open a session, and keep it fed until the file runs out. On macOS AVFoundation converts formats the system can read. On Linux the portable example takes a WAVE file that is already 16 bit stereo at 44100 Hz.</p>
-    <p>Both examples are lifted out of <code>Sources/Demo/Demo.swift</code> when this page is built. Receiver playback has been recorded on macOS. Linux builds in CI; receiver playback on Linux has not yet been recorded.</p>
+    <p>Both functions are excerpts from <code>Sources/Demo/Demo.swift</code> and use its surrounding imports and helpers. To run the complete Demo, use <code>swift run Demo file ~/Music/track.m4a speaker.local</code> on macOS or <code>swift run Demo wave ~/Music/track.wav speaker.local</code> on Linux. Receiver playback has been recorded on macOS. Linux builds in CI; receiver playback on Linux has not yet been recorded.</p>
 
     <figure class="panel" data-variant="apple">
       <figcaption>
@@ -186,15 +190,10 @@ targets: [
     .target(name: <span class="s">"YourTarget"</span>, dependencies: [<span class="s">"PlayableAirplay"</span>]),
 ]</code></pre>
 <pre data-variant="portable" hidden><code><span class="c"># Bonjour on Linux is Avahi's compatibility library.</span>
-sudo apt install libavahi-compat-libdnssd-dev
-
-<span class="c"># Then the same dependency, and swift build as usual.</span>
-dependencies: [
-    .package(url: <span class="s">"https://github.com/phranck/PlayableAirplay.git"</span>, exact: <span class="s">"0.1.0"</span>),
-],</code></pre>
+sudo apt install libavahi-compat-libdnssd-dev</code></pre>
     </figure>
 
-    <p>Then <code>import PlayableAirplay</code>. On Linux, browsing needs <code>avahi-daemon</code> running at the time, which is a matter of the machine rather than of the build.</p>
+    <p>Then <code>import PlayableAirplay</code>. On Linux, use the same <code>Package.swift</code> dependency shown in the macOS tab, then run <code>swift build</code>. Browsing needs <code>avahi-daemon</code> running at the time, which is a matter of the machine rather than of the build.</p>
   </section>
 
 </main>
