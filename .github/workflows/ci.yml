@@ -43,6 +43,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        if: matrix.container == ''
+
+      # actions/checkout runs Node inside the job's container, and Gitea's runner, unlike GitHub's,
+      # brings none into it. The Swift image carries git, which fetches the pushed commit itself.
+      - name: Check out
+        if: matrix.container != ''
+        run: |
+          git init --quiet .
+          git fetch --quiet --depth 1 "${{ github.server_url }}/${{ github.repository }}.git" "${{ github.sha }}"
+          git checkout --quiet FETCH_HEAD
 
       # dns_sd.h ships with macOS. On Linux it comes from Avahi's compatibility
       # package, which is the same header and the same calls.
