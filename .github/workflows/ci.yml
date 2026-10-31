@@ -79,21 +79,20 @@ jobs:
       - name: Build
         run: ./Scripts/build-site.sh
 
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: build/site
-
-  publish:
-    name: Publish the site
-    needs: site
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - id: deploy
-        uses: actions/deploy-pages@v5
+      # git-pages on the MacServer serves airplaykit.layered.work and takes the
+      # whole site as one tar, which replaces what it held. It accepts the
+      # password whose hash stands in the TXT record
+      # _git-pages-challenge.airplaykit.layered.work. macOS's tar leaves out its
+      # resource forks and extended attributes, which would otherwise arrive as
+      # ._ files on the site.
+      - name: Publish
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        shell: bash
+        env:
+          PAGES_PASSWORD: ${{ secrets.PAGES_PASSWORD }}
+        run: |
+          COPYFILE_DISABLE=1 tar --no-mac-metadata -C build/site -cf - . |
+            curl --fail-with-body --silent --show-error -X PUT \
+              -H @<(printf 'Authorization: Pages %s\n' "$PAGES_PASSWORD") \
+              -H "Content-Type: application/x-tar" \
+              --data-binary @- https://airplaykit.layered.work/
