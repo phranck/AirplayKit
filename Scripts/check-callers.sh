@@ -44,12 +44,12 @@ reference="$(sed -n 's/^[[:space:]]*relativePath = \(.*AirplayKit\);$/\1/p' \
     "$project/project.pbxproj" | head -1)"
 
 if [[ -z "$reference" ]]; then
-    if ! grep -q 'repositoryURL = "https://github.com/phranck/AirplayKit.git";' \
+    if ! grep -q 'repositoryURL = "https://git.layered.work/phranck/AirplayKit.git";' \
         "$project/project.pbxproj"; then
-        echo "$project names neither this checkout nor the AirplayKit GitHub package." >&2
+        echo "$project names neither this checkout nor the AirplayKit package on git.layered.work." >&2
         exit 1
     fi
-    echo "== $caller, which compiles the released AirplayKit package from GitHub"
+    echo "== $caller, which compiles the released AirplayKit package from git.layered.work"
     echo "This checks the released caller, not unreleased code in $root."
     "$caller/Scripts/run-tests.sh"
     exit 0

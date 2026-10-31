@@ -1,11 +1,10 @@
 <div align="center">
 
-[![CI](https://img.shields.io/github/actions/workflow/status/phranck/AirplayKit/ci.yml?branch=main&style=flat&label=CI&labelColor=1c1c1c&color=e53935)](https://github.com/phranck/AirplayKit/actions/workflows/ci.yml)
-[![Last commit](https://img.shields.io/github/last-commit/phranck/AirplayKit?style=flat&label=Commit&labelColor=1c1c1c&color=fb8c00)](https://github.com/phranck/AirplayKit/commits/main)
-[![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux-fdd835?style=flat&labelColor=1c1c1c)](https://github.com/phranck/AirplayKit/actions/workflows/ci.yml)
-[![Language](https://img.shields.io/badge/Written%20in-Swift-43a047?style=flat&labelColor=1c1c1c)](https://swift.org)
-[![Documentation](https://img.shields.io/badge/Reference-DocC-1e88e5?style=flat&labelColor=1c1c1c)](https://playable-airplay.layered.work/docs/)
-[![License](https://img.shields.io/github/license/phranck/AirplayKit?style=flat&label=License&labelColor=1c1c1c&color=8e24aa)](https://layered.mit-license.org)
+[![Last commit](https://img.shields.io/gitea/last-commit/phranck/AirplayKit/main?gitea_url=https%3A%2F%2Fgit.layered.work&style=flat&label=Commit&labelColor=1c1c1c&color=e53935)](https://git.layered.work/phranck/AirplayKit/commits/branch/main)
+[![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux-fb8c00?style=flat&labelColor=1c1c1c)](https://git.layered.work/phranck/AirplayKit/actions)
+[![Language](https://img.shields.io/badge/Written%20in-Swift-f9a825?style=flat&labelColor=1c1c1c)](https://swift.org)
+[![Documentation](https://img.shields.io/badge/Reference-DocC-43a047?style=flat&labelColor=1c1c1c)](https://airplaykit.layered.work/docs/)
+[![License](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgit.layered.work%2Fapi%2Fv1%2Frepos%2Fphranck%2FAirplayKit&query=%24.licenses%5B0%5D&style=flat&label=License&labelColor=1c1c1c&color=1e88e5)](https://layered.mit-license.org)
 
 </div>
 
@@ -25,7 +24,7 @@ Per-receiver volume memory is opt-in. An application supplies its own storage pa
 
 ## Documentation
 
-The site is at [playable-airplay.layered.work](https://playable-airplay.layered.work/), and the reference under [/docs](https://playable-airplay.layered.work/docs/). Both are built from the source by CI on every push to `main`.
+The site is at [airplaykit.layered.work](https://airplaykit.layered.work/), and the reference under [/docs](https://airplaykit.layered.work/docs/). Both are built from the source by `./Scripts/build-site.sh`.
 
 To read them locally, run `./Scripts/build-site.sh` and serve `build/site`, which the reference needs because it is served from `/docs`. CI uses the same script to build both from one commit. The file-streaming snippets on the home page come from the compiled Demo; the other page text and examples are maintained separately and must still be checked against the API.
 
@@ -43,13 +42,13 @@ The sender, public Swift interface and device metadata are Swift. Bonjour discov
 
 ### macOS
 
-Add the package to your project. In Xcode that is **File > Add Package Dependencies**, with `https://github.com/phranck/AirplayKit.git`, and then `import AirplayKit`. Swift Package Manager resolves swift-crypto and BigInt automatically.
+Add the package to your project. In Xcode that is **File > Add Package Dependencies**, with `https://git.layered.work/phranck/AirplayKit.git`, and then `import AirplayKit`. Swift Package Manager resolves swift-crypto and BigInt automatically.
 
 In a package of your own:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/phranck/AirplayKit.git", branch: "main"),
+    .package(url: "https://git.layered.work/phranck/AirplayKit.git", branch: "main"),
 ],
 targets: [
     .target(name: "YourTarget", dependencies: ["AirplayKit"]),
