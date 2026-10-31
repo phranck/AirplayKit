@@ -38,8 +38,19 @@ swift --version
 # the pin and this file have drifted apart. On a person's machine it is a note,
 # since the toolchain there is whichever Xcode they have and this gate is still
 # worth running on it.
+#
+# Swift names a .0 release by its first two numbers, so Xcode 27.0 and the
+# swift:6.4.0 image both report 6.4 for the 6.4.0 that .swift-version pins.
+release_version() {
+    if [[ "$1" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        echo "$1.0"
+    else
+        echo "$1"
+    fi
+}
+
 pinned_version="$(cat .swift-version)"
-running_version="$(swift --version 2>&1 | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p' | head -1)"
+running_version="$(release_version "$(swift --version 2>&1 | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p' | head -1)")"
 
 if [[ "$running_version" != "$pinned_version" ]]; then
     echo "This is Swift ${running_version}, and .swift-version pins ${pinned_version}." >&2

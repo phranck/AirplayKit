@@ -151,11 +151,11 @@ swift run Demo file ~/Music/track.m4a speaker.local # macOS only
 
 ## The toolchain
 
-The package is built and tested with Swift 6.2.4, and `.swift-version` is where that version is written down. Both CI runners are pinned to it: the macOS one builds with Xcode 26.3, whose compiler reports 6.2.4 on that runner, and the Linux one runs in the `swift:6.2.4` image, which `Scripts/check-linux.sh` builds from as well.
+The package is built and tested with Swift 6.4.0, and `.swift-version` is where that version is written down. Both CI runners are pinned to it: the macOS one builds with Xcode 27.0, whose compiler is `swiftlang-6.4.0`, and the Linux one runs in the `swift:6.4.0` image, which `Scripts/check-linux.sh` builds from as well. Both compilers call themselves Swift 6.4, because Swift names a .0 release by its first two numbers, so `Scripts/build-and-test.sh` reads 6.4 as 6.4.0.
 
 The pin is there because compilers disagree about what they accept. In a Swift test target that imports the C header, a direct call into a Swift `@_cdecl` group function made Linux Swift 6.2.4 abort while linking SIL: the header declared an opaque pointer where the Swift export used a raw pointer. That test was removed; the C and Objective-C boundary is checked through the caller build. A gate run on another compiler can therefore promise less than it looks like it promises.
 
-A local run means what a CI run means when it uses the same compiler, which is the toolchain of that version from [swift.org](https://www.swift.org/install/) or an Xcode carrying it. [swiftly](https://github.com/swiftlang/swiftly) picks it from `.swift-version` on distributions it supports. On the tested Ubuntu 26.04 VM, swiftly 1.1.2 refused that platform; the official Swift 6.4.0 Ubuntu 26.04 toolchain built the released tag and passed all 170 tests. That is additional verification, not a replacement for the pinned CI toolchain. Where local and CI toolchains differ, `Scripts/build-and-test.sh` says which compiler it ran on and which one CI will use.
+A local run means what a CI run means when it uses the same compiler, which is the toolchain of that version from [swift.org](https://www.swift.org/install/) or an Xcode carrying it. [swiftly](https://github.com/swiftlang/swiftly) picks it from `.swift-version` on distributions it supports. On the tested Ubuntu 26.04 VM, swiftly 1.1.2 refused that platform, and the official Swift 6.4.0 toolchain for Ubuntu 26.04 built the released tag and passed all 170 tests. Where local and CI toolchains differ, `Scripts/build-and-test.sh` says which compiler it ran on and which one CI will use.
 
 ## Tests
 

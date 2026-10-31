@@ -36,9 +36,8 @@ if [[ -d "$binPath/Modules" ]]; then
     moduleSearch+=(-I "$binPath/Modules")
 fi
 
-# Xcode 26.3 requires an explicit target for symbol extraction. Take it from
-# the same Swift toolchain that built the module, so the runner and a local Mac
-# do not silently extract for different platform versions.
+# The target is the one the same Swift toolchain built the module for, so the
+# symbols describe the module that was built, on the runner and on a local Mac.
 targetTriple="$(swift -print-target-info | python3 -c 'import json,sys; print(json.load(sys.stdin)["target"]["triple"])')"
 symbolArguments=(-module-name "$moduleName" -output-dir "$symbolDirectory" -target "$targetTriple"
     -minimum-access-level public -I Sources/CAirplayKit/include
