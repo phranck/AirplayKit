@@ -15,15 +15,15 @@ concurrency:
 # Xcode. Without this the macOS runner uses whichever Xcode it happens to default
 # to, and that compiler has already rejected code every local gate had passed.
 #
-# Set for the whole workflow rather than per job, so the version stands in one
-# place. Linux ignores it, because only Apple's tools read it.
-env:
-  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+# Set on the build job, where the version stands in one place. Linux ignores it,
+# because only Apple's tools read it.
 
 jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
     # Linux builds inside the official Swift image, which brings the toolchain
     # with it. Installing one on a bare runner took a quarter of an hour, which
@@ -67,9 +67,12 @@ jobs:
       - name: Build and test
         run: ./Scripts/build-and-test.sh
 
+  # The MacServer runner has Xcode 27.0 installed and no Xcode 26.3, so the site is built with 27.0.
   site:
     name: Site
     runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
     steps:
       - uses: actions/checkout@v7
 
@@ -79,10 +82,12 @@ jobs:
       - name: Build
         run: ./Scripts/build-site.sh
 
-      # git-pages on the MacServer serves airplaykit.layered.work and takes the
-      # whole site as one tar, which replaces what it held. It accepts the
-      # password whose hash stands in the TXT record
-      # _git-pages-challenge.airplaykit.layered.work. macOS's tar leaves out its
+      # The site has its own git-pages instance on the MacServer, which publishes
+      # on the loopback port 3510 of that server, so the publish reaches it before
+      # Caddy points the host at it. The Host header names the site. The site is
+      # one tar that replaces what it held, and the password whose hash stands in
+      # the TXT record _git-pages-challenge.airplaykit.layered.work authorizes it.
+      # A dry run goes first and changes nothing. macOS's tar leaves out its
       # resource forks and extended attributes, which would otherwise arrive as
       # ._ files on the site.
       - name: Publish
@@ -91,8 +96,20 @@ jobs:
         env:
           PAGES_PASSWORD: ${{ secrets.PAGES_PASSWORD }}
         run: |
+          set -euo pipefail
+          site="http://127.0.0.1:3510/"
+          host="airplaykit.layered.work"
           COPYFILE_DISABLE=1 tar --no-mac-metadata -C build/site -cf - . |
             curl --fail-with-body --silent --show-error -X PUT \
+              -H "Host: $host" -H "Dry-Run: yes" \
               -H @<(printf 'Authorization: Pages %s\n' "$PAGES_PASSWORD") \
               -H "Content-Type: application/x-tar" \
-              --data-binary @- https://airplaykit.layered.work/
+              --data-binary @- "$site"
+          COPYFILE_DISABLE=1 tar --no-mac-metadata -C build/site -cf - . |
+            curl --fail-with-body --silent --show-error -X PUT \
+              -H "Host: $host" \
+              -H @<(printf 'Authorization: Pages %s\n' "$PAGES_PASSWORD") \
+              -H "Content-Type: application/x-tar" \
+              --data-binary @- "$site"
+          # The instance answers ok for a host once a site is published on it.
+          test "$(curl --fail-with-body --silent --show-error -H "Host: $host" "${site}.git-pages/health")" = "ok"
