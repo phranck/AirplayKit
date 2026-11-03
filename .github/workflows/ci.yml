@@ -22,10 +22,6 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
-    env:
-      # The macOS job runs with Xcode 27.0, the Xcode the runner has installed. Xcode 26.3,
-      # which the job pinned before, is not installed there.
-      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
 
     # Linux builds inside the official Swift image, which brings the toolchain
     # with it. Installing one on a bare runner took a quarter of an hour, which
@@ -66,6 +62,13 @@ jobs:
 
       # The same script Scripts/check-linux.sh runs in this same image, so a red
       # run here is one that could have been seen before the push.
+      # The macOS job runs with Xcode 27.0, the Xcode the runner has installed. Xcode 26.3,
+      # which the job pinned before, is not installed there. Only the macOS job sets it:
+      # a Linux job that inherits a path to Xcode fails in Swift Build.
+      - name: Select Xcode 27.0
+        if: matrix.container == ''
+        run: echo "DEVELOPER_DIR=/Applications/Xcode_27.0.app/Contents/Developer" >> "$GITHUB_ENV"
+
       - name: Build and test
         run: ./Scripts/build-and-test.sh
 
