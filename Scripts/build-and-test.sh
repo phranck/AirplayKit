@@ -39,13 +39,7 @@ swift --version
 # since the toolchain there is whichever Xcode they have and this gate is still
 # worth running on it.
 pinned_version="$(cat .swift-version)"
-# Apple names the release "6.4" and the compiler "swiftlang-6.4.0.34.1", where Linux names
-# the release "6.4.0". The compiler, read from the build number, is what .swift-version
-# means, so it is read first, and the release name serves only where no build number is printed.
-running_version="$(swift --version 2>&1 | sed -n 's/.*swiftlang-\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)\..*/\1/p' | head -1)"
-if [[ -z "$running_version" ]]; then
-    running_version="$(swift --version 2>&1 | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p' | head -1)"
-fi
+running_version="$(swift --version 2>&1 | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p' | head -1)"
 
 if [[ "$running_version" != "$pinned_version" ]]; then
     echo "This is Swift ${running_version}, and .swift-version pins ${pinned_version}." >&2
