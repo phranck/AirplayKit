@@ -9,11 +9,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
-# Xcode 26.3 on this runner reports Swift 6.2.4, which is the version
-# .swift-version names and the version the Linux container below runs. Read from
-# the runner rather than from Apple's release notes, which say 6.2.3 for this
-# Xcode. Without this the macOS runner uses whichever Xcode it happens to default
-# to, and that compiler has already rejected code every local gate had passed.
+# Xcode 27.0, the only Xcode the MacServer runner has, reports Swift 6.4, which is
+# the version .swift-version names and the version the Linux container below runs.
+# Read from the runner, not from a release note. Without this the macOS runner
+# would use whichever Xcode it defaults to, and that compiler has already rejected
+# code every local gate had passed.
 #
 # Set on the build job, where the version stands in one place. Linux ignores it,
 # because only Apple's tools read it.
@@ -23,7 +23,9 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      # The macOS job runs with Xcode 27.0, the Xcode the runner has installed. Xcode 26.3,
+      # which the job pinned before, is not installed there.
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
 
     # Linux builds inside the official Swift image, which brings the toolchain
     # with it. Installing one on a bare runner took a quarter of an hour, which
@@ -39,7 +41,7 @@ jobs:
             container: ""
           - name: Linux
             runner: ubuntu-latest
-            container: swift:6.2.4
+            container: swift:6.4
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
