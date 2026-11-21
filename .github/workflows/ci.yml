@@ -9,14 +9,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
-# Xcode 27.0, the only Xcode the MacServer runner has, reports Swift 6.4, which is
-# the version .swift-version names and the version the Linux container below runs.
-# Read from the runner, not from a release note. Without this the macOS runner
-# would use whichever Xcode it defaults to, and that compiler has already rejected
-# code every local gate had passed.
-#
-# Set on the build job, where the version stands in one place. Linux ignores it,
-# because only Apple's tools read it.
+# Xcode 27.0 reports Swift 6.4, the version .swift-version names and the Linux
+# container runs. Only Apple's tools read DEVELOPER_DIR, so the build job sets it
+# for macOS and leaves the Linux container untouched.
 
 jobs:
   build:
@@ -33,7 +28,7 @@ jobs:
       matrix:
         include:
           - name: macOS
-            runner: macos-15
+            runner: xcode-27
             container: ""
           - name: Linux
             runner: ubuntu-latest
@@ -41,16 +36,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: matrix.container == ''
-
-      # actions/checkout runs Node inside the job's container, and Gitea's runner, unlike GitHub's,
-      # brings none into it. The Swift image carries git, which fetches the pushed commit itself.
-      - name: Check out
-        if: matrix.container != ''
-        run: |
-          git init --quiet .
-          git fetch --quiet --depth 1 "${{ github.server_url }}/${{ github.repository }}.git" "${{ github.sha }}"
-          git checkout --quiet FETCH_HEAD
 
       # dns_sd.h ships with macOS. On Linux it comes from Avahi's compatibility
       # package, which is the same header and the same calls.
@@ -60,11 +45,9 @@ jobs:
           apt-get update
           apt-get install -y libavahi-compat-libdnssd-dev
 
-      # The same script Scripts/check-linux.sh runs in this same image, so a red
-      # run here is one that could have been seen before the push.
-      # The macOS job runs with Xcode 27.0, the Xcode the runner has installed. Xcode 26.3,
-      # which the job pinned before, is not installed there. Only the macOS job sets it:
-      # a Linux job that inherits a path to Xcode fails in Swift Build.
+      # Scripts/check-linux.sh runs in this same image, so a red run here is one
+      # that could have been seen before the push. Only the macOS job sets
+      # DEVELOPER_DIR. A Linux job that inherits a path to Xcode fails in Swift Build.
       - name: Select Xcode 27.0
         if: matrix.container == ''
         run: echo "DEVELOPER_DIR=/Applications/Xcode_27.0.app/Contents/Developer" >> "$GITHUB_ENV"
@@ -72,10 +55,10 @@ jobs:
       - name: Build and test
         run: ./Scripts/build-and-test.sh
 
-  # The MacServer runner has Xcode 27.0 installed and no Xcode 26.3, so the site is built with 27.0.
+  # The site uses the same Swift 6.4 toolchain as the macOS build job.
   site:
     name: Site
-    runs-on: macos-15
+    runs-on: xcode-27
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
     steps:
@@ -87,14 +70,12 @@ jobs:
       - name: Build
         run: ./Scripts/build-site.sh
 
-      # The site has its own git-pages instance on the MacServer, which publishes
-      # on the loopback port 3510 of that server, so the publish reaches it before
-      # Caddy points the host at it. The Host header names the site. The site is
-      # one tar that replaces what it held, and the password whose hash stands in
-      # the TXT record _git-pages-challenge.airplaykit.layered.work authorizes it.
-      # A dry run goes first and changes nothing. macOS's tar leaves out its
-      # resource forks and extended attributes, which would otherwise arrive as
-      # ._ files on the site.
+      # The git-pages instance on the MacServer accepts the site through its public
+      # address. One tar replaces what the instance holds, and the password whose
+      # hash stands in the TXT record _git-pages-challenge.airplaykit.layered.work
+      # authorizes it. A dry run goes first and changes nothing. macOS's tar leaves
+      # out resource forks and extended attributes, which would otherwise arrive
+      # as ._ files on the site.
       - name: Publish
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         shell: bash
@@ -102,19 +83,17 @@ jobs:
           PAGES_PASSWORD: ${{ secrets.PAGES_PASSWORD }}
         run: |
           set -euo pipefail
-          site="http://127.0.0.1:3510/"
-          host="airplaykit.layered.work"
+          site="https://airplaykit.layered.work/"
           COPYFILE_DISABLE=1 tar --no-mac-metadata -C build/site -cf - . |
             curl --fail-with-body --silent --show-error -X PUT \
-              -H "Host: $host" -H "Dry-Run: yes" \
+              -H "Dry-Run: yes" \
               -H @<(printf 'Authorization: Pages %s\n' "$PAGES_PASSWORD") \
               -H "Content-Type: application/x-tar" \
               --data-binary @- "$site"
           COPYFILE_DISABLE=1 tar --no-mac-metadata -C build/site -cf - . |
             curl --fail-with-body --silent --show-error -X PUT \
-              -H "Host: $host" \
               -H @<(printf 'Authorization: Pages %s\n' "$PAGES_PASSWORD") \
               -H "Content-Type: application/x-tar" \
               --data-binary @- "$site"
-          # The instance answers ok for a host once a site is published on it.
-          test "$(curl --fail-with-body --silent --show-error -H "Host: $host" "${site}.git-pages/health")" = "ok"
+          # The instance answers ok once a site is published on it.
+          test "$(curl --fail-with-body --silent --show-error "${site}.git-pages/health")" = "ok"
