@@ -6,13 +6,13 @@ Read this once, then work from the issues. **The issues are the plan**, this fil
 
 ## What the library is for
 
-[#113](https://git.layered.work/phranck/AirplayKit/issues/113) states the original scope. The later decision narrows the supported sender platforms to macOS and Linux. A program must be able to find receivers, stream to one, group several and dissolve the group, set the volume of one speaker or all group members, read each speaker's model and name, and receive typed AirplayKit events when observable values change. Speaker renaming is out of scope.
+[#113](https://github.com/phranck/AirplayKit/issues/113) states the original scope. The later decision narrows the supported sender platforms to macOS and Linux. A program must be able to find receivers, stream to one, group several and dissolve the group, set the volume of one speaker or all group members, read each speaker's model and name, and receive typed AirplayKit events when observable values change. Speaker renaming is out of scope.
 
 Two rules on that, both stated by phranck and both non-negotiable:
 
-**AirPlay 2 only.** No manufacturer's own services, however convenient. A feature that works on one make of speaker and nowhere else is not a feature of this library. A module that spoke Sonos's own services was removed on 2026-09-24 for exactly that reason, and the reasoning is in [#120](https://git.layered.work/phranck/AirplayKit/issues/120) and in the documentation page `What-AirPlay-Does-Not-Say`.
+**AirPlay 2 only.** No manufacturer's own services, however convenient. A feature that works on one make of speaker and nowhere else is not a feature of this library. A module that spoke Sonos's own services was removed on 2026-09-24 for exactly that reason, and the reasoning is in [#120](https://github.com/phranck/AirplayKit/issues/120) and in the documentation page `What-AirPlay-Does-Not-Say`.
 
-**Everything those functions need goes into the API, and nothing else does.** That is [#66](https://git.layered.work/phranck/AirplayKit/issues/66), which carries the decision already: a caller sees a discovery, a receiver and a session, and the whole protocol machinery becomes internal.
+**Everything those functions need goes into the API, and nothing else does.** That is [#66](https://github.com/phranck/AirplayKit/issues/66), which carries the decision already: a caller sees a discovery, a receiver and a session, and the whole protocol machinery becomes internal.
 
 ## Where things stand
 
@@ -28,12 +28,12 @@ Both repositories are on `develop` with everything merged, and `main` carries th
 
 This list records what was pending when the handover was written. It is not a current task list. Later local work added a group sender, typed events and physical tests; check the working tree, [test log](Documentation/Research/test-log.md) and open issues before taking the next step.
 
-1. [#114](https://git.layered.work/phranck/AirplayKit/issues/114) Read the receiver's volume with `GET_PARAMETER` rather than only setting it. Small, and it fixes a visible fault: a fresh session shows the wrong number because it imposes a level instead of adopting the one the speaker is at. Apple's own sender reads it between the session SETUP and RECORD.
-2. [#18](https://git.layered.work/phranck/AirplayKit/issues/18) The measurement multi-room rests on: whether every member of a group is given the identical anchor, and what a leaving member is told. Needs two receivers under your own control, so it is bench work rather than typing.
-3. [#15](https://git.layered.work/phranck/AirplayKit/issues/15) Multi-room itself. Its first half is done; grouping is its second.
-4. [#119](https://git.layered.work/phranck/AirplayKit/issues/119) Read what the event channel already delivers. The package opens that channel and answers it, because a receiver ends the session otherwise, and throws the content away without looking.
+1. [#114](https://github.com/phranck/AirplayKit/issues/114) Read the receiver's volume with `GET_PARAMETER` rather than only setting it. Small, and it fixes a visible fault: a fresh session shows the wrong number because it imposes a level instead of adopting the one the speaker is at. Apple's own sender reads it between the session SETUP and RECORD.
+2. [#18](https://github.com/phranck/AirplayKit/issues/18) The measurement multi-room rests on: whether every member of a group is given the identical anchor, and what a leaving member is told. Needs two receivers under your own control, so it is bench work rather than typing.
+3. [#15](https://github.com/phranck/AirplayKit/issues/15) Multi-room itself. Its first half is done; grouping is its second.
+4. [#119](https://github.com/phranck/AirplayKit/issues/119) Read what the event channel already delivers. The package opens that channel and answers it, because a receiver ends the session otherwise, and throws the content away without looking.
 
-[#66](https://git.layered.work/phranck/AirplayKit/issues/66) can be done at any point and makes everything after it easier.
+[#66](https://github.com/phranck/AirplayKit/issues/66) can be done at any point and makes everything after it easier.
 
 ## Traps on this machine
 
