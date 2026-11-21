@@ -70,30 +70,23 @@ jobs:
       - name: Build
         run: ./Scripts/build-site.sh
 
-      # The git-pages instance on the MacServer accepts the site through its public
-      # address. One tar replaces what the instance holds, and the password whose
-      # hash stands in the TXT record _git-pages-challenge.airplaykit.layered.work
-      # authorizes it. A dry run goes first and changes nothing. macOS's tar leaves
-      # out resource forks and extended attributes, which would otherwise arrive
-      # as ._ files on the site.
-      - name: Publish
+      - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        shell: bash
-        env:
-          PAGES_PASSWORD: ${{ secrets.PAGES_PASSWORD }}
-        run: |
-          set -euo pipefail
-          site="https://airplaykit.layered.work/"
-          COPYFILE_DISABLE=1 tar --no-mac-metadata -C build/site -cf - . |
-            curl --fail-with-body --silent --show-error -X PUT \
-              -H "Dry-Run: yes" \
-              -H @<(printf 'Authorization: Pages %s\n' "$PAGES_PASSWORD") \
-              -H "Content-Type: application/x-tar" \
-              --data-binary @- "$site"
-          COPYFILE_DISABLE=1 tar --no-mac-metadata -C build/site -cf - . |
-            curl --fail-with-body --silent --show-error -X PUT \
-              -H @<(printf 'Authorization: Pages %s\n' "$PAGES_PASSWORD") \
-              -H "Content-Type: application/x-tar" \
-              --data-binary @- "$site"
-          # The instance answers ok once a site is published on it.
-          test "$(curl --fail-with-body --silent --show-error "${site}.git-pages/health")" = "ok"
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/site
+
+  publish:
+    name: Publish the site
+    needs: site
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5
